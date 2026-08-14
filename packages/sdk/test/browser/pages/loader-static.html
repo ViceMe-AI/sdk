@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>loader static (deferred, before DOM ready)</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Host page</h1>
+      <p id="status">untouched</p>
+      <div id="viceme-host"></div>
+    </main>
+    <script>
+      // Record every viceme:* event for assertions (host events bubble).
+      window.__events = [];
+      for (const type of [
+        'viceme:ready',
+        'viceme:capability-ready',
+        'viceme:error',
+        'viceme:destroyed',
+      ]) {
+        document.addEventListener(type, (event) => {
+          window.__events.push({ type, detail: event.detail });
+        });
+      }
+    </script>
+    <script
+      defer
+      src="/sdk/v1/viceme.min.js"
+      data-viceme-work="wrk_test"
+      data-viceme-region="cn"
+      data-viceme-features="fixture"
+      data-viceme-target="#viceme-host"
+      data-viceme-theme="dark"
+    ></script>
+  </body>
+</html>

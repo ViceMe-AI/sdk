@@ -1,1 +1,14 @@
 .private/
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+*.tgz
+.DS_Store
+*.log
+.env
+.env.*
+.vercel
+.next/
+.turbo/
