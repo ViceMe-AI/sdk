@@ -1,6 +1,7 @@
 .private/
 node_modules/
 dist/
+test-fixtures-dist/
 coverage/
 test-results/
 playwright-report/

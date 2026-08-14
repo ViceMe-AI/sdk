@@ -89,9 +89,7 @@ async function waitForEvent(
       { type, count },
       timeout,
     )
-    .then(() =>
-      page.evaluate(() => (window as unknown as { __events: RecordedEvent[] }).__events),
-    );
+    .then(() => page.evaluate(() => (window as unknown as { __events: RecordedEvent[] }).__events));
 }
 
 /* ------------------------------------------------------------------ */
