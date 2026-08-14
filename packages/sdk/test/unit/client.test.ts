@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTestViceMe, createMemoryTransport, FIXTURE_WORK } from '../../src/testing.ts';
+import { createFetchTransport } from '../../src/transport/transport.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 function makeClient(work = FIXTURE_WORK) {
@@ -83,5 +84,40 @@ describe('ViceMeClient', () => {
     });
     expect(transport.requests).toHaveLength(0);
     expect(client.state).toBe('FAILED');
+  });
+
+  it('destroy during body read cancels the response and fails closed', async () => {
+    // Headers arrive instantly; the body stalls until the transport's abort
+    // signal fires (the real fetch cancels the stream the same way).
+    const fetchImpl = (_url: string, init: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () =>
+          new Promise<never>((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError')),
+            );
+          }),
+      });
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport: createFetchTransport({
+        apiBaseUrl: 'https://api.viceme.cn',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    });
+
+    const ready = client.ready();
+    await new Promise((resolve) => setTimeout(resolve, 20)); // headers delivered
+    client.destroy();
+
+    await expect(ready).rejects.toSatisfy((err: unknown) => {
+      return err instanceof ViceMeError && err.code === 'CLIENT_DESTROYED';
+    });
+    // No session snapshot can be populated by the late body.
+    expect(client.hasCapability('fixture')).toBe(false);
   });
 });

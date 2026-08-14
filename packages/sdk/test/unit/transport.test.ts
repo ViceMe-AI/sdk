@@ -145,4 +145,76 @@ describe('FetchTransport', () => {
     });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it('NETWORK_TIMEOUT when the server returns headers but never ends the body', async () => {
+    const fetchImpl = vi.fn((_url: string, init: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        // Real fetch cancels the body stream when the abort signal fires.
+        json: () =>
+          new Promise<never>((_resolve, reject) => {
+            const signal = init.signal;
+            if (signal?.aborted) {
+              reject(signal.reason ?? new DOMException('aborted', 'AbortError'));
+              return;
+            }
+            signal?.addEventListener(
+              'abort',
+              () => reject(signal.reason ?? new DOMException('aborted', 'AbortError')),
+              { once: true },
+            );
+          }),
+      }),
+    );
+    const transport = createFetchTransport({
+      apiBaseUrl: 'https://api.viceme.cn',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      defaultTimeoutMs: 80,
+    });
+    await expect(
+      transport.request({ method: 'POST', path: '/public/v1/work-sessions' }),
+    ).rejects.toSatisfy((e: unknown) => (e as ViceMeError).code === 'NETWORK_TIMEOUT');
+  });
+
+  it('caller abort cancels an in-progress body read', async () => {
+    const fetchImpl = vi.fn((_url: string, init: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () =>
+          new Promise<never>((_resolve, reject) => {
+            const signal = init.signal;
+            if (signal?.aborted) {
+              reject(signal.reason ?? new DOMException('aborted', 'AbortError'));
+              return;
+            }
+            signal?.addEventListener(
+              'abort',
+              () => reject(signal.reason ?? new DOMException('aborted', 'AbortError')),
+              { once: true },
+            );
+          }),
+      }),
+    );
+    const transport = createFetchTransport({
+      apiBaseUrl: 'https://api.viceme.cn',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      defaultTimeoutMs: 10_000,
+    });
+    const controller = new AbortController();
+    const pending = transport.request({
+      method: 'POST',
+      path: '/public/v1/work-sessions',
+      signal: controller.signal,
+    });
+    // Let the response headers (and the json() reader) attach first.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    controller.abort();
+    await expect(pending).rejects.toSatisfy(
+      (e: unknown) => (e as DOMException).name === 'AbortError',
+    );
+  });
 });

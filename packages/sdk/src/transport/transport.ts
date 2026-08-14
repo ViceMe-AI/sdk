@@ -135,10 +135,9 @@ export class FetchTransport implements Transport {
     const onOuterAbort = () => controller.abort(new TimeoutAbort(false));
     request.signal?.addEventListener('abort', onOuterAbort, { once: true });
 
-    let response: Response;
     const requestId = this.#generateRequestId();
     try {
-      response = await this.#fetchImpl(`${this.#apiBaseUrl}${request.path}`, {
+      const response = await this.#fetchImpl(`${this.#apiBaseUrl}${request.path}`, {
         method: request.method,
         // Public API is CORS-only; credentials must stay off so Shop session
         // cookies can never attach to public SDK requests.
@@ -151,6 +150,35 @@ export class FetchTransport implements Transport {
         body: request.body !== undefined ? JSON.stringify(request.body) : undefined,
         signal: controller.signal,
       });
+
+      // Body reading stays inside the same timeout/abort lifecycle: a server
+      // that returns headers and then stalls the body still hits
+      // NETWORK_TIMEOUT, caller abort still cancels the read, and a late
+      // body can never outlive a destroyed client/session.
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch (error) {
+        // A malformed/empty body is tolerated; a cancelled read must
+        // propagate so the outer handler can classify it.
+        if (request.signal?.aborted || timedOut) {
+          throw error;
+        }
+        body = undefined;
+      }
+
+      const serverRequestId = response.headers.get('x-request-id') ?? undefined;
+      if (!response.ok) {
+        const parsed = parseErrorBody(body);
+        const code = parsed.code ?? STATUS_CODE_MAP.get(response.status) ?? 'INTERNAL_ERROR';
+        throw new ViceMeError({
+          code,
+          message: parsed.message ?? 'Public API request failed.',
+          retryable: parsed.retryable,
+          requestId: parsed.requestId ?? serverRequestId,
+        });
+      }
+      return { status: response.status, body, requestId: serverRequestId };
     } catch (cause) {
       if (request.signal?.aborted) {
         throw this.#callerAbortError(request.signal);
@@ -162,6 +190,10 @@ export class FetchTransport implements Transport {
           retryable: true,
           requestId,
         });
+      }
+      // Non-OK statuses already carry a normalized error — pass it through.
+      if (cause instanceof ViceMeError) {
+        throw cause;
       }
       if (cause instanceof DOMException && cause.name === 'AbortError') {
         throw new DOMException('ViceMe request aborted by caller.', 'AbortError');
@@ -176,25 +208,6 @@ export class FetchTransport implements Transport {
       clearTimeout(timer);
       request.signal?.removeEventListener('abort', onOuterAbort);
     }
-    const serverRequestId = response.headers.get('x-request-id') ?? undefined;
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      body = undefined;
-    }
-
-    if (!response.ok) {
-      const parsed = parseErrorBody(body);
-      const code = parsed.code ?? STATUS_CODE_MAP.get(response.status) ?? 'INTERNAL_ERROR';
-      throw new ViceMeError({
-        code,
-        message: parsed.message ?? 'Public API request failed.',
-        retryable: parsed.retryable,
-        requestId: parsed.requestId ?? serverRequestId,
-      });
-    }
-    return { status: response.status, body, requestId: serverRequestId };
   }
 
   /** Caller-abort error that preserves the caller's own abort reason. */
