@@ -87,7 +87,7 @@ async function waitForEvent(
         return events.filter((e) => e.type === type).length >= count;
       },
       { type, count },
-      timeout,
+      timeout !== undefined ? { timeout } : undefined,
     )
     .then(() => page.evaluate(() => (window as unknown as { __events: RecordedEvent[] }).__events));
 }
