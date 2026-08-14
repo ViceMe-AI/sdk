@@ -18,7 +18,7 @@
     "contracts:check": "node scripts/generate-contracts.mjs check",
     "release:version": "changeset version",
     "release:gate": "node scripts/release-gate.mjs",
-    "release:publish": "pnpm release:gate && pnpm build && pnpm pack:check && pnpm --filter './packages/*' publish --provenance --access public --tag \"${DIST_TAG:-next}\"",
+    "release:publish": "pnpm release:gate && pnpm build && pnpm pack:check && node scripts/publish-or-verify.mjs",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm contracts:check && pnpm test && pnpm build && pnpm test:browser && pnpm pack:check",
     "changeset": "changeset"
   },

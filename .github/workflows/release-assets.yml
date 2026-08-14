@@ -1,26 +1,26 @@
 name: Release Assets (recovery)
 
 # Re-runnable recovery for "published to npm but the GitHub release/assets
-# are missing or failed". The Release Package workflow only attaches assets
-# right after a fresh publish — if that step fails, re-running it will NOT
-# retry (Changesets already sees the version as released). This workflow is
-# the independent, convergent authority:
+# are missing or failed" — for ANY previously published version, not just
+# the current dist-tag. Preconditions and flow:
 #
-#   1. prove the exact version is published (npm dist-tag read-back);
-#   2. download the published npm tarball (artifacts are byte-identical to
-#      what npm serves — §13.3);
-#   3. verify digests, then attach to the GitHub release idempotently
+#   1. validate the input (strict semver; env-passed, never interpolated
+#      into the script text);
+#   2. prove the exact @viceme-ai/sdk@<version> exists on npm and its
+#      tarball resolves (dist-tag checks belong to the immediate
+#      post-publish gate in release-package.yml, not to historical
+#      recovery);
+#   3. attach assets from the published npm tarball, idempotently
 #      (create-if-absent / identical-skip / differ-fail).
 #
-# Drill (post-publish failure rehearsal, docs/RELEASE.md): after any real
-# release, delete the dist-<version>.zip asset from the release and re-run
-# this workflow — it must restore the byte-identical asset and succeed.
+# Drill (docs/RELEASE.md): after any release, delete the dist-<version>.zip
+# asset and re-run this workflow — it must restore the byte-identical asset.
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact published version (e.g. 1.2.3)'
+        description: 'Exact published version (e.g. 1.2.3 or 0.1.1-next.0)'
         required: true
         type: string
 
@@ -29,19 +29,29 @@ permissions:
 
 jobs:
   attach:
-    name: Verify published, attach assets from npm tarball
+    name: Verify published version, attach assets from npm tarball
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Verify the version is live on npm (dist-tag read-back)
+        with: { node-version: 24 }
+      - name: Validate input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: node scripts/validate-release-inputs.mjs --version "$VERSION"
+      - name: Verify the exact version exists on npm
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          node scripts/verify-npm-dist-tag.mjs \
-            --package '@viceme-ai/sdk' --version '${{ inputs.version }}' --tag next
+          # Historical recovery must not depend on the current dist-tag:
+          # only the exact package version and its tarball matter here.
+          resolved="$(npm view "@viceme-ai/sdk@${VERSION}" version --json)"
+          test "$resolved" = "\"${VERSION}\"" || {
+            echo "::error::@viceme-ai/sdk@${VERSION} is not published"
+            exit 1
+          }
       - name: Attach assets (idempotent, immutable)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          node scripts/attach-release-assets.mjs --version '${{ inputs.version }}'
+          VERSION: ${{ inputs.version }}
+        run: node scripts/attach-release-assets.mjs --version "$VERSION"

@@ -1,102 +1,234 @@
 name: Release Package
 
-# Changesets flow (§14.2):
-#   1. PR merged to main with pending changesets -> this workflow opens the
-#      "Version Packages" PR (no publish).
-#   2. Version PR merged -> tag exists on main -> quality gates rerun, then
-#      npm publish via OIDC trusted publishing with provenance.
-#   3. The same build's CDN artifacts are attached to the GitHub release for
-#      the promote-cdn workflow — npm tarball and CDN objects always come
-#      from one build.
+# Release publication for @viceme-ai/sdk, following the reviewed
+# ViceMe-AI/cli release.yml baseline (OIDC trusted publishing, immutable
+# tag binding, publish-or-verify convergence) and adding the SDK's own
+# tarball/CDN asset steps:
 #
-# Publishing preconditions (machine-enforced in `pnpm release:publish`,
-# which runs `pnpm release:gate` first):
-#   - final LICENSE exists and LICENSE-PENDING.md is gone;
-#   - 0.x publishes under the `next` dist-tag only (DIST_TAG below + the
-#     committed .changeset/pre.json); the post-publish step verifies the
-#     live npm dist-tag read-back.
+#   1. Changesets opens Version PRs only (no publishing from the action).
+#   2. On main push: resolve the version from packages/sdk/package.json.
+#      A version without a tag is a new release; a version whose tag already
+#      points at this SHA is a recovery run; anything else fails (immutable
+#      tags never move).
+#   3. Full quality gate reruns at the exact reviewed SHA.
+#   4. An annotated immutable tag @viceme-ai/sdk@<version> is created (or
+#      verified in recovery).
+#   5. npm publication via OIDC trusted publishing — NO publish token is
+#      injected; the OIDC-capable npm CLI is pinned; the OIDC context is
+#      verified; scripts/publish-or-verify.mjs converges (already-published
+#      versions with matching integrity are a success, mismatched integrity
+#      fails closed).
+#   6. CDN artifacts are attached to the GitHub release from the published
+#      npm tarball (attach-release-assets.mjs) and the dist-tag is read back
+#      publicly. If these post-publish steps fail, re-run this workflow with
+#      the same tag input (recovery) or the Release Assets workflow.
 #
-# Required org configuration (one-time, needs owner permissions):
-#   - GitHub environment `npm` with required reviewers.
-#   - `@viceme-ai` npm scope configured for trusted publishing
-#     (repository + workflow + environment), no long-lived tokens.
+# 0.x publishes under the `next` dist-tag (DIST_TAG + .changeset/pre.json);
+# flip to `latest` at 1.0.0 in the same release PR that exits pre mode.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to recover, e.g. @viceme-ai/sdk@0.1.1-next.0'
+        required: false
+        type: string
 
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
 
 env:
   # 0.x phase (§14.1): publish under `next` only. Flip to `latest` at 1.0.0
   # and remove .changeset/pre.json in the same release PR.
   DIST_TAG: next
 
+concurrency:
+  # Serialize releases: npm dist-tags have no compare-and-swap.
+  group: viceme-sdk-release
+  cancel-in-progress: false
+
 jobs:
-  release:
-    name: Version / publish (OIDC + provenance)
+  version-pr:
+    name: Version Packages PR (Changesets, no publishing)
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: npm
-    outputs:
-      published: ${{ steps.changesets.outputs.published }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-
+        with: { version: 11 }
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action@v1
+        with:
+          version: pnpm release:version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+  metadata:
+    name: Resolve and validate immutable release identity
+    if: github.event_name == 'push' || inputs.tag != ''
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
+      recovery: ${{ steps.release.outputs.recovery }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve version, tag, and recovery mode
+        id: release
+        env:
+          RECOVERY_TAG: ${{ inputs.tag || '' }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./packages/sdk/package.json').version")"
+          TAG="@viceme-ai/sdk@${VERSION}"
+          SHA="$(git rev-parse HEAD)"
+          git fetch origin --tags
 
-      - name: Release quality gate (all PR checks rerun)
+          RECOVERY=false
+          if [ -n "$RECOVERY_TAG" ]; then
+            RECOVERY=true
+            if [ "$RECOVERY_TAG" != "$TAG" ]; then
+              echo "::error::recovery tag ${RECOVERY_TAG} does not match package version ${VERSION}"
+              exit 1
+            fi
+          fi
+
+          EXISTING_SHA="$(git rev-list -n 1 "${TAG}" 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ] && [ "$EXISTING_SHA" != "$SHA" ]; then
+            echo "::error::immutable tag ${TAG} already points to ${EXISTING_SHA}, not ${SHA}"
+            exit 1
+          fi
+          if [ "$RECOVERY" = true ] && [ -z "$EXISTING_SHA" ]; then
+            echo "::error::recovery requires an existing immutable tag ${TAG}"
+            exit 1
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "tag=${TAG}"
+            echo "sha=${SHA}"
+            echo "recovery=${RECOVERY}"
+          } >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Release quality (exact reviewed SHA)
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Full gate (format, lint, types, contract drift, tests, browsers, tarball)
         run: |
           pnpm --filter '@viceme-ai/sdk' exec playwright install --with-deps chromium firefox webkit
           pnpm check
 
-      - name: Changesets (version PR or publish)
-        id: changesets
-        uses: changesets/action@v1
+  tag:
+    name: Create or verify immutable release tag
+    needs:
+      - metadata
+      - quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
         with:
-          version: pnpm release:version
-          publish: pnpm release:publish
+          ref: ${{ needs.metadata.outputs.sha }}
+          fetch-depth: 0
+      - name: Tag
+        env:
+          TAG: ${{ needs.metadata.outputs.tag }}
+          RELEASE_SHA: ${{ needs.metadata.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin --tags
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          EXISTING_SHA="$(git rev-list -n 1 "${TAG}" 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ]; then
+            test "$EXISTING_SHA" = "$RELEASE_SHA"
+            exit 0
+          fi
+          git tag --annotate "${TAG}" "${RELEASE_SHA}" --message "Release ${TAG}"
+          git push origin "refs/tags/${TAG}"
+
+  npm-publish:
+    name: npm publication (OIDC, no publish token)
+    needs:
+      - metadata
+      - tag
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install pinned OIDC-capable npm CLI
+        run: npm install --global npm@11.12.1
+      - name: Verify trusted publisher OIDC context
+        run: |
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+      - run: pnpm install --frozen-lockfile
+      - name: Release gate (license fail closed)
+        run: pnpm release:gate
+      - name: Build and audit the exact release artifacts
+        run: pnpm build && pnpm pack:check
+      - name: Publish or verify the exact npm version
+        env:
+          VICEME_SDK_DIST_TAG: 'next'
+        run: node scripts/publish-or-verify.mjs
+
+  assets:
+    name: Attach CDN assets + dist-tag read-back
+    needs:
+      - metadata
+      - npm-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Attach CDN artifacts from the published npm tarball (immutable)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: 'true'
-
-      - name: Verify npm dist-tag read-back
-        if: steps.changesets.outputs.published == 'true'
+          VERSION: ${{ needs.metadata.outputs.version }}
+          RECOVERY: ${{ needs.metadata.outputs.recovery }}
         run: |
-          version="$(node -p "require('./packages/sdk/package.json').version")"
-          node scripts/verify-npm-dist-tag.mjs \
-            --package '@viceme-ai/sdk' --version "$version" --tag "$DIST_TAG"
-
-      # Sources assets from the published npm tarball (byte-identical to
-      # what npm serves, §13.3) and attaches them idempotently. If THIS step
-      # fails after a successful publish, re-running this workflow will skip
-      # it (Changesets sees the version as released) — recover by running the
-      # "Release Assets (recovery)" workflow with the same version.
-      - name: Attach CDN artifacts to the GitHub release (immutable)
-        if: steps.changesets.outputs.published == 'true'
-        run: |
-          version="$(node -p "require('./packages/sdk/package.json').version")"
-          node scripts/attach-release-assets.mjs --version "$version"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The dist-tag read-back is the immediate post-publish gate only;
+          # recovery runs go straight to convergent asset attachment.
+          if [ "$RECOVERY" != "true" ]; then
+            node scripts/verify-npm-dist-tag.mjs \
+              --package '@viceme-ai/sdk' --version "$VERSION" --tag next
+          fi
+          node scripts/attach-release-assets.mjs --version "$VERSION"

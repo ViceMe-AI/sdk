@@ -37,31 +37,60 @@ upload <region> <local-file> <object-key>
 - For the pointer key `sdk/-/aliases/v1`: `text/plain`, short TTL
   (`max-age=300`), overwriting is expected — it is the one mutable object.
 
+### Optional `CDN_PURGE_COMMAND` contract
+
+```text
+purge <region> <object-key>
+```
+
+When configured, the alias step runs it right after each pointer write so
+the read-back observes origin state immediately. Without it, pointer and
+alias verification converge within the pointer's cache TTL (bounded wait,
+see "Stable alias model") — slower but still correct.
+
 ## Releasing an npm version (0.x → `next` dist-tag)
 
-The 0.x phase publishes under `next` only, enforced in three places:
+Publication follows the reviewed `ViceMe-AI/cli` OIDC baseline — **no npm
+tokens anywhere**:
 
-1. `.changeset/pre.json` puts Changesets in pre-release mode with tag `next`.
-2. `release-package.yml` sets `DIST_TAG: next` and `pnpm release:publish`
-   passes `--tag "$DIST_TAG"` to `pnpm publish`.
-3. A post-publish step runs
-   `node scripts/verify-npm-dist-tag.mjs --tag next --version <v>` and fails
-   if the live registry shows anything else (or `latest` pointing at it).
+- Changesets only opens **Version Packages** PRs; it never publishes.
+- On merge, the workflow resolves the version from `packages/sdk/
+package.json`, binds it to an **immutable annotated tag**
+  `@viceme-ai/sdk@<version>` at the exact reviewed SHA (recovery runs
+  require the tag to exist and point at that SHA), reruns the full quality
+  gate at that SHA, installs the pinned OIDC-capable npm CLI (`npm@11.12.1`),
+  verifies the OIDC context, and publishes via
+  `scripts/publish-or-verify.mjs`:
+  - already published with matching integrity → dist-tag policy verified,
+    success (convergent rerun);
+  - already published with different integrity → fail (immutable);
+  - not published → `npm publish --provenance` (OIDC trusted publishing).
+- The 0.x dist-tag policy is enforced by the same script: `next` must point
+  at the version and `latest` must never point at it (`.changeset/pre.json`
+  keeps Changesets in pre-release mode; flip to `latest` at `1.0.0` in the
+  same release PR that exits pre mode).
+- CDN artifacts are then attached to the GitHub release from the published
+  npm tarball (immutable, idempotent).
 
 Flow:
 
 1. Merge feature PRs; each carries its Changeset.
-2. The **Release Package** workflow opens a `Version Packages` PR when
-   changesets are pending. Review it (version bumps + changelog only).
-3. Merge the Version PR. The workflow reruns the full quality gate, runs the
-   release gate, publishes with provenance under `next`, verifies the npm
-   dist-tag read-back, and attaches the CDN artifacts to the GitHub release
-   tag `@viceme-ai/sdk@<version>` (create-if-absent; identical bytes are
-   idempotent; differing bytes fail — release assets are immutable).
+2. Review and merge the **Version Packages** PR.
+3. The workflow runs the whole pipeline above and attaches CDN artifacts.
 4. Nothing about the CDN changes yet.
 
-At `1.0.0`: remove `.changeset/pre.json` (exit pre mode), set `DIST_TAG:
-latest` in the workflow, both in the same release PR (§14.1).
+## Recovery
+
+- **Any step after a successful npm publish failed**: re-run the Release
+  Package workflow with the `tag` input (`@viceme-ai/sdk@<version>`) —
+  recovery mode reuses the immutable tag/SHA, skips the immediate
+  dist-tag gate, and converges assets. For asset-only repair on ANY
+  historical version, run the **Release Assets (recovery)** workflow (it
+  only requires the exact version to exist on npm, not any dist-tag).
+- Drill: delete the `dist-<version>.zip` release asset and re-run the
+  recovery workflow; it must restore the byte-identical asset.
+  `attach-release-assets.mjs --dry-run` stages and digest-verifies without
+  GitHub API calls.
 
 ## Promoting a version to the CDN
 
@@ -91,43 +120,29 @@ GET https://<cdn-host>/sdk/-/aliases/v1   ->   "<version>"
 The CDN edge resolves `/sdk/v1/<file>` to `/sdk/<pointer-version>/<file>`.
 With `moveStableAlias=true`, the workflow writes that single pointer object
 per region (an atomic object write — no per-file copying, no torn state),
-verifies the pointer read-back equals the version, and verifies the alias
-resolves with `verify-cdn.mjs --expect-version`. Until the edge implements
-pointer resolution, this step fails closed by design.
+then verifies **with bounded convergence**: the public pointer URL is
+cacheable (short TTL), so `write-alias-pointer.mjs` optionally purges the
+edge (`CDN_PURGE_COMMAND`) and otherwise polls until the read matches the
+version, within a budget longer than the TTL. The alias-level
+`verify-cdn --expect-version` check retries with the same bounded budget.
+A timeout reports the last observed value, distinguishing a stale edge from
+an origin problem. Until the edge implements pointer resolution, this step
+fails closed by design.
 
 **Rollback** = re-run Promote CDN with the previous verified version and
 `moveStableAlias=true`: only the pointer moves. Exact-version objects are
 never rewritten or deleted; npm versions are never unpublished or reused.
 
-## Post-publish failure recovery
-
-If npm publish succeeded but a later step failed (dist-tag verification,
-GitHub release assets), re-running the **Release Package** workflow will NOT
-retry those steps — Changesets already sees the version as released. The
-convergent recovery is the **Release Assets (recovery)** workflow:
-
-1. Run it with the published `version`.
-2. It proves the version is live (npm dist-tag read-back), downloads the
-   published npm tarball (assets are byte-identical to what npm serves),
-   verifies digests, and attaches to the GitHub release idempotently
-   (create-if-absent / identical-skip / differ-fail).
-3. Re-run as many times as needed; it always converges.
-
-Drill (rehearse after the first real release): delete the
-`dist-<version>.zip` asset from the release, re-run the recovery workflow,
-and confirm it restores the byte-identical asset. `node
-scripts/attach-release-assets.mjs --version <v> --dry-run` stages and
-digest-verifies assets without any GitHub API calls.
-
 ## Verification tooling
 
 ```bash
 pnpm release:gate        # license + package metadata preconditions
+node scripts/validate-release-inputs.mjs --version 1.2.3 --regions cn,global
 node scripts/verify-cdn.mjs --local packages/sdk/dist
 node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/1.2.3/
 node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/v1/ --expect-version 1.2.3 --allow-mutable-cache
 node scripts/upload-plan.mjs --dist packages/sdk/dist --base https://cdn.viceme.cn/sdk/1.2.3/
-node scripts/write-alias-pointer.mjs --version 1.2.3 --regions cn --hosts cn=... --upload-command "..."
+node scripts/write-alias-pointer.mjs --version 1.2.3 --regions cn --hosts cn=... --upload-command "..." [--purge-command "..."]
 node scripts/attach-release-assets.mjs --version 1.2.3 --dry-run
 node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag next
 ```

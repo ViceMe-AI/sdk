@@ -328,10 +328,11 @@ describe('write-alias-pointer.mjs', () => {
     }
   });
 
-  it('fails closed when the pointer read-back does not match', async () => {
+  it('fails closed when the pointer never converges (bounded wait)', async () => {
     const cn = await startRegionServer('cn');
     try {
-      // Pre-seed a wrong pointer and make the upload a no-op.
+      // Pre-seed a wrong pointer and make the upload a no-op; a tiny
+      // convergence budget keeps the test fast.
       mkdirSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases'), { recursive: true });
       writeFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), '9.9.9');
       await expect(
@@ -347,10 +348,98 @@ describe('write-alias-pointer.mjs', () => {
             `cn=${cn.url}`,
             '--upload-command',
             'true',
+            '--converge-timeout-ms',
+            '2500',
           ],
           { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot } },
         ),
       ).rejects.toMatchObject({ code: 1 });
+    } finally {
+      await cn.close();
+    }
+  });
+
+  it(
+    'converges after a stale edge stops serving the old pointer',
+    { timeout: 25_000 },
+    async () => {
+      // The "edge" serves the stale value for the first two reads, then the
+      // origin value — the bounded poll must succeed without a purge.
+      const cn = await startRegionServer('cn');
+      let reads = 0;
+      const stale = Buffer.from('0.1.0');
+      const fresh = Buffer.from('0.2.0');
+      const serverWithStaleEdge = {
+        url: '',
+        close: () => Promise.resolve(),
+      };
+      const httpServer: Server = createServer((_req, res) => {
+        reads += 1;
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end(reads <= 2 ? stale : fresh);
+      });
+      await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+      const address = httpServer.address();
+      if (address === null || typeof address === 'string') throw new Error('bind failed');
+      serverWithStaleEdge.url = `http://127.0.0.1:${address.port}`;
+      serverWithStaleEdge.close = () => new Promise<void>((done) => httpServer.close(() => done()));
+      void cn; // region server unused here; keep structure symmetric
+      try {
+        const { stdout } = await exec(
+          'node',
+          [
+            join(scriptsDir, 'write-alias-pointer.mjs'),
+            '--version',
+            '0.2.0',
+            '--regions',
+            'cn',
+            '--hosts',
+            `cn=${serverWithStaleEdge.url}`,
+            '--upload-command',
+            'true',
+            '--converge-timeout-ms',
+            '15000',
+          ],
+          { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot } },
+        );
+        expect(stdout).toContain('alias pointer written and verified in 1 region(s)');
+      } finally {
+        await serverWithStaleEdge.close();
+      }
+    },
+  );
+
+  it('runs the purge hook after each pointer write', async () => {
+    const purgeMarker = join(tmpRoot, 'purge-invoked');
+    const fakePurge = join(tmpRoot, 'fake-purge.mjs');
+    writeFileSync(
+      fakePurge,
+      [
+        "import { writeFileSync } from 'node:fs';",
+        'const [, , region, key] = process.argv;',
+        "writeFileSync(process.env.PURGE_MARKER ?? '', `${region} ${key}\\n`);",
+      ].join('\n'),
+    );
+    const cn = await startRegionServer('cn');
+    try {
+      await exec(
+        'node',
+        [
+          join(scriptsDir, 'write-alias-pointer.mjs'),
+          '--version',
+          '0.2.0',
+          '--regions',
+          'cn',
+          '--hosts',
+          `cn=${cn.url}`,
+          '--upload-command',
+          `node ${fakeUpload}`,
+          '--purge-command',
+          `node ${fakePurge}`,
+        ],
+        { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot, PURGE_MARKER: purgeMarker } },
+      );
+      expect(readFileSync(purgeMarker, 'utf8')).toBe('cn sdk/-/aliases/v1\n');
     } finally {
       await cn.close();
     }
@@ -369,6 +458,36 @@ describe('write-alias-pointer.mjs', () => {
         '--upload-command',
         'true',
       ),
+    ).rejects.toMatchObject({ code: 1 });
+  });
+});
+
+/* ---------------------------- input validation --------------------------- */
+
+describe('validate-release-inputs.mjs', () => {
+  it('accepts exact semver versions and known region sets', async () => {
+    await expect(run('validate-release-inputs.mjs', '--version', '1.2.3')).resolves.toMatchObject({
+      stdout: expect.stringContaining('valid'),
+    });
+    await expect(
+      run('validate-release-inputs.mjs', '--version', '0.1.1-next.0', '--regions', 'cn,global'),
+    ).resolves.toMatchObject({ stdout: expect.stringContaining('valid') });
+  });
+
+  it('rejects malformed versions and unknown or duplicate regions', async () => {
+    for (const bad of ['1.2', 'v1.2.3', '1.2.3;rm -rf', '../escape', '']) {
+      await expect(run('validate-release-inputs.mjs', '--version', bad)).rejects.toMatchObject({
+        code: 1,
+      });
+    }
+    await expect(
+      run('validate-release-inputs.mjs', '--version', '1.2.3', '--regions', 'eu'),
+    ).rejects.toMatchObject({ code: 1 });
+    await expect(
+      run('validate-release-inputs.mjs', '--version', '1.2.3', '--regions', 'cn,cn'),
+    ).rejects.toMatchObject({ code: 1 });
+    await expect(
+      run('validate-release-inputs.mjs', '--version', '1.2.3', '--regions', ','),
     ).rejects.toMatchObject({ code: 1 });
   });
 });

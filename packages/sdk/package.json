@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "ViceMe browser SDK: headless core, public session, and capability subpaths for static HTML, ESM, React, and Agent-generated sites.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ViceMe-AI/sdk.git",
+    "directory": "packages/sdk"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

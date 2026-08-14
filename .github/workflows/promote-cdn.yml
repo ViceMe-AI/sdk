@@ -2,13 +2,14 @@ name: Promote CDN
 
 # Promotes an already-published npm release to the CDN (§14.2 steps 7-10).
 #
-# Flow: download the exact GitHub release artifacts -> re-verify digests
-# locally -> per region, plan immutable uploads (missing => upload,
-# byte-identical => skip, different => fail closed) -> upload -> public
-# read-back -> (explicit input) move the stable `v1` alias by writing ONE
-# pointer object per region -> verify pointer + alias + real-browser smoke.
+# Flow: strictly validate inputs -> download the exact GitHub release
+# artifacts -> re-verify digests locally -> per region, plan immutable
+# uploads (missing => upload, byte-identical => skip, different => fail
+# closed) -> upload -> public read-back -> (explicit input) move the stable
+# `v1` alias by writing ONE pointer object per region -> bounded-convergence
+# pointer/alias verification -> real-network loader smoke.
 #
-# Atomicity model (review P1):
+# Atomicity model:
 #   - Exact versions live only under immutable /sdk/<version>/ objects and
 #     are never overwritten (scripts/upload-plan.mjs enforces this).
 #   - /sdk/v1 is NOT a copy of the files. Each region exposes a small public
@@ -17,15 +18,26 @@ name: Promote CDN
 #     /sdk/<pointer-version>/<file>. Moving the alias = one atomic object
 #     write per region. Rollback = point at an older verified version.
 #
+# Security model (review P1):
+#   - workflow_dispatch inputs are attacker-controllable text: they are
+#     passed to scripts via env and referenced as double-quoted shell
+#     variables, NEVER interpolated into script text by ${{ }}.
+#   - Every job validates version/regions with scripts/validate-release-
+#     inputs.mjs before any network, file, or credential operation.
+#   - CDN_UPLOAD_COMMAND / CDN_PURGE_COMMAND secrets are expanded only
+#     inside their explicit bash -lc invocation, never into script bodies.
+#
 # Required org configuration (§21.2):
 #   - CDN buckets for cdn.viceme.cn (region `cn`) and cdn.viceme.ai
 #     (region `global`).
-#   - `CDN_UPLOAD_COMMAND` secret: a one-line command contract invoked as
-#     `upload <region> <local-file> <object-key>` (bash -lc). The region
-#     argument (`cn` | `global`) selects that region's own bucket and
-#     credentials; the command must not write outside the given object key
-#     and must set immutable long-cache headers for /sdk/<version>/ keys and
-#     a short TTL for the pointer key.
+#   - `CDN_UPLOAD_COMMAND` secret: invoked as `upload <region> <local-file>
+#     <object-key>` (bash -lc). The region argument (`cn` | `global`)
+#     selects that region's own bucket and credentials; the command must not
+#     write outside the given object key and must set immutable long-cache
+#     headers for /sdk/<version>/ keys and a short TTL for the pointer key.
+#   - Optional `CDN_PURGE_COMMAND` secret: invoked as `purge <region> <key>`;
+#     when present it runs after each pointer write so the read-back sees
+#     origin state instead of a stale edge cache.
 #   - Edge prerequisite: /sdk/v1/<file> resolution from the pointer above.
 #     Until the edge implements it, alias verification fails closed — by
 #     design, never silently.
@@ -57,22 +69,29 @@ concurrency:
 
 jobs:
   verify-artifacts:
-    name: Download + locally verify release artifacts
+    name: Validate inputs, download + locally verify release artifacts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
+      - name: Strict input validation (before anything else)
+        env:
+          VERSION: ${{ inputs.version }}
+          REGIONS: ${{ inputs.regions }}
+        run: node scripts/validate-release-inputs.mjs --version "$VERSION" --regions "$REGIONS"
       - name: Download release artifacts and verify digests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
         run: |
-          gh release download "@viceme-ai/sdk@${{ inputs.version }}" \
+          set -euo pipefail
+          gh release download "@viceme-ai/sdk@${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern 'dist-*.zip' --dir release
           unzip -q release/dist-*.zip -d release/dist
           mkdir -p packages/sdk/dist && cp -r release/dist/. packages/sdk/dist/
           node scripts/verify-cdn.mjs --local packages/sdk/dist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   upload:
     name: Immutable exact-version upload + read-back (per region)
@@ -83,53 +102,51 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
       - name: Download release artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
         run: |
-          gh release download "@viceme-ai/sdk@${{ inputs.version }}" \
+          set -euo pipefail
+          gh release download "@viceme-ai/sdk@${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern 'dist-*.zip' --dir release
           unzip -q release/dist-*.zip -d release/dist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Validate regions input
-        run: |
-          found=0
-          for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
-            case "$region" in
-              cn|global) found=1 ;;
-              *) echo "::error::unknown region '$region' (expected cn or global)"; exit 1 ;;
-            esac
-          done
-          [ "$found" -eq 1 ] || { echo "::error::no regions selected"; exit 1; }
       - name: Plan immutable uploads, upload, and read back (per region)
         shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          REGIONS: ${{ inputs.regions }}
+          CDN_UPLOAD_COMMAND: ${{ secrets.CDN_UPLOAD_COMMAND }}
         run: |
           set -euo pipefail
-          if [ -z "${{ secrets.CDN_UPLOAD_COMMAND }}" ]; then
+          node scripts/validate-release-inputs.mjs --version "$VERSION" --regions "$REGIONS"
+          if [ -z "$CDN_UPLOAD_COMMAND" ]; then
             echo "::error::CDN_UPLOAD_COMMAND secret is not configured (bucket provider pending — see promote-cdn.yml header and docs/RELEASE.md)"
             exit 1
           fi
-          upload() { bash -lc "${{ secrets.CDN_UPLOAD_COMMAND }} $1 $2 $3"; }
-          for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
+          # The secret is expanded only inside this explicit bash invocation.
+          upload() { bash -lc "$CDN_UPLOAD_COMMAND $1 $2 $3"; }
+          for region in $(echo "$REGIONS" | tr ',' ' '); do
             case "$region" in
               cn) host=cdn.viceme.cn ;;
               global) host=cdn.viceme.ai ;;
             esac
             echo "::group::region ${region} (${host})"
-            plan="$(node scripts/upload-plan.mjs --dist release/dist --base "https://${host}/sdk/${{ inputs.version }}/")"
+            plan="$(node scripts/upload-plan.mjs --dist release/dist --base "https://${host}/sdk/${VERSION}/")"
             if [ -n "$plan" ]; then
               echo "$plan" | while IFS= read -r file; do
-                upload "$region" "release/dist/$file" "sdk/${{ inputs.version }}/$file"
-                echo "uploaded sdk/${{ inputs.version }}/$file"
+                upload "$region" "release/dist/$file" "sdk/${VERSION}/$file"
+                echo "uploaded sdk/${VERSION}/$file"
               done
             else
               echo "all objects already present and byte-identical (idempotent re-run)"
             fi
-            node scripts/verify-cdn.mjs --base "https://${host}/sdk/${{ inputs.version }}/"
+            node scripts/verify-cdn.mjs --base "https://${host}/sdk/${VERSION}/"
             echo "::endgroup::"
           done
 
   alias:
-    name: Move stable v1 pointer (explicit) + verify + smoke
+    name: Move stable v1 pointer (explicit) + bounded verification + smoke
     needs: upload
     if: ${{ inputs.moveStableAlias }}
     runs-on: ubuntu-latest
@@ -137,29 +154,57 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
-      - name: Write the pointer (one atomic object per region) and read back
+      - name: Write the pointer (one atomic object per region) with convergence
         env:
+          VERSION: ${{ inputs.version }}
+          REGIONS: ${{ inputs.regions }}
           CDN_UPLOAD_COMMAND: ${{ secrets.CDN_UPLOAD_COMMAND }}
+          CDN_PURGE_COMMAND: ${{ secrets.CDN_PURGE_COMMAND }}
         run: |
+          set -euo pipefail
+          node scripts/validate-release-inputs.mjs --version "$VERSION" --regions "$REGIONS"
           if [ -z "$CDN_UPLOAD_COMMAND" ]; then
             echo "::error::CDN_UPLOAD_COMMAND secret is not configured"
             exit 1
           fi
-          node scripts/write-alias-pointer.mjs \
-            --version '${{ inputs.version }}' \
-            --regions '${{ inputs.regions }}' \
-            --hosts cn=https://cdn.viceme.cn,global=https://cdn.viceme.ai \
+          args=(
+            --version "$VERSION"
+            --regions "$REGIONS"
+            --hosts cn=https://cdn.viceme.cn,global=https://cdn.viceme.ai
             --upload-command "$CDN_UPLOAD_COMMAND"
-      - name: Verify the alias on every region
+          )
+          # Optional purge hook: without it, the pointer read-back converges
+          # within the pointer's cache TTL instead of immediately.
+          if [ -n "$CDN_PURGE_COMMAND" ]; then
+            args+=(--purge-command "$CDN_PURGE_COMMAND")
+          fi
+          node scripts/write-alias-pointer.mjs "${args[@]}"
+      - name: Verify the alias on every region (bounded retry for edge TTL)
+        env:
+          VERSION: ${{ inputs.version }}
+          REGIONS: ${{ inputs.regions }}
         run: |
-          for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
+          set -euo pipefail
+          # The edge may serve the previous alias resolution for up to the
+          # pointer TTL; retry the whole verification with a bounded budget
+          # (~5 minutes) instead of treating a stale edge as failure.
+          for region in $(echo "$REGIONS" | tr ',' ' '); do
             case "$region" in
               cn) host=cdn.viceme.cn ;;
               global) host=cdn.viceme.ai ;;
             esac
-            node scripts/verify-cdn.mjs \
-              --base "https://${host}/sdk/v1/" \
-              --expect-version '${{ inputs.version }}' --allow-mutable-cache
+            attempt=1
+            until node scripts/verify-cdn.mjs \
+                --base "https://${host}/sdk/v1/" \
+                --expect-version "$VERSION" --allow-mutable-cache; do
+              if [ "$attempt" -ge 10 ]; then
+                echo "::error::alias did not converge to $VERSION on ${host} within the retry budget"
+                exit 1
+              fi
+              echo "alias on ${host} not converged yet (attempt ${attempt}); waiting 30s"
+              attempt=$((attempt + 1))
+              sleep 30
+            done
           done
       - name: Loader smoke against the live CDN
         run: |
