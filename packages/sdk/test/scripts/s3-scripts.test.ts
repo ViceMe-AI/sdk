@@ -69,9 +69,11 @@ const digest = (body: Buffer) => ({
 });
 const indexBody = Buffer.from('export const SDK_VERSION = "0.1.0";\n');
 const loaderBody = Buffer.from('(function(){/* data-viceme */})();\n');
+const bootstrapBody = Buffer.from('(function(){/* fixed alias bootstrap */})();\n');
 mkdirSync(distDir, { recursive: true });
 writeFileSync(join(distDir, 'index.js'), indexBody);
 writeFileSync(join(distDir, 'viceme.min.js'), loaderBody);
+writeFileSync(join(distDir, 'bootstrap.min.js'), bootstrapBody);
 writeFileSync(
   join(distDir, 'manifest.json'),
   `${JSON.stringify(
@@ -80,7 +82,11 @@ writeFileSync(
       apiMajor: 1,
       loader: 'viceme.min.js',
       features: {},
-      files: { 'index.js': digest(indexBody), 'viceme.min.js': digest(loaderBody) },
+      files: {
+        'index.js': digest(indexBody),
+        'viceme.min.js': digest(loaderBody),
+        'bootstrap.min.js': digest(bootstrapBody),
+      },
     },
     null,
     2,
@@ -198,11 +204,11 @@ describe('publish-s3-region.mjs', () => {
     ];
     // Empty region: everything uploads and the public read-back passes.
     const first = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(first.stdout).toContain('CN: 3 uploaded, 0 already identical');
+    expect(first.stdout).toContain('CN: 4 uploaded, 0 already identical');
 
     // Re-run: byte-identical objects are skipped.
     const second = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(second.stdout).toContain('CN: 0 uploaded, 3 already identical');
+    expect(second.stdout).toContain('CN: 0 uploaded, 4 already identical');
 
     // Tamper one object: the immutable violation fails closed.
     writeFileSync(join(storeRoot, '0.1.0/index.js'), 'tampered\n');
@@ -274,8 +280,9 @@ describe('s3-alias-pointer.mjs', () => {
     // and finish GLOBAL.
     mkdirSync(join(storeRoot, '0.2.0'), { recursive: true });
     writeFileSync(join(storeRoot, '0.2.0', 'viceme.min.js'), loaderBody);
+    writeFileSync(join(storeRoot, '0.2.0', 'bootstrap.min.js'), bootstrapBody);
     mkdirSync(join(storeRoot, 'v1'), { recursive: true });
-    writeFileSync(join(storeRoot, 'v1', 'viceme.min.js'), loaderBody);
+    writeFileSync(join(storeRoot, 'v1', 'viceme.min.js'), bootstrapBody);
     mkdirSync(join(storeRoot, '-', 'aliases'), { recursive: true });
     writeFileSync(join(storeRoot, '-', 'aliases', 'v1'), '0.2.0');
 
@@ -350,6 +357,46 @@ describe('s3-alias-pointer.mjs', () => {
     }
   });
 
+  it('a hung pointer response cannot stall the bounded wait (per-request timeout)', async () => {
+    // Server accepts the connection but never responds: every fetch must
+    // hit its own timeout so the run fails within the budget.
+    const hung = createServer(() => {
+      /* deliberately never respond */
+    });
+    await new Promise<void>((resolve) => hung.listen(0, '127.0.0.1', resolve));
+    const hungAddress = hung.address();
+    if (hungAddress === null || typeof hungAddress === 'string') throw new Error('bind');
+    const hungUrl = `http://127.0.0.1:${hungAddress.port}`;
+    try {
+      const result = await exec(
+        'node',
+        [
+          join(scriptsDir, 's3-alias-pointer.mjs'),
+          '--version',
+          '0.1.0',
+          '--regions',
+          'cn',
+          '--public-base-cn',
+          hungUrl,
+          '--converge-timeout-ms',
+          '8000',
+        ],
+        {
+          env: {
+            ...process.env,
+            AWS_BIN: fakeAws,
+            FAKE_AWS_STORE: storeRoot,
+            EXPECT_BUCKET: 'viceme-sdk',
+            ...ALIAS_ENV,
+          },
+        },
+      ).catch((error: { code?: number }) => error);
+      expect(result).toMatchObject({ code: 1 });
+    } finally {
+      await new Promise<void>((done) => hung.close(() => done()));
+    }
+  }, 30_000);
+
   it('promotes forward after the exact version exists, then refuses a backward promote', async () => {
     // Isolate the pointer for this scenario's lifecycle.
     rmSync(join(storeRoot, '-', 'aliases', 'v1'), { force: true });
@@ -374,7 +421,7 @@ describe('s3-alias-pointer.mjs', () => {
     expect(promote.stdout).toContain('pointer unset; promoting to 0.1.0');
     expect(readFileSync(join(storeRoot, '-', 'aliases', 'v1'), 'utf8')).toBe('0.1.0');
     expect(readFileSync(join(storeRoot, 'v1/viceme.min.js'), 'utf8')).toBe(
-      loaderBody.toString('utf8'),
+      bootstrapBody.toString('utf8'),
     );
 
     // Forward promote to 0.2.0 succeeds.

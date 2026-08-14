@@ -118,6 +118,20 @@ async function verifyAliasByPointer(aliasBase, expectVersion) {
     `alias pointer is '${pointerVersion}', expected '${expectVersion}'`,
   );
   console.log(`alias pointer verified -> ${pointerVersion}`);
+
+  // The alias loader is the FIXED bootstrap: its public bytes must EXACTLY
+  // match the pointed-to version's canonical bootstrap build — a 200 with
+  // corrupted content must fail.
+  const aliasLoader = await fetchOrThrow(new URL('viceme.min.js', aliasBase));
+  const canonical = await fetchOrThrow(
+    new URL(`/viceme-sdk/${expectVersion}/bootstrap.min.js`, aliasBase),
+  );
+  check(
+    aliasLoader.buffer.equals(canonical.buffer),
+    `alias loader bytes differ from ${expectVersion}/bootstrap.min.js (${aliasLoader.buffer.length}B vs ${canonical.buffer.length}B)`,
+  );
+  console.log('alias loader byte-verified against canonical bootstrap');
+
   const exactBase = new URL(`/viceme-sdk/${expectVersion}/`, aliasBase);
   return verifyExactVersion(exactBase.toString(), {
     expectVersion,

@@ -34,9 +34,10 @@
   },
   "scripts": {
     "clean": "node ../../scripts/rmrf.mjs dist test-fixtures-dist",
-    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:types && pnpm build:fixture && pnpm build:manifest && pnpm build:license",
+    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:bootstrap && pnpm build:types && pnpm build:fixture && pnpm build:manifest && pnpm build:license",
     "build:esm": "vite build --config vite.config.esm.ts",
     "build:loader": "vite build --config vite.config.loader.ts",
+    "build:bootstrap": "vite build --config vite.config.bootstrap.ts",
     "build:types": "tsc -p tsconfig.build.json",
     "build:fixture": "vite build --config vite.config.fixture.ts",
     "build:manifest": "node ../../scripts/build-manifest.mjs",

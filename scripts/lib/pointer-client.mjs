@@ -4,6 +4,41 @@
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+/** fetch with a per-request timeout of at most `budgetMs`. */
+function fetchBudgeted(url, budgetMs) {
+  const ms = Math.max(200, Math.min(budgetMs, 5_000));
+  const signal =
+    typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+      ? AbortSignal.timeout(ms)
+      : undefined;
+  return fetch(url, { credentials: 'omit', headers: { 'cache-control': 'no-cache' }, signal });
+}
+
+/** Poll until the body EXACTLY equals `expected` (bounded, per-request timeout). */
+export async function awaitBodyEquals(url, expected, timeoutMs, pollIntervalMs = 3_000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = '(no response)';
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetchBudgeted(url, deadline - Date.now());
+      if (response.ok) {
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const { createHash } = await import('node:crypto');
+        last = `${buffer.length}B (sha256 ${createHash('sha256').update(buffer).digest('hex').slice(0, 12)}…)`;
+        if (buffer.equals(expected)) return;
+      } else {
+        last = `HTTP ${response.status}`;
+      }
+    } catch (error) {
+      last = `fetch error: ${String(error)}`;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+  console.error(`body did not match within ${timeoutMs}ms: ${url}`);
+  console.error(`  last seen: ${last}`);
+  process.exit(1);
+}
+
 /**
  * Strict single read of a pointer URL.
  *
@@ -18,10 +53,7 @@ const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 export async function readPointerState(url) {
   let response;
   try {
-    response = await fetch(url, {
-      credentials: 'omit',
-      headers: { 'cache-control': 'no-cache' },
-    });
+    response = await fetchBudgeted(url, 5_000);
   } catch (error) {
     return { kind: 'error', detail: `fetch failed: ${String(error)}` };
   }
@@ -53,10 +85,7 @@ export async function awaitPointerConvergence(url, expected, timeoutMs, pollInte
   let lastStatus = 0;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(url, {
-        credentials: 'omit',
-        headers: { 'cache-control': 'no-cache' },
-      });
+      const response = await fetchBudgeted(url, deadline - Date.now());
       lastStatus = response.status;
       if (response.ok) {
         lastObserved = (await response.text()).trim();

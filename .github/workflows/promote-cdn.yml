@@ -51,8 +51,9 @@ concurrency:
 
 jobs:
   alias:
-    name: Move /sdk/v1 pointer (policy-checked, both regions)
+    name: Move the /viceme-sdk/v1 pointer (policy-checked, both regions)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: cdn
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -113,14 +114,28 @@ jobs:
             esac
             node scripts/verify-cdn.mjs --base "https://${host}/viceme-sdk/v1/" --expect-version "$VERSION"
           done
-      - name: Loader smoke against the live alias
+      - name: Bootstrap + loader smoke on every region
+        env:
+          REGIONS: ${{ inputs.regions }}
         run: |
-          node - <<'EOF'
-          const base = 'https://s3.viceme.ai/viceme-sdk/v1/';
-          const res = await fetch(new URL('viceme.min.js', base));
-          if (!res.ok) throw new Error(`loader HTTP ${res.status}`);
-          const text = await res.text();
-          if (!text.includes('data-viceme')) throw new Error('loader bundle looks wrong');
-          const pointer = await (await fetch('https://s3.viceme.ai/viceme-sdk/-/aliases/v1')).text();
-          console.log('cdn smoke ok, alias ->', pointer.trim());
+          set -euo pipefail
+          for region in $(echo "$REGIONS" | tr ',' ' '); do
+            case "$region" in
+              cn) host=s3.viceme.cn ;;
+              global) host=s3.viceme.ai ;;
+            esac
+            node - "$host" <<'EOF'
+          const [host] = process.argv.slice(2);
+          const base = `https://${host}/viceme-sdk/v1/`;
+          const bootstrap = await fetch(new URL('viceme.min.js', base));
+          if (!bootstrap.ok) throw new Error(`bootstrap HTTP ${bootstrap.status}`);
+          const bootstrapText = await bootstrap.text();
+          if (!bootstrapText.includes('/viceme-sdk/-/aliases/v1')) {
+            throw new Error(`${host}: alias loader is not the fixed bootstrap`);
+          }
+          const pointer = await (await fetch(`https://${host}/viceme-sdk/-/aliases/v1`)).text();
+          const loader = await fetch(`https://${host}/viceme-sdk/${pointer.trim()}/viceme.min.js`);
+          if (!loader.ok) throw new Error(`versioned loader HTTP ${loader.status}`);
+          console.log(`${host} smoke ok, alias ->`, pointer.trim());
           EOF
+          done

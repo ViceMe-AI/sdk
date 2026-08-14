@@ -26,12 +26,15 @@
  * EXPECT_BUCKET (default viceme-sdk).
  */
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { decideMutableTagMove } from './lib/release-policy.mjs';
-import { awaitPointerConvergence, readPointerState } from './lib/pointer-client.mjs';
+import {
+  awaitBodyEquals,
+  awaitPointerConvergence,
+  readPointerState,
+} from './lib/pointer-client.mjs';
 
 const POINTER_KEY = '-/aliases/v1';
 const ALIAS_SEGMENT = 'v1';
@@ -146,13 +149,23 @@ try {
     if (!decision.allowed) {
       if (decision.converged) {
         // Partial-success rerun: this region already serves the target;
-        // verify loader + pointer, then continue with the other regions.
-        const aliasLoaderUrl = `${config.publicBase}/${BUCKET_PATH}/${ALIAS_SEGMENT}/viceme.min.js`;
-        const loaderCheck = await fetch(aliasLoaderUrl, { credentials: 'omit' }).catch(() => null);
-        if (loaderCheck === null || !loaderCheck.ok) {
-          console.error(`converged region ${region}: alias loader missing at ${aliasLoaderUrl}`);
+        // verify the alias bootstrap BYTES against the canonical build and
+        // the pointer value, then continue with the other regions.
+        const bootstrapLocal = join(scratch, `bootstrap-${region}.js`);
+        rmSync(bootstrapLocal, { force: true });
+        const bootstrapGet = aws(
+          's3',
+          'cp',
+          `s3://${config.bucket}/${args.version}/bootstrap.min.js`,
+          bootstrapLocal,
+          '--only-show-errors',
+        );
+        if (bootstrapGet.status !== 0) {
+          console.error(`converged region ${region}: canonical bootstrap missing`);
           process.exit(1);
         }
+        const aliasLoaderUrl = `${config.publicBase}/${BUCKET_PATH}/${ALIAS_SEGMENT}/viceme.min.js`;
+        await awaitBodyEquals(aliasLoaderUrl, readFileSync(bootstrapLocal), 15_000);
         await awaitPointerConvergence(pointerUrl, args.version, 2_000, 500);
         console.log(`alias policy ${region}: ${decision.reason}`);
         continue;
@@ -162,81 +175,49 @@ try {
     }
     console.log(`alias policy ${region}: ${decision.reason}`);
 
-    // 2. Loader object under the alias path (immutable semantics).
-    const loaderLocal = join(scratch, 'viceme.min.js');
-    rmSync(loaderLocal, { force: true });
-    const loaderGet = aws(
+    // 2. The alias path carries the FIXED bootstrap (byte-stable for the
+    // whole API major): canonical bytes come from
+    // <version>/bootstrap.min.js in this bucket. v1/viceme.min.js is an
+    // alias object — writable like the pointer — and correctness is
+    // guarded by an exact public byte read-back, never by assuming the
+    // first release's bytes are frozen forever.
+    const bootstrapLocal = join(scratch, 'bootstrap.min.js');
+    rmSync(bootstrapLocal, { force: true });
+    const bootstrapGet = aws(
       's3',
       'cp',
-      `s3://${config.bucket}/${args.version}/viceme.min.js`,
-      loaderLocal,
+      `s3://${config.bucket}/${args.version}/bootstrap.min.js`,
+      bootstrapLocal,
       '--only-show-errors',
     );
-    if (loaderGet.status !== 0) {
+    if (bootstrapGet.status !== 0) {
       console.error(
-        `s3-alias-pointer: loader object missing at ${args.version}/viceme.min.js for ${region} — publish the exact version first`,
+        `s3-alias-pointer: canonical bootstrap missing at ${args.version}/bootstrap.min.js for ${region} — publish the exact version first`,
       );
       process.exit(1);
     }
+    const canonicalBootstrap = readFileSync(bootstrapLocal);
     const aliasLoaderKey = `${ALIAS_SEGMENT}/viceme.min.js`;
-    const aliasHead = aws(
-      's3api',
-      'head-object',
-      '--bucket',
-      config.bucket,
-      '--key',
-      aliasLoaderKey,
+    const put = aws(
+      's3',
+      'cp',
+      bootstrapLocal,
+      `s3://${config.bucket}/${aliasLoaderKey}`,
+      '--cache-control',
+      'public,max-age=300',
+      '--only-show-errors',
     );
-    if (aliasHead.status === 0) {
-      const existing = join(scratch, 'existing-loader');
-      rmSync(existing, { force: true });
-      const cp = aws(
-        's3',
-        'cp',
-        `s3://${config.bucket}/${aliasLoaderKey}`,
-        existing,
-        '--only-show-errors',
-      );
-      if (cp.status !== 0) {
-        console.error(
-          `s3-alias-pointer: could not read existing alias loader:\n${cp.stderr ?? ''}`,
-        );
-        process.exit(1);
-      }
-      const a = createHash('sha256').update(readFileSync(loaderLocal)).digest('hex');
-      const b = createHash('sha256').update(readFileSync(existing)).digest('hex');
-      if (a !== b) {
-        console.error(
-          `immutable violation: ${aliasLoaderKey} exists with different bytes in ${region}`,
-        );
-        process.exit(1);
-      }
-      console.log(`${region}: alias loader already identical`);
-    } else if (
-      /404|NoSuchKey|Not Found/i.test(`${aliasHead.stderr ?? ''}${aliasHead.stdout ?? ''}`)
-    ) {
-      const cp = aws(
-        's3',
-        'cp',
-        loaderLocal,
-        `s3://${config.bucket}/${aliasLoaderKey}`,
-        '--cache-control',
-        'public,max-age=31536000,immutable',
-        '--only-show-errors',
-      );
-      if (cp.status !== 0) {
-        console.error(`s3-alias-pointer: alias loader upload failed:\n${cp.stderr ?? ''}`);
-        process.exit(1);
-      }
-    } else {
-      console.error(`head-object failed for ${aliasLoaderKey}:\n${aliasHead.stderr ?? ''}`);
+    if (put.status !== 0) {
+      console.error(`s3-alias-pointer: alias bootstrap upload failed:\n${put.stderr ?? ''}`);
       process.exit(1);
     }
+    const aliasLoaderUrl = `${config.publicBase}/${BUCKET_PATH}/${aliasLoaderKey}`;
+    await awaitBodyEquals(aliasLoaderUrl, canonicalBootstrap, 15_000);
 
     // 3. The single mutable pointer object, then bounded convergence.
     const pointerLocal = join(scratch, 'pointer-version');
     writeFileSync(pointerLocal, args.version);
-    const put = aws(
+    const pointerPut = aws(
       's3',
       'cp',
       pointerLocal,
@@ -247,8 +228,8 @@ try {
       'public,max-age=300',
       '--only-show-errors',
     );
-    if (put.status !== 0) {
-      console.error(`s3-alias-pointer: pointer upload failed:\n${put.stderr ?? ''}`);
+    if (pointerPut.status !== 0) {
+      console.error(`s3-alias-pointer: pointer upload failed:\n${pointerPut.stderr ?? ''}`);
       process.exit(1);
     }
     await awaitPointerConvergence(pointerUrl, args.version, args.convergeTimeoutMs, 1_000);

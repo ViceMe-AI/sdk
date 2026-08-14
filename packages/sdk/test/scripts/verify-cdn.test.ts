@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync as writeFile } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync as writeFile } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -36,6 +36,11 @@ async function digestInfo(body: Buffer) {
 
 const files = new Map<string, ServedFile>();
 
+const indexBody = Buffer.from('export const SDK_VERSION = "0.1.0";\n');
+const loaderBody = Buffer.from('(function(){/* data-viceme loader */})();\n');
+const bootstrapBody = Buffer.from('(function(){/* fixed alias bootstrap */})();\n');
+const chunkBody = Buffer.from('export {};\n');
+
 let server:
   | {
       url: string;
@@ -44,10 +49,6 @@ let server:
   | undefined;
 
 beforeAll(async () => {
-  const indexBody = Buffer.from('export const SDK_VERSION = "0.1.0";\n');
-  const loaderBody = Buffer.from('(function(){/* data-viceme loader */})();\n');
-  const chunkBody = Buffer.from('export {};\n');
-
   await writeFile(join(distDir, 'index.js'), indexBody);
   await writeFile(join(distDir, 'testing.js'), chunkBody);
   await writeFile(join(distDir, 'viceme.min.js'), loaderBody);
@@ -159,26 +160,61 @@ describe('verify-cdn.mjs', () => {
     ).rejects.toMatchObject({ code: 1 });
   });
 
-  it('alias mode resolves the version pointer and verifies the target', async () => {
-    // Without --allow-mutable-cache, the alias check reads
-    // /viceme-sdk/-/aliases/v1 and fully verifies /sdk/<pointer-version>/.
-    files.set('aliases/v1', {
-      body: Buffer.from('0.1.0\n'),
-      contentType: 'text/plain; charset=utf-8',
+  it('alias mode byte-verifies the alias loader against the canonical bootstrap', async () => {
+    // Dedicated server preserving full keys under /viceme-sdk/.
+    const bytes = new Map<string, Buffer>([
+      ['-/aliases/v1', Buffer.from('0.1.0\n')],
+      ['v1/viceme.min.js', bootstrapBody],
+      ['0.1.0/bootstrap.min.js', bootstrapBody],
+      ['0.1.0/manifest.json', readFileSync(join(distDir, 'manifest.json'))],
+      ['0.1.0/index.js', indexBody],
+      ['0.1.0/viceme.min.js', loaderBody],
+      ['0.1.0/testing.js', chunkBody],
+    ]);
+    const httpServer = createServer((req, res) => {
+      const key = decodeURIComponent((req.url ?? '').replace(/^\/viceme-sdk\//, ''));
+      const body = bytes.get(key);
+      if (!body) {
+        res.writeHead(404);
+        res.end('not found');
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': key.endsWith('.json')
+          ? 'application/json; charset=utf-8'
+          : key === '-/aliases/v1'
+            ? 'text/plain; charset=utf-8'
+            : 'text/javascript; charset=utf-8',
+        'cache-control': 'public,max-age=31536000,immutable',
+        'access-control-allow-origin': '*',
+      });
+      res.end(body);
     });
-    const { stdout } = await run(
-      '--base',
-      `${server!.url}/viceme-sdk/v1/`,
-      '--expect-version',
-      '0.1.0',
-    );
-    expect(stdout).toContain('alias pointer verified -> 0.1.0');
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    const address = httpServer.address();
+    if (address === null || typeof address === 'string') throw new Error('bind failed');
+    const url = `http://127.0.0.1:${address.port}`;
+    try {
+      // Canonical bytes on the alias path: verification passes.
+      await expect(
+        run('--base', `${url}/viceme-sdk/v1/`, '--expect-version', '0.1.0'),
+      ).resolves.toMatchObject({ stdout: expect.stringContaining('alias loader byte-verified') });
 
-    // Pointer mismatch fails closed.
-    await expect(
-      run('--base', `${server!.url}/viceme-sdk/v1/`, '--expect-version', '0.2.0'),
-    ).rejects.toMatchObject({ code: 1 });
-    files.delete('aliases/v1');
+      // Corrupted alias loader (HTTP 200 with wrong bytes): fails closed.
+      bytes.set('v1/viceme.min.js', Buffer.from('(function(){/* corrupted */})();\n'));
+      await expect(
+        run('--base', `${url}/viceme-sdk/v1/`, '--expect-version', '0.1.0'),
+      ).rejects.toMatchObject({ code: 1 });
+
+      // Pointer mismatch: fails closed.
+      bytes.set('v1/viceme.min.js', bootstrapBody);
+      bytes.set('-/aliases/v1', Buffer.from('9.9.9\n'));
+      await expect(
+        run('--base', `${url}/viceme-sdk/v1/`, '--expect-version', '0.1.0'),
+      ).rejects.toMatchObject({ code: 1 });
+    } finally {
+      await new Promise<void>((done) => httpServer.close(() => done()));
+    }
   });
 
   it('local mode verifies the fixture directory', async () => {

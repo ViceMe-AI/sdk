@@ -79,7 +79,7 @@ for (const file of files.sort()) {
 }
 
 // Sanity: the manifest must describe the core entry and the loader.
-for (const required of ['index.js', 'viceme.min.js']) {
+for (const required of ['index.js', 'viceme.min.js', 'bootstrap.min.js']) {
   if (!manifest.files[required]) {
     console.error(`manifest: missing required artifact ${required}`);
     process.exit(1);

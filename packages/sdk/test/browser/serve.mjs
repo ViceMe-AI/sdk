@@ -81,6 +81,9 @@ createServer(async (req, res) => {
       }
       if (rest === 'fixture.js') {
         file = join(fixturesDist, 'fixture.js');
+      } else if (rest === 'viceme.min.js' && path.startsWith('/viceme-sdk/v1/')) {
+        // Real topology: the alias path carries the FIXED bootstrap.
+        file = join(distDir, 'bootstrap.min.js');
       } else {
         // Loader, core, and manifest all live at the dist root — the same
         // flat public layout the CDN serves.

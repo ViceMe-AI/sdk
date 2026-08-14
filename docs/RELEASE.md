@@ -104,14 +104,24 @@ delivery is automatic in Release Package):
   declared value (stale/concurrent guard) and the target must be older.
 
 Mechanics per region (credentials via the fixed S3 secret names, dedicated
-`viceme-sdk` bucket, CN through its HTTPS proxy): the content-stable
-loader object is placed at `viceme-sdk/v1/viceme.min.js` with immutable-put
-semantics, then the single pointer object `viceme-sdk/-/aliases/v1` is written
-(`text/plain`, short TTL) and the public URL is polled until it matches.
-The loader itself resolves `/viceme-sdk/v1` by reading the pointer at runtime, so
-even a torn write stays functional. Reads are origin-fresh on the S3
-entries (no edge cache yet); when a CDN edge is introduced, add edge
-caching without changing the URL contract.
+`viceme-sdk` bucket, CN through its HTTPS proxy):
+
+1. `v1/viceme.min.js` carries the **fixed bootstrap** (canonical bytes:
+   `<version>/bootstrap.min.js` from this release build). The bootstrap is
+   byte-stable for the whole API major — it only reads the pointer and
+   injects `<version>/viceme.min.js` (the full loader, which may change
+   every release). `v1/viceme.min.js` is an alias object like the pointer:
+   re-written on every promote and verified by an exact public byte
+   read-back against the canonical build, so it can never be locked to one
+   release's bytes nor serve corrupted content silently.
+2. The single pointer object `-/aliases/v1` is written (`text/plain`,
+   short TTL) and polled until the public read matches.
+3. `verify-cdn --expect-version` byte-verifies the alias loader against
+   the pointed version's bootstrap in addition to the full exact-version
+   verification; the workflow smoke covers both regions.
+
+Reads are origin-fresh on the S3 entries (no edge cache yet); when a CDN
+edge is introduced, add edge caching without changing the URL contract.
 
 ## Verification tooling
 
