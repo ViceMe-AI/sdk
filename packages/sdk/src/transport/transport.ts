@@ -119,7 +119,14 @@ export class FetchTransport implements Transport {
   async request(request: TransportRequest): Promise<TransportResponse> {
     const timeoutMs = request.timeoutMs ?? this.#defaultTimeoutMs;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(new TimeoutAbort()), timeoutMs);
+    // Engine notes: Chrome/Firefox reject fetch with the abort reason and
+    // WebKit may reject with a plain error — so timeout/abort classification
+    // keys off our own timer/signal state, never off the exception shape.
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new TimeoutAbort());
+    }, timeoutMs);
     const onOuterAbort = () => controller.abort(new TimeoutAbort(false));
     request.signal?.addEventListener('abort', onOuterAbort, { once: true });
 
@@ -143,7 +150,7 @@ export class FetchTransport implements Transport {
       if (request.signal?.aborted) {
         throw new DOMException('ViceMe request aborted by caller.', 'AbortError');
       }
-      if (cause instanceof TimeoutAbort) {
+      if (timedOut) {
         throw new ViceMeError({
           code: 'NETWORK_TIMEOUT',
           message: 'Public API request timed out.',

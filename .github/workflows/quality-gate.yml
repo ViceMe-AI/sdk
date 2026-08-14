@@ -137,9 +137,31 @@ jobs:
       - name: Pack @viceme-ai/sdk
         run: pnpm --filter '@viceme-ai/sdk' pack --pack-destination "${{ github.workspace }}"
 
-      - name: Re-point fixtures at the tarball and build
+      # Build the React fixture in a standalone workspace (outside the repo)
+      # whose dependency is the real tarball — proving what an npm consumer
+      # installs, not workspace sources.
+      - name: Build the React fixture from the real tarball (standalone)
         run: |
-          tarball="$(pwd)/viceme-ai-sdk-$(node -p "require('./packages/sdk/package.json').version").tgz"
-          pnpm --filter '@viceme-ai/example-react-vite' remove '@viceme-ai/sdk'
-          pnpm --filter '@viceme-ai/example-react-vite' add "file:${tarball}"
-          pnpm --filter '@viceme-ai/example-react-vite' build
+          version="$(node -p "require('./packages/sdk/package.json').version")"
+          tarball="$(pwd)/viceme-ai-sdk-${version}.tgz"
+          root="$(mktemp -d)/viceme-tarball-check"
+          mkdir -p "$root"
+          cp -r examples/react-vite "$root/app"
+          # The example tsconfig extends ../../tsconfig.base.json (two levels up
+          # from the app directory = the parent of $root).
+          cp tsconfig.base.json "$(dirname "$root")/"
+          rm -rf "$root/app/node_modules"
+          cat > "$root/pnpm-workspace.yaml" <<'YAML'
+          packages:
+            - app
+          allowBuilds:
+            esbuild: true
+          YAML
+          node -e "
+            const fs = require('node:fs');
+            const path = process.argv[1] + '/app/package.json';
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            pkg.dependencies['@viceme-ai/sdk'] = 'file:' + process.argv[2];
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2));
+          " "$root" "$tarball"
+          cd "$root" && pnpm install --no-frozen-lockfile && pnpm --filter app build
