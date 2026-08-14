@@ -34,6 +34,13 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
+      # GitHub silently skips a workflow whose YAML cannot be parsed (the
+      # push run starts with jobs=[]); this offline gate parses every
+      # workflow (rejecting duplicate keys and structural errors) and
+      # enforces action SHA pinning.
+      - name: Workflow syntax gate
+        run: pnpm workflows:check
+
       - name: Lint
         run: pnpm lint
 
