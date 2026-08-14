@@ -9,12 +9,17 @@ name: Release Package
 #      the promote-cdn workflow — npm tarball and CDN objects always come
 #      from one build.
 #
+# Publishing preconditions (machine-enforced in `pnpm release:publish`,
+# which runs `pnpm release:gate` first):
+#   - final LICENSE exists and LICENSE-PENDING.md is gone;
+#   - 0.x publishes under the `next` dist-tag only (DIST_TAG below + the
+#     committed .changeset/pre.json); the post-publish step verifies the
+#     live npm dist-tag read-back.
+#
 # Required org configuration (one-time, needs owner permissions):
 #   - GitHub environment `npm` with required reviewers.
 #   - `@viceme-ai` npm scope configured for trusted publishing
 #     (repository + workflow + environment), no long-lived tokens.
-#   - LICENSE finalized (LICENSE-PENDING.md removed) — publishing is blocked
-#     by policy until then.
 
 on:
   push:
@@ -30,6 +35,11 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # 0.x phase (§14.1): publish under `next` only. Flip to `latest` at 1.0.0
+  # and remove .changeset/pre.json in the same release PR.
+  DIST_TAG: next
+
 jobs:
   release:
     name: Version / publish (OIDC + provenance)
@@ -37,7 +47,6 @@ jobs:
     environment: npm
     outputs:
       published: ${{ steps.changesets.outputs.published }}
-      tag: ${{ steps.release-tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,22 +81,49 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'
 
-      - name: Resolve release tag
+      - name: Verify npm dist-tag read-back
         if: steps.changesets.outputs.published == 'true'
-        id: release-tag
         run: |
           version="$(node -p "require('./packages/sdk/package.json').version")"
-          echo "tag=@viceme-ai/sdk@${version}" >> "$GITHUB_OUTPUT"
+          node scripts/verify-npm-dist-tag.mjs \
+            --package '@viceme-ai/sdk' --version "$version" --tag "$DIST_TAG"
 
-      - name: Attach CDN artifacts to the GitHub release
+      - name: Attach CDN artifacts to the GitHub release (immutable)
         if: steps.changesets.outputs.published == 'true'
+        shell: bash
         run: |
+          set -euo pipefail
           version="$(node -p "require('./packages/sdk/package.json').version")"
+          tag="@viceme-ai/sdk@${version}"
           mkdir -p release-artifacts
           cp packages/sdk/dist/manifest.json release-artifacts/
           (cd packages/sdk/dist && zip -qr "$GITHUB_WORKSPACE/release-artifacts/dist-${version}.zip" .)
           pnpm --filter '@viceme-ai/sdk' pack --pack-destination release-artifacts
-          gh release create "@viceme-ai/sdk@${version}" --verify-tag --title "@viceme-ai/sdk@${version}" --notes "Release artifacts for ${version}. CDN promotion: run the Promote CDN workflow against this tag." || true
-          gh release upload "@viceme-ai/sdk@${version}" release-artifacts/* --clobber
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release exists; verifying assets instead of overwriting"
+            mkdir -p existing-assets
+            gh release download "$tag" --dir existing-assets --clobber
+            missing=()
+            for file in release-artifacts/*; do
+              base="$(basename "$file")"
+              if [ -f "existing-assets/$base" ]; then
+                cmp -s "$file" "existing-assets/$base" || {
+                  echo "::error::release asset $base differs from the existing one (exact versions are immutable)"
+                  exit 1
+                }
+                echo "asset $base already attached and byte-identical"
+              else
+                missing+=("$base")
+              fi
+            done
+            if [ ${#missing[@]} -gt 0 ]; then
+              gh release upload "$tag" "${missing[@]/#/release-artifacts/}"
+            fi
+          else
+            gh release create "$tag" --verify-tag --title "$tag" \
+              --notes "Release artifacts for ${version}. CDN promotion: run the Promote CDN workflow against this tag." \
+              release-artifacts/*
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

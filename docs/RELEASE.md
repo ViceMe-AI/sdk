@@ -1,71 +1,113 @@
 # Release & CDN Runbook
 
-This is the operational runbook for releasing `@viceme-ai/sdk` and promoting
-it to the CDN. The architecture is fixed in the SDK plan (§14); this document
-only describes _how to run it_.
+Operational runbook for releasing `@viceme-ai/sdk` and promoting it to the
+CDN. Architecture is fixed in the SDK plan (§14); this documents _how to run
+it_.
 
 ## Prerequisites (one-time, owner permissions)
 
-- [ ] Final license confirmed; `LICENSE-PENDING.md` replaced by `LICENSE`
-      (**publishing is blocked by policy until then**).
+- [ ] Final license confirmed; `LICENSE-PENDING.md` replaced by `LICENSE`.
+      **`pnpm release:gate` blocks publishing until this is done** (it also
+      runs as the first step of `pnpm release:publish` in CI).
 - [ ] GitHub environment `npm` with required reviewers.
 - [ ] `@viceme-ai` npm scope configured for OIDC trusted publishing
-      (repository `ViceMe-AI/sdk`, workflows `release-package.yml`,
+      (repository `ViceMe-AI/sdk`, workflow `release-package.yml`,
       environment `npm`). No long-lived npm tokens.
-- [ ] CDN buckets for `cdn.viceme.cn` and `cdn.viceme.ai`, plus the
-      `CDN_UPLOAD_COMMAND` secret implementing the upload contract
-      (`upload <local-file> <object-key>`), enforcing
-      `cache-control: public, max-age=31536000, immutable`, correct
-      content-types, and `access-control-allow-origin: *` for js/json objects.
+- [ ] CDN buckets for `cdn.viceme.cn` (region `cn`) and `cdn.viceme.ai`
+      (region `global`), plus the `CDN_UPLOAD_COMMAND` secret implementing
+      the contract below.
+- [ ] CDN edge resolves `/sdk/v1/<file>` from the alias pointer (see
+      "Stable alias model").
 
-## Releasing an npm version (0.x uses the `next` dist-tag)
+### `CDN_UPLOAD_COMMAND` contract
+
+A one-line command (bash `-lc`) invoked as:
+
+```text
+upload <region> <local-file> <object-key>
+```
+
+- `<region>` is `cn` or `global` and MUST select that region's own bucket
+  and credentials — regions never share a target implicitly.
+- For `sdk/<version>/…` keys: content-type by extension,
+  `cache-control: public, max-age=31536000, immutable`,
+  `access-control-allow-origin: *`, and no overwrite of existing objects
+  (bucket-side object-lock / deny-overwrite is ideal).
+- For the pointer key `sdk/-/aliases/v1`: `text/plain`, short TTL
+  (`max-age=300`), overwriting is expected — it is the one mutable object.
+
+## Releasing an npm version (0.x → `next` dist-tag)
+
+The 0.x phase publishes under `next` only, enforced in three places:
+
+1. `.changeset/pre.json` puts Changesets in pre-release mode with tag `next`.
+2. `release-package.yml` sets `DIST_TAG: next` and `pnpm release:publish`
+   passes `--tag "$DIST_TAG"` to `pnpm publish`.
+3. A post-publish step runs
+   `node scripts/verify-npm-dist-tag.mjs --tag next --version <v>` and fails
+   if the live registry shows anything else (or `latest` pointing at it).
+
+Flow:
 
 1. Merge feature PRs; each carries its Changeset.
 2. The **Release Package** workflow opens a `Version Packages` PR when
    changesets are pending. Review it (version bumps + changelog only).
-3. Merge the Version PR. The workflow reruns the full quality gate, publishes
-   to npm with provenance, and attaches the CDN artifacts to the GitHub
-   release tag `@viceme-ai/sdk@<version>`.
+3. Merge the Version PR. The workflow reruns the full quality gate, runs the
+   release gate, publishes with provenance under `next`, verifies the npm
+   dist-tag read-back, and attaches the CDN artifacts to the GitHub release
+   tag `@viceme-ai/sdk@<version>` (create-if-absent; identical bytes are
+   idempotent; differing bytes fail — release assets are immutable).
 4. Nothing about the CDN changes yet.
 
-> 0.x phase: keep releases on the `next` dist-tag (`pnpm release:publish`
-> follows the Changeset pre-release mode when `.changeset/pre.json` exists).
+At `1.0.0`: remove `.changeset/pre.json` (exit pre mode), set `DIST_TAG:
+latest` in the workflow, both in the same release PR (§14.1).
 
 ## Promoting a version to the CDN
 
-1. Run the **Promote CDN** workflow with the exact released `version`.
-2. It downloads the GitHub release artifacts, re-verifies every digest
-   locally, uploads immutable objects to `/sdk/<version>/**`, and verifies
-   them from the public network (sha256/SRI/bytes/content-type/cache headers)
-   per region.
+Run the **Promote CDN** workflow with the exact released `version` (and the
+target `regions`, validated as `cn`/`global`):
+
+1. Downloads the GitHub release artifacts and re-verifies every digest
+   locally.
+2. Per region: `scripts/upload-plan.mjs` probes each public target —
+   missing ⇒ upload, byte-identical ⇒ skip, **different ⇒ fail closed**
+   (exact versions are never overwritten) — then uploads exactly the planned
+   files through the region-scoped upload contract, and re-reads everything
+   from the public network (`verify-cdn.mjs`: sha256/SRI/bytes/content-type/
+   immutable cache headers/CORS).
 3. Leave `moveStableAlias` off unless the release is meant to become the
-   stable major. With it on, the workflow additionally:
-   - rewrites `/sdk/v1/**` to the verified version,
-   - verifies the alias from the public network (`--expect-version`),
-   - runs a real-network loader smoke test.
+   stable major.
 
-**Exact versions are immutable. Never re-upload or overwrite
-`/sdk/<version>/**` for an existing version.**
+### Stable alias model (`/sdk/v1`)
 
-## Rollback
+`/sdk/v1` is **not** a copy of a version's files. Each region serves one
+small public pointer object:
 
-Rollback never deletes or rewrites an exact version; it only moves the stable
-alias:
+```text
+GET https://<cdn-host>/sdk/-/aliases/v1   ->   "<version>"
+```
 
-1. Pick the previous verified version (see release history; every promoted
-   version has passed read-back).
-2. Re-run **Promote CDN** with that `version` and `moveStableAlias=true`.
-3. The alias verification step fails loudly if the read-back does not match.
+The CDN edge resolves `/sdk/v1/<file>` to `/sdk/<pointer-version>/<file>`.
+With `moveStableAlias=true`, the workflow writes that single pointer object
+per region (an atomic object write — no per-file copying, no torn state),
+verifies the pointer read-back equals the version, and verifies the alias
+resolves with `verify-cdn.mjs --expect-version`. Until the edge implements
+pointer resolution, this step fails closed by design.
 
-npm versions are never unpublished or reused.
+**Rollback** = re-run Promote CDN with the previous verified version and
+`moveStableAlias=true`: only the pointer moves. Exact-version objects are
+never rewritten or deleted; npm versions are never unpublished or reused.
 
 ## Verification tooling
 
 ```bash
+pnpm release:gate        # license + package metadata preconditions
 node scripts/verify-cdn.mjs --local packages/sdk/dist
 node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/1.2.3/
 node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/v1/ --expect-version 1.2.3 --allow-mutable-cache
+node scripts/upload-plan.mjs --dist packages/sdk/dist --base https://cdn.viceme.cn/sdk/1.2.3/
+node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag next
 ```
 
-The manifest digests are produced by `scripts/build-manifest.mjs` during the
-release build; npm tarball and CDN objects always come from that one build.
+Manifest digests come from `scripts/build-manifest.mjs` during the release
+build; the npm tarball and CDN objects always originate from that one build.
