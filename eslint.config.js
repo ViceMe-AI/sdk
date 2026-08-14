@@ -27,6 +27,7 @@ export default tseslint.config(
       '**/.next/**',
       '**/test-fixtures-dist/**',
       'examples/nextjs/**',
+      'packages/sdk/src/generated/**',
     ],
   },
   js.configs.recommended,
@@ -45,7 +46,7 @@ export default tseslint.config(
   {
     files: [
       'scripts/**/*.mjs',
-      'packages/sdk/test/browser/serve.mjs',
+      'packages/sdk/test/**/*.mjs',
       '*.config.js',
       '*.config.ts',
       '**/vite.config.*.ts',
