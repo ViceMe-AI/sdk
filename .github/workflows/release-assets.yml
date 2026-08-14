@@ -1,0 +1,47 @@
+name: Release Assets (recovery)
+
+# Re-runnable recovery for "published to npm but the GitHub release/assets
+# are missing or failed". The Release Package workflow only attaches assets
+# right after a fresh publish — if that step fails, re-running it will NOT
+# retry (Changesets already sees the version as released). This workflow is
+# the independent, convergent authority:
+#
+#   1. prove the exact version is published (npm dist-tag read-back);
+#   2. download the published npm tarball (artifacts are byte-identical to
+#      what npm serves — §13.3);
+#   3. verify digests, then attach to the GitHub release idempotently
+#      (create-if-absent / identical-skip / differ-fail).
+#
+# Drill (post-publish failure rehearsal, docs/RELEASE.md): after any real
+# release, delete the dist-<version>.zip asset from the release and re-run
+# this workflow — it must restore the byte-identical asset and succeed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact published version (e.g. 1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    name: Verify published, attach assets from npm tarball
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify the version is live on npm (dist-tag read-back)
+        run: |
+          node scripts/verify-npm-dist-tag.mjs \
+            --package '@viceme-ai/sdk' --version '${{ inputs.version }}' --tag next
+      - name: Attach assets (idempotent, immutable)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/attach-release-assets.mjs --version '${{ inputs.version }}'

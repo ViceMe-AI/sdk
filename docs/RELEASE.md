@@ -6,9 +6,10 @@ it_.
 
 ## Prerequisites (one-time, owner permissions)
 
-- [ ] Final license confirmed; `LICENSE-PENDING.md` replaced by `LICENSE`.
-      **`pnpm release:gate` blocks publishing until this is done** (it also
-      runs as the first step of `pnpm release:publish` in CI).
+- [ ] Final license confirmed; `LICENSE-PENDING.md` replaced by `LICENSE`
+      at the repo root. The build copies it into `packages/sdk/LICENSE`
+      (gitignored) so the tarball ships it; `pnpm release:gate` and the
+      tarball audit both block publishing until then.
 - [ ] GitHub environment `npm` with required reviewers.
 - [ ] `@viceme-ai` npm scope configured for OIDC trusted publishing
       (repository `ViceMe-AI/sdk`, workflow `release-package.yml`,
@@ -98,6 +99,26 @@ pointer resolution, this step fails closed by design.
 `moveStableAlias=true`: only the pointer moves. Exact-version objects are
 never rewritten or deleted; npm versions are never unpublished or reused.
 
+## Post-publish failure recovery
+
+If npm publish succeeded but a later step failed (dist-tag verification,
+GitHub release assets), re-running the **Release Package** workflow will NOT
+retry those steps — Changesets already sees the version as released. The
+convergent recovery is the **Release Assets (recovery)** workflow:
+
+1. Run it with the published `version`.
+2. It proves the version is live (npm dist-tag read-back), downloads the
+   published npm tarball (assets are byte-identical to what npm serves),
+   verifies digests, and attaches to the GitHub release idempotently
+   (create-if-absent / identical-skip / differ-fail).
+3. Re-run as many times as needed; it always converges.
+
+Drill (rehearse after the first real release): delete the
+`dist-<version>.zip` asset from the release, re-run the recovery workflow,
+and confirm it restores the byte-identical asset. `node
+scripts/attach-release-assets.mjs --version <v> --dry-run` stages and
+digest-verifies assets without any GitHub API calls.
+
 ## Verification tooling
 
 ```bash
@@ -106,8 +127,12 @@ node scripts/verify-cdn.mjs --local packages/sdk/dist
 node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/1.2.3/
 node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/v1/ --expect-version 1.2.3 --allow-mutable-cache
 node scripts/upload-plan.mjs --dist packages/sdk/dist --base https://cdn.viceme.cn/sdk/1.2.3/
+node scripts/write-alias-pointer.mjs --version 1.2.3 --regions cn --hosts cn=... --upload-command "..."
+node scripts/attach-release-assets.mjs --version 1.2.3 --dry-run
 node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag next
 ```
 
 Manifest digests come from `scripts/build-manifest.mjs` during the release
 build; the npm tarball and CDN objects always originate from that one build.
+The plan always includes `manifest.json` itself as a first-class immutable
+object (an empty CDN must receive it before `verify-cdn` can read it).

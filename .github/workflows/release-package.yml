@@ -88,42 +88,15 @@ jobs:
           node scripts/verify-npm-dist-tag.mjs \
             --package '@viceme-ai/sdk' --version "$version" --tag "$DIST_TAG"
 
+      # Sources assets from the published npm tarball (byte-identical to
+      # what npm serves, §13.3) and attaches them idempotently. If THIS step
+      # fails after a successful publish, re-running this workflow will skip
+      # it (Changesets sees the version as released) — recover by running the
+      # "Release Assets (recovery)" workflow with the same version.
       - name: Attach CDN artifacts to the GitHub release (immutable)
         if: steps.changesets.outputs.published == 'true'
-        shell: bash
         run: |
-          set -euo pipefail
           version="$(node -p "require('./packages/sdk/package.json').version")"
-          tag="@viceme-ai/sdk@${version}"
-          mkdir -p release-artifacts
-          cp packages/sdk/dist/manifest.json release-artifacts/
-          (cd packages/sdk/dist && zip -qr "$GITHUB_WORKSPACE/release-artifacts/dist-${version}.zip" .)
-          pnpm --filter '@viceme-ai/sdk' pack --pack-destination release-artifacts
-
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "release exists; verifying assets instead of overwriting"
-            mkdir -p existing-assets
-            gh release download "$tag" --dir existing-assets --clobber
-            missing=()
-            for file in release-artifacts/*; do
-              base="$(basename "$file")"
-              if [ -f "existing-assets/$base" ]; then
-                cmp -s "$file" "existing-assets/$base" || {
-                  echo "::error::release asset $base differs from the existing one (exact versions are immutable)"
-                  exit 1
-                }
-                echo "asset $base already attached and byte-identical"
-              else
-                missing+=("$base")
-              fi
-            done
-            if [ ${#missing[@]} -gt 0 ]; then
-              gh release upload "$tag" "${missing[@]/#/release-artifacts/}"
-            fi
-          else
-            gh release create "$tag" --verify-tag --title "$tag" \
-              --notes "Release artifacts for ${version}. CDN promotion: run the Promote CDN workflow against this tag." \
-              release-artifacts/*
-          fi
+          node scripts/attach-release-assets.mjs --version "$version"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

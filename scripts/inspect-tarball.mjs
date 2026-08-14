@@ -7,13 +7,15 @@
  * workspace sources — so CI proves what npm consumers actually install.
  */
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const sdkDir = join(here, '..', 'packages', 'sdk');
+const root = join(here, '..');
+const sdkDir = join(root, 'packages', 'sdk');
 
 const tmp = mkdtempSync(join(tmpdir(), 'viceme-tarball-'));
 try {
@@ -61,6 +63,19 @@ try {
   if (violations.length > 0) {
     console.error('tarball audit failed for entries:');
     for (const v of violations) console.error(`  ${v}`);
+    process.exit(1);
+  }
+
+  // 2b. Required entries. README always ships; once the final repo-root
+  // LICENSE exists (build copies it into the package), the tarball MUST
+  // carry it too — a missing license entry fails closed instead of
+  // publishing an unlicensed artifact.
+  const required = ['package/package.json', 'package/README.md'];
+  if (existsSync(join(root, 'LICENSE'))) required.push('package/LICENSE');
+  const missingEntries = required.filter((entry) => !entries.includes(entry));
+  if (missingEntries.length > 0) {
+    console.error('tarball audit failed; required entries missing:');
+    for (const entry of missingEntries) console.error(`  ${entry}`);
     process.exit(1);
   }
 

@@ -137,32 +137,29 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
-      - name: Move the pointer (one atomic object write per region), then verify
-        shell: bash
+      - name: Write the pointer (one atomic object per region) and read back
+        env:
+          CDN_UPLOAD_COMMAND: ${{ secrets.CDN_UPLOAD_COMMAND }}
         run: |
-          set -euo pipefail
-          if [ -z "${{ secrets.CDN_UPLOAD_COMMAND }}" ]; then
+          if [ -z "$CDN_UPLOAD_COMMAND" ]; then
             echo "::error::CDN_UPLOAD_COMMAND secret is not configured"
             exit 1
           fi
-          upload() { bash -lc "${{ secrets.CDN_UPLOAD_COMMAND }} $1 $2 $3"; }
-          printf '%s' '${{ inputs.version }}' > release/pointer-version
+          node scripts/write-alias-pointer.mjs \
+            --version '${{ inputs.version }}' \
+            --regions '${{ inputs.regions }}' \
+            --hosts cn=https://cdn.viceme.cn,global=https://cdn.viceme.ai \
+            --upload-command "$CDN_UPLOAD_COMMAND"
+      - name: Verify the alias on every region
+        run: |
           for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
             case "$region" in
               cn) host=cdn.viceme.cn ;;
               global) host=cdn.viceme.ai ;;
             esac
-            echo "::group::pointer ${region} (${host})"
-            upload "$region" "release/pointer-version" "sdk/-/aliases/v1"
-            got="$(curl -fsSL "https://${host}/sdk/-/aliases/v1")"
-            if [ "$got" != '${{ inputs.version }}' ]; then
-              echo "::error::pointer read-back returned '$got', expected '${{ inputs.version }}'"
-              exit 1
-            fi
             node scripts/verify-cdn.mjs \
               --base "https://${host}/sdk/v1/" \
               --expect-version '${{ inputs.version }}' --allow-mutable-cache
-            echo "::endgroup::"
           done
       - name: Loader smoke against the live CDN
         run: |

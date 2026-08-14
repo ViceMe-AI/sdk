@@ -35,14 +35,19 @@ if (!args.dist || !args.base) {
   process.exit(2);
 }
 
-const manifest = JSON.parse(await readFile(join(args.dist, 'manifest.json'), 'utf8'));
+const manifestPath = join(args.dist, 'manifest.json');
+const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 const base = args.base.endsWith('/') ? args.base : `${args.base}/`;
 
 const toUpload = [];
 let identical = 0;
 
-for (const [file, info] of Object.entries(manifest.files)) {
-  if (file.endsWith('.map')) continue;
+/**
+ * Probe one exact-version object. `localBytes` are the release bytes to
+ * compare against; `expectedSha256` (optional) is the manifest digest.
+ * 404 => queue for upload; identical => skip; different => fail closed.
+ */
+async function probe(file, localBytes, expectedSha256) {
   let response;
   try {
     response = await fetch(new URL(file, base), { credentials: 'omit' });
@@ -52,21 +57,33 @@ for (const [file, info] of Object.entries(manifest.files)) {
   }
   if (response.status === 404) {
     toUpload.push(file);
-    continue;
+    return;
   }
   if (!response.ok) {
     console.error(`upload plan: ${file}: unexpected HTTP ${response.status}`);
     process.exit(1);
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const sha256 = createHash('sha256').update(buffer).digest('hex');
-  if (sha256 !== info.sha256) {
+  const remote = Buffer.from(await response.arrayBuffer());
+  const remoteSha256 = createHash('sha256').update(remote).digest('hex');
+  const expected = expectedSha256 ?? createHash('sha256').update(localBytes).digest('hex');
+  if (remoteSha256 !== expected) {
     console.error(`immutable violation: ${base}${file} already exists with different bytes`);
-    console.error(`  remote:  ${sha256}`);
-    console.error(`  release: ${info.sha256}`);
+    console.error(`  remote:  ${remoteSha256}`);
+    console.error(`  release: ${expected}`);
     process.exit(1);
   }
   identical += 1;
+}
+
+// The manifest itself is a first-class immutable object: build-manifest does
+// not list it in `files`, but verify-cdn reads it from the exact-version
+// path — a first promotion on an empty CDN must upload it too.
+const manifestBytes = await readFile(manifestPath);
+await probe('manifest.json', manifestBytes);
+
+for (const [file, info] of Object.entries(manifest.files)) {
+  if (file.endsWith('.map')) continue;
+  await probe(file, await readFile(join(args.dist, file)), info.sha256);
 }
 
 for (const file of toUpload) console.log(file);

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -154,7 +154,7 @@ afterAll(async () => {
 });
 
 describe('upload-plan.mjs', () => {
-  it('lists every file when the remote version directory is empty', async () => {
+  it('lists every file — including manifest.json itself — when the remote is empty', async () => {
     const { stdout } = await run(
       'upload-plan.mjs',
       '--dist',
@@ -162,7 +162,13 @@ describe('upload-plan.mjs', () => {
       '--base',
       `${server!.url}/sdk/0.1.0/`,
     );
-    expect(stdout.split('\n').filter(Boolean).sort()).toEqual(['index.js', 'loader/viceme.min.js']);
+    // manifest.json is a first-class immutable object even though it is not
+    // listed inside manifest.files: verify-cdn reads it from this path.
+    expect(stdout.split('\n').filter(Boolean).sort()).toEqual([
+      'index.js',
+      'loader/viceme.min.js',
+      'manifest.json',
+    ]);
   });
 
   it('skips byte-identical objects and lists only the missing ones', async () => {
@@ -177,7 +183,10 @@ describe('upload-plan.mjs', () => {
       '--base',
       `${server!.url}/sdk/0.1.0/`,
     );
-    expect(stdout.split('\n').filter(Boolean)).toEqual(['loader/viceme.min.js']);
+    expect(stdout.split('\n').filter(Boolean).sort()).toEqual([
+      'loader/viceme.min.js',
+      'manifest.json',
+    ]);
   });
 
   it('fails closed when the remote object has different bytes', async () => {
@@ -188,6 +197,18 @@ describe('upload-plan.mjs', () => {
     await expect(
       run('upload-plan.mjs', '--dist', distDir, '--base', `${server!.url}/sdk/0.1.0/`),
     ).rejects.toMatchObject({ code: 1 });
+    remote.delete('index.js');
+  });
+
+  it('guards manifest.json itself against overwrite', async () => {
+    remote.set('manifest.json', {
+      body: Buffer.from('{"version":"0.0.0-tampered"}\n'),
+      contentType: 'application/json; charset=utf-8',
+    });
+    await expect(
+      run('upload-plan.mjs', '--dist', distDir, '--base', `${server!.url}/sdk/0.1.0/`),
+    ).rejects.toMatchObject({ code: 1 });
+    remote.delete('manifest.json');
   });
 });
 
@@ -226,6 +247,127 @@ describe('verify-npm-dist-tag.mjs', () => {
         '0.1.1-next.0',
         '--tag',
         'next',
+      ),
+    ).rejects.toMatchObject({ code: 1 });
+  });
+});
+
+/* --------------------------- alias pointer write ------------------------- */
+
+describe('write-alias-pointer.mjs', () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'viceme-alias-'));
+
+  // Fake region-scoped CDN: `fake-upload <region> <file> <key>` stores the
+  // file under <root>/<region>/<key>; two static servers expose each region.
+  const fakeUpload = join(tmpRoot, 'fake-upload.mjs');
+  writeFileSync(
+    fakeUpload,
+    [
+      "import { mkdirSync, copyFileSync } from 'node:fs';",
+      "import { dirname, join } from 'node:path';",
+      'const [, , region, file, key] = process.argv;',
+      "const target = join(process.env.FAKE_CDN_ROOT ?? '', region, key);",
+      'mkdirSync(dirname(target), { recursive: true });',
+      'copyFileSync(file, target);',
+    ].join('\n'),
+  );
+
+  function startRegionServer(region: string) {
+    const regionRoot = join(tmpRoot, region);
+    const httpServer: Server = createServer((req, res) => {
+      const path = decodeURIComponent(req.url ?? '').replace(/^\/+/, '');
+      try {
+        const body = readFileSync(join(regionRoot, path));
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end(body);
+      } catch {
+        res.writeHead(404);
+        res.end('not found');
+      }
+    });
+    return new Promise<{ url: string; close: () => Promise<void> }>((resolve) => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const address = httpServer.address();
+        if (address === null || typeof address === 'string') throw new Error('bind failed');
+        resolve({
+          url: `http://127.0.0.1:${address.port}`,
+          close: () => new Promise((done) => httpServer.close(() => done())),
+        });
+      });
+    });
+  }
+
+  it('writes one pointer object per region and verifies the read-back', async () => {
+    const cn = await startRegionServer('cn');
+    const global = await startRegionServer('global');
+    try {
+      const { stdout } = await exec(
+        'node',
+        [
+          join(scriptsDir, 'write-alias-pointer.mjs'),
+          '--version',
+          '0.2.0',
+          '--regions',
+          'cn,global',
+          '--hosts',
+          `cn=${cn.url},global=${global.url}`,
+          '--upload-command',
+          `node ${fakeUpload}`,
+        ],
+        { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot } },
+      );
+      expect(stdout).toContain('alias pointer written and verified in 2 region(s)');
+      for (const region of ['cn', 'global']) {
+        expect(readFileSync(join(tmpRoot, region, 'sdk', '-', 'aliases', 'v1'), 'utf8')).toBe(
+          '0.2.0',
+        );
+      }
+    } finally {
+      await cn.close();
+      await global.close();
+    }
+  });
+
+  it('fails closed when the pointer read-back does not match', async () => {
+    const cn = await startRegionServer('cn');
+    try {
+      // Pre-seed a wrong pointer and make the upload a no-op.
+      mkdirSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases'), { recursive: true });
+      writeFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), '9.9.9');
+      await expect(
+        exec(
+          'node',
+          [
+            join(scriptsDir, 'write-alias-pointer.mjs'),
+            '--version',
+            '0.2.0',
+            '--regions',
+            'cn',
+            '--hosts',
+            `cn=${cn.url}`,
+            '--upload-command',
+            'true',
+          ],
+          { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot } },
+        ),
+      ).rejects.toMatchObject({ code: 1 });
+    } finally {
+      await cn.close();
+    }
+  });
+
+  it('rejects unknown regions', async () => {
+    await expect(
+      run(
+        'write-alias-pointer.mjs',
+        '--version',
+        '0.2.0',
+        '--regions',
+        'eu',
+        '--hosts',
+        'eu=https://example.com',
+        '--upload-command',
+        'true',
       ),
     ).rejects.toMatchObject({ code: 1 });
   });

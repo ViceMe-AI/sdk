@@ -52,9 +52,13 @@ if (await exists(join(root, 'LICENSE-PENDING.md'))) {
 
 try {
   const pkg = JSON.parse(await readFile(join(root, 'packages', 'sdk', 'package.json'), 'utf8'));
-  if (!Array.isArray(pkg.files) || !pkg.files.includes('LICENSE')) {
+  if (
+    !Array.isArray(pkg.files) ||
+    !pkg.files.includes('LICENSE') ||
+    !pkg.files.includes('README.md')
+  ) {
     failures.push(
-      'packages/sdk/package.json "files" must include LICENSE so the tarball ships it.',
+      'packages/sdk/package.json "files" must include LICENSE and README.md so the tarball ships them.',
     );
   }
   if (pkg.publishConfig?.access !== 'public') {
