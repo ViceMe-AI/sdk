@@ -43,6 +43,11 @@ jobs:
       - name: Contract drift gate
         run: pnpm contracts:check
 
+      # The gate itself is side-effect free; this asserts nothing in the
+      # working tree changed during the whole check job.
+      - name: Working tree must be clean after gates
+        run: git diff --exit-code -- contracts packages/sdk/src/generated
+
       - name: Unit tests
         run: pnpm test
 
