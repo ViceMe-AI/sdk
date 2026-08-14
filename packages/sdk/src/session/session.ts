@@ -14,6 +14,15 @@
 
 import { ViceMeError } from '../core/errors.ts';
 import type { Transport } from '../transport/transport.ts';
+import type { components } from '../generated/public-contract.ts';
+
+/**
+ * DTO shapes come from the generated public contract snapshot — the SDK never
+ * hand-writes a second copy of the server DTOs. The runtime validator below
+ * stays intentionally narrow (required fields of the current contract only).
+ */
+type WorkSessionDto = components['schemas']['WorkSession'];
+export type CreateWorkSessionRequestDto = components['schemas']['CreateWorkSessionRequest'];
 
 export interface WorkDescriptor {
   key: string;
@@ -38,35 +47,22 @@ export interface SessionManagerOptions {
   now?: () => number;
 }
 
-interface WorkSessionResponse {
-  work?: { key?: unknown; capabilities?: unknown };
-  token?: unknown;
-  expiresAt?: unknown;
-}
-
 function parseSessionResponse(body: unknown, workKey: string): WorkSessionSnapshot {
   if (typeof body !== 'object' || body === null) {
-    throw new ViceMeError({
-      code: 'INTERNAL_ERROR',
-      message: 'Malformed work-session response.',
-      retryable: true,
-    });
+    throw malformedSessionResponse();
   }
-  const raw = body as WorkSessionResponse;
+  const raw = body as WorkSessionDto;
+  const work = raw.work as { key?: unknown; capabilities?: unknown } | undefined;
   if (
-    typeof raw.work !== 'object' ||
-    raw.work === null ||
-    typeof raw.work.key !== 'string' ||
-    !Array.isArray(raw.work.capabilities) ||
-    !raw.work.capabilities.every((c) => typeof c === 'string')
+    typeof work !== 'object' ||
+    work === null ||
+    typeof work.key !== 'string' ||
+    !Array.isArray(work.capabilities) ||
+    !work.capabilities.every((c) => typeof c === 'string')
   ) {
-    throw new ViceMeError({
-      code: 'INTERNAL_ERROR',
-      message: 'Malformed work-session response.',
-      retryable: true,
-    });
+    throw malformedSessionResponse();
   }
-  if (raw.work.key !== workKey) {
+  if (work.key !== workKey) {
     throw new ViceMeError({
       code: 'WORK_NOT_FOUND',
       message: 'Work-session response did not match the requested work key.',
@@ -75,14 +71,22 @@ function parseSessionResponse(body: unknown, workKey: string): WorkSessionSnapsh
   }
   const snapshot: WorkSessionSnapshot = {
     work: {
-      key: raw.work.key,
-      capabilities: raw.work.capabilities as string[],
+      key: work.key,
+      capabilities: work.capabilities as string[],
     },
   };
   // Unknown extra fields are allowed and ignored (forward compatibility).
   if (typeof raw.token === 'string') snapshot.token = raw.token;
   if (typeof raw.expiresAt === 'number') snapshot.expiresAt = raw.expiresAt;
   return snapshot;
+}
+
+function malformedSessionResponse(): ViceMeError {
+  return new ViceMeError({
+    code: 'INTERNAL_ERROR',
+    message: 'Malformed work-session response.',
+    retryable: true,
+  });
 }
 
 export class SessionManager {
@@ -122,7 +126,7 @@ export class SessionManager {
       .request({
         method: 'POST',
         path: '/public/v1/work-sessions',
-        body: { workKey: this.#options.workKey },
+        body: { workKey: this.#options.workKey } satisfies CreateWorkSessionRequestDto,
         signal: this.#options.signal,
         timeoutMs: this.#options.timeoutMs,
       })
