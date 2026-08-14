@@ -34,27 +34,12 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
-      # GitHub silently skips a workflow whose YAML cannot be parsed (the
-      # push run starts with jobs=[]); the offline gate parses every
-      # workflow (duplicate keys, structural errors) and enforces action
-      # SHA pinning.
-      - name: Workflow syntax gate (offline)
+      # Workflow gate: js-yaml pre-check (duplicate keys, structural
+      # errors, floating action tags) + actionlint 1.7.7 semantics
+      # (schema, expressions, events). actionlint is digest-pinned and
+      # cross-platform via the same Node wrapper contributors run locally.
+      - name: Workflow gate (syntax + actionlint semantics)
         run: pnpm workflows:check
-
-      # Full GitHub Actions semantic gate: schema, expressions, event
-      # structures. actionlint is pinned to an exact release and its
-      # tarball digest is verified before execution.
-      - name: Workflow semantic gate (actionlint 1.7.7, digest-pinned)
-        env:
-          ACTIONLINT_VERSION: '1.7.7'
-          ACTIONLINT_SHA256: 023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
-        run: |
-          set -euo pipefail
-          curl -fsSL -o actionlint.tar.gz \
-            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum --check
-          tar -xzf actionlint.tar.gz actionlint
-          ./actionlint -color -shellcheck= -pyflakes=
 
       - name: Lint
         run: pnpm lint
