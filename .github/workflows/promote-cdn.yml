@@ -1,0 +1,178 @@
+name: Promote CDN
+
+# Promotes an already-published npm release to the CDN (§14.2 steps 7-10).
+#
+# Flow: download the exact GitHub release artifacts -> re-verify digests
+# locally -> per region, plan immutable uploads (missing => upload,
+# byte-identical => skip, different => fail closed) -> upload -> public
+# read-back -> (explicit input) move the stable `v1` alias by writing ONE
+# pointer object per region -> verify pointer + alias + real-browser smoke.
+#
+# Atomicity model (review P1):
+#   - Exact versions live only under immutable /sdk/<version>/ objects and
+#     are never overwritten (scripts/upload-plan.mjs enforces this).
+#   - /sdk/v1 is NOT a copy of the files. Each region exposes a small public
+#     pointer object `sdk/-/aliases/v1` whose body is exactly the version
+#     string; the CDN edge resolves /sdk/v1/<file> to
+#     /sdk/<pointer-version>/<file>. Moving the alias = one atomic object
+#     write per region. Rollback = point at an older verified version.
+#
+# Required org configuration (§21.2):
+#   - CDN buckets for cdn.viceme.cn (region `cn`) and cdn.viceme.ai
+#     (region `global`).
+#   - `CDN_UPLOAD_COMMAND` secret: a one-line command contract invoked as
+#     `upload <region> <local-file> <object-key>` (bash -lc). The region
+#     argument (`cn` | `global`) selects that region's own bucket and
+#     credentials; the command must not write outside the given object key
+#     and must set immutable long-cache headers for /sdk/<version>/ keys and
+#     a short TTL for the pointer key.
+#   - Edge prerequisite: /sdk/v1/<file> resolution from the pointer above.
+#     Until the edge implements it, alias verification fails closed — by
+#     design, never silently.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact released version (e.g. 1.2.3)'
+        required: true
+        type: string
+      regions:
+        description: 'Regions to promote (comma-separated: cn,global)'
+        required: true
+        default: 'cn,global'
+        type: string
+      moveStableAlias:
+        description: 'Also move the /sdk/v1 pointer to this version after verification'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-cdn
+  cancel-in-progress: false
+
+jobs:
+  verify-artifacts:
+    name: Download + locally verify release artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Download release artifacts and verify digests
+        run: |
+          gh release download "@viceme-ai/sdk@${{ inputs.version }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'dist-*.zip' --dir release
+          unzip -q release/dist-*.zip -d release/dist
+          mkdir -p packages/sdk/dist && cp -r release/dist/. packages/sdk/dist/
+          node scripts/verify-cdn.mjs --local packages/sdk/dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  upload:
+    name: Immutable exact-version upload + read-back (per region)
+    needs: verify-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Download release artifacts
+        run: |
+          gh release download "@viceme-ai/sdk@${{ inputs.version }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'dist-*.zip' --dir release
+          unzip -q release/dist-*.zip -d release/dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate regions input
+        run: |
+          found=0
+          for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
+            case "$region" in
+              cn|global) found=1 ;;
+              *) echo "::error::unknown region '$region' (expected cn or global)"; exit 1 ;;
+            esac
+          done
+          [ "$found" -eq 1 ] || { echo "::error::no regions selected"; exit 1; }
+      - name: Plan immutable uploads, upload, and read back (per region)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${{ secrets.CDN_UPLOAD_COMMAND }}" ]; then
+            echo "::error::CDN_UPLOAD_COMMAND secret is not configured (bucket provider pending — see promote-cdn.yml header and docs/RELEASE.md)"
+            exit 1
+          fi
+          upload() { bash -lc "${{ secrets.CDN_UPLOAD_COMMAND }} $1 $2 $3"; }
+          for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
+            case "$region" in
+              cn) host=cdn.viceme.cn ;;
+              global) host=cdn.viceme.ai ;;
+            esac
+            echo "::group::region ${region} (${host})"
+            plan="$(node scripts/upload-plan.mjs --dist release/dist --base "https://${host}/sdk/${{ inputs.version }}/")"
+            if [ -n "$plan" ]; then
+              echo "$plan" | while IFS= read -r file; do
+                upload "$region" "release/dist/$file" "sdk/${{ inputs.version }}/$file"
+                echo "uploaded sdk/${{ inputs.version }}/$file"
+              done
+            else
+              echo "all objects already present and byte-identical (idempotent re-run)"
+            fi
+            node scripts/verify-cdn.mjs --base "https://${host}/sdk/${{ inputs.version }}/"
+            echo "::endgroup::"
+          done
+
+  alias:
+    name: Move stable v1 pointer (explicit) + verify + smoke
+    needs: upload
+    if: ${{ inputs.moveStableAlias }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Write the pointer (one atomic object per region) and read back
+        env:
+          CDN_UPLOAD_COMMAND: ${{ secrets.CDN_UPLOAD_COMMAND }}
+        run: |
+          if [ -z "$CDN_UPLOAD_COMMAND" ]; then
+            echo "::error::CDN_UPLOAD_COMMAND secret is not configured"
+            exit 1
+          fi
+          node scripts/write-alias-pointer.mjs \
+            --version '${{ inputs.version }}' \
+            --regions '${{ inputs.regions }}' \
+            --hosts cn=https://cdn.viceme.cn,global=https://cdn.viceme.ai \
+            --upload-command "$CDN_UPLOAD_COMMAND"
+      - name: Verify the alias on every region
+        run: |
+          for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
+            case "$region" in
+              cn) host=cdn.viceme.cn ;;
+              global) host=cdn.viceme.ai ;;
+            esac
+            node scripts/verify-cdn.mjs \
+              --base "https://${host}/sdk/v1/" \
+              --expect-version '${{ inputs.version }}' --allow-mutable-cache
+          done
+      - name: Loader smoke against the live CDN
+        run: |
+          # B0.3 rehearsal: the loader must download and parse from the real
+          # CDN through the v1 alias. Full capability E2E arrives with B1/B2.
+          node - <<'EOF'
+          const base = 'https://cdn.viceme.ai/sdk/v1/';
+          const res = await fetch(new URL('manifest.json', base));
+          if (!res.ok) throw new Error(`manifest HTTP ${res.status}`);
+          const manifest = await res.json();
+          const loader = await fetch(new URL(manifest.loader, base));
+          if (!loader.ok) throw new Error(`loader HTTP ${loader.status}`);
+          const text = await loader.text();
+          if (!text.includes('data-viceme')) throw new Error('loader bundle looks wrong');
+          console.log('cdn smoke ok', manifest.version);
+          EOF

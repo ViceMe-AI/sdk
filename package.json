@@ -16,6 +16,9 @@
     "pack:check": "pnpm --filter '@viceme-ai/sdk' pack:check",
     "contracts:generate": "node scripts/generate-contracts.mjs",
     "contracts:check": "node scripts/generate-contracts.mjs check",
+    "release:version": "changeset version",
+    "release:gate": "node scripts/release-gate.mjs",
+    "release:publish": "pnpm release:gate && pnpm build && pnpm pack:check && pnpm --filter './packages/*' publish --provenance --access public --tag \"${DIST_TAG:-next}\"",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm contracts:check && pnpm test && pnpm build && pnpm test:browser && pnpm pack:check",
     "changeset": "changeset"
   },

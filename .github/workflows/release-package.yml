@@ -1,0 +1,102 @@
+name: Release Package
+
+# Changesets flow (§14.2):
+#   1. PR merged to main with pending changesets -> this workflow opens the
+#      "Version Packages" PR (no publish).
+#   2. Version PR merged -> tag exists on main -> quality gates rerun, then
+#      npm publish via OIDC trusted publishing with provenance.
+#   3. The same build's CDN artifacts are attached to the GitHub release for
+#      the promote-cdn workflow — npm tarball and CDN objects always come
+#      from one build.
+#
+# Publishing preconditions (machine-enforced in `pnpm release:publish`,
+# which runs `pnpm release:gate` first):
+#   - final LICENSE exists and LICENSE-PENDING.md is gone;
+#   - 0.x publishes under the `next` dist-tag only (DIST_TAG below + the
+#     committed .changeset/pre.json); the post-publish step verifies the
+#     live npm dist-tag read-back.
+#
+# Required org configuration (one-time, needs owner permissions):
+#   - GitHub environment `npm` with required reviewers.
+#   - `@viceme-ai` npm scope configured for trusted publishing
+#     (repository + workflow + environment), no long-lived tokens.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # 0.x phase (§14.1): publish under `next` only. Flip to `latest` at 1.0.0
+  # and remove .changeset/pre.json in the same release PR.
+  DIST_TAG: next
+
+jobs:
+  release:
+    name: Version / publish (OIDC + provenance)
+    runs-on: ubuntu-latest
+    environment: npm
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Release quality gate (all PR checks rerun)
+        run: |
+          pnpm --filter '@viceme-ai/sdk' exec playwright install --with-deps chromium firefox webkit
+          pnpm check
+
+      - name: Changesets (version PR or publish)
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm release:version
+          publish: pnpm release:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'
+
+      - name: Verify npm dist-tag read-back
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          version="$(node -p "require('./packages/sdk/package.json').version")"
+          node scripts/verify-npm-dist-tag.mjs \
+            --package '@viceme-ai/sdk' --version "$version" --tag "$DIST_TAG"
+
+      # Sources assets from the published npm tarball (byte-identical to
+      # what npm serves, §13.3) and attaches them idempotently. If THIS step
+      # fails after a successful publish, re-running this workflow will skip
+      # it (Changesets sees the version as released) — recover by running the
+      # "Release Assets (recovery)" workflow with the same version.
+      - name: Attach CDN artifacts to the GitHub release (immutable)
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          version="$(node -p "require('./packages/sdk/package.json').version")"
+          node scripts/attach-release-assets.mjs --version "$version"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

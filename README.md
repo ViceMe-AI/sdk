@@ -123,11 +123,12 @@ contracts/        public API contract snapshots (added in B0.2)
 
 ```bash
 pnpm install
-pnpm check   # format + lint + typecheck + test + build + browser tests + tarball audit
+pnpm check   # format + lint + typecheck + contract drift + test + build + browser tests + tarball audit
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full workflow and capability
-module template.
+module template, and [docs/RELEASE.md](./docs/RELEASE.md) for the release and
+CDN promotion runbook.
 
 ## Security
 
