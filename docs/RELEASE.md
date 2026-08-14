@@ -31,12 +31,12 @@ documents _how to run it_.
 The current public entries are the S3 path-style hosts:
 
 ```text
-https://s3.viceme.cn/viceme-sdk/sdk/<version>/...   (region cn)
-https://s3.viceme.ai/viceme-sdk/sdk/<version>/...   (region global)
+https://s3.viceme.cn/viceme-sdk/<version>/...   (region cn)
+https://s3.viceme.ai/viceme-sdk/<version>/...   (region global)
 ```
 
-`/sdk/v1` is an alias, NOT a copy of a version: it carries the loader
-object plus a single version pointer at `sdk/-/aliases/v1` (the one
+`/viceme-sdk/v1` is an alias, NOT a copy of a version: it carries the loader
+object plus a single version pointer at `viceme-sdk/-/aliases/v1` (the one
 mutable object). The loader resolves the pointer at runtime (see
 `resolveAliasPointer` in `packages/sdk/src/loader/auto-loader.ts`), so
 moving the alias is one atomic pointer write per region. If a CDN edge
@@ -91,7 +91,7 @@ Drill: delete the `dist-<version>.zip` release asset, re-run recovery, and
 confirm the byte-identical asset is restored (`attach-release-assets.mjs
 --dry-run` stages and digest-verifies without GitHub API calls).
 
-## Moving the stable alias (`/sdk/v1`)
+## Moving the stable alias (`/viceme-sdk/v1`)
 
 The **Promote CDN** workflow only manages the alias pointer (exact-version
 delivery is automatic in Release Package):
@@ -105,10 +105,10 @@ delivery is automatic in Release Package):
 
 Mechanics per region (credentials via the fixed S3 secret names, dedicated
 `viceme-sdk` bucket, CN through its HTTPS proxy): the content-stable
-loader object is placed at `sdk/v1/viceme.min.js` with immutable-put
-semantics, then the single pointer object `sdk/-/aliases/v1` is written
+loader object is placed at `viceme-sdk/v1/viceme.min.js` with immutable-put
+semantics, then the single pointer object `viceme-sdk/-/aliases/v1` is written
 (`text/plain`, short TTL) and the public URL is polled until it matches.
-The loader itself resolves `/sdk/v1` by reading the pointer at runtime, so
+The loader itself resolves `/viceme-sdk/v1` by reading the pointer at runtime, so
 even a torn write stays functional. Reads are origin-fresh on the S3
 entries (no edge cache yet); when a CDN edge is introduced, add edge
 caching without changing the URL contract.
@@ -119,8 +119,8 @@ caching without changing the URL contract.
 pnpm release:gate        # license + package metadata preconditions
 node scripts/validate-release-inputs.mjs --version 1.2.3 --regions cn,global
 node scripts/verify-cdn.mjs --local packages/sdk/dist
-node scripts/verify-cdn.mjs --base https://s3.viceme.cn/sdk/1.2.3/
-node scripts/verify-cdn.mjs --base https://s3.viceme.cn/sdk/v1/ --expect-version 1.2.3
+node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/1.2.3/
+node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/v1/ --expect-version 1.2.3
 node scripts/fetch-npm-dist.mjs --version 1.2.3 --out verified-dist
 node scripts/attach-release-assets.mjs --version 1.2.3 --dry-run
 node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag next

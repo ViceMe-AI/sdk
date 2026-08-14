@@ -78,8 +78,8 @@ beforeAll(async () => {
   await writeFile(join(distDir, 'manifest.json'), manifestBody);
 
   const httpServer: Server = createServer((req, res) => {
-    // Both /sdk/<version>/ and /sdk/v1/ map to the same dist layout.
-    const path = decodeURIComponent((req.url ?? '').replace(/^\/sdk\/[^/]+\//, ''));
+    // Both /viceme-sdk/<version>/ and /viceme-sdk/v1/ map to the same dist layout.
+    const path = decodeURIComponent((req.url ?? '').replace(/^\/viceme-sdk\/[^/]+\//, ''));
     const file = files.get(path);
     if (!file) {
       res.writeHead(404);
@@ -118,7 +118,7 @@ function run(...args: string[]) {
 
 describe('verify-cdn.mjs', () => {
   it('passes for an untampered immutable exact version', async () => {
-    const { stdout } = await run('--base', `${server!.url}/sdk/0.1.0/`);
+    const { stdout } = await run('--base', `${server!.url}/viceme-sdk/0.1.0/`);
     expect(stdout).toContain('cdn verification passed');
   });
 
@@ -129,7 +129,7 @@ describe('verify-cdn.mjs', () => {
     tampered[tampered.length - 2] = tampered[tampered.length - 2]! ^ 0xff;
     files.set('index.js', { ...entry, body: tampered });
     try {
-      await expect(run('--base', `${server!.url}/sdk/0.1.0/`)).rejects.toMatchObject({
+      await expect(run('--base', `${server!.url}/viceme-sdk/0.1.0/`)).rejects.toMatchObject({
         code: 1,
       });
     } finally {
@@ -139,27 +139,44 @@ describe('verify-cdn.mjs', () => {
 
   it('enforces the alias expectation', async () => {
     await expect(
-      run('--base', `${server!.url}/sdk/v1/`, '--expect-version', '0.1.0', '--allow-mutable-cache'),
+      run(
+        '--base',
+        `${server!.url}/viceme-sdk/v1/`,
+        '--expect-version',
+        '0.1.0',
+        '--allow-mutable-cache',
+      ),
     ).resolves.toMatchObject({ stdout: expect.stringContaining('0.1.0') });
 
     await expect(
-      run('--base', `${server!.url}/sdk/v1/`, '--expect-version', '9.9.9', '--allow-mutable-cache'),
+      run(
+        '--base',
+        `${server!.url}/viceme-sdk/v1/`,
+        '--expect-version',
+        '9.9.9',
+        '--allow-mutable-cache',
+      ),
     ).rejects.toMatchObject({ code: 1 });
   });
 
   it('alias mode resolves the version pointer and verifies the target', async () => {
     // Without --allow-mutable-cache, the alias check reads
-    // /sdk/-/aliases/v1 and fully verifies /sdk/<pointer-version>/.
+    // /viceme-sdk/-/aliases/v1 and fully verifies /sdk/<pointer-version>/.
     files.set('aliases/v1', {
       body: Buffer.from('0.1.0\n'),
       contentType: 'text/plain; charset=utf-8',
     });
-    const { stdout } = await run('--base', `${server!.url}/sdk/v1/`, '--expect-version', '0.1.0');
+    const { stdout } = await run(
+      '--base',
+      `${server!.url}/viceme-sdk/v1/`,
+      '--expect-version',
+      '0.1.0',
+    );
     expect(stdout).toContain('alias pointer verified -> 0.1.0');
 
     // Pointer mismatch fails closed.
     await expect(
-      run('--base', `${server!.url}/sdk/v1/`, '--expect-version', '0.2.0'),
+      run('--base', `${server!.url}/viceme-sdk/v1/`, '--expect-version', '0.2.0'),
     ).rejects.toMatchObject({ code: 1 });
     files.delete('aliases/v1');
   });

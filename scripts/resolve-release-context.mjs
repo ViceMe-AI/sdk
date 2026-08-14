@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
  * Resolve whether a main push is a RELEASE commit (a merged, reviewed
- * "Version Packages" PR) or an ordinary commit, and bind the release to
- * that exact PR merge SHA — ported from the ViceMe-AI/cli baseline
- * (npm/scripts/resolve-release-context.mjs), adapted to Changesets.
+ * dev -> main promotion PR titled "chore(release): @viceme-ai/sdk@<v>")
+ * or an ordinary commit, and bind the release to that exact merge SHA —
+ * ported from the ViceMe-AI/cli baseline, adapted to the SDK's
+ * Changesets-on-dev flow. Recovery runs check out an already-existing
+ * immutable tag instead.
  *
  * Why: ordinary feature/doc pushes must never create immutable release tags
  * or publish; only the reviewed Version Packages PR may. Recovery runs
@@ -24,7 +26,6 @@
 import { appendFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
-const VERSION_PR_TITLE = 'Version Packages';
 const repository = process.env.GITHUB_REPOSITORY;
 const event = process.env.GITHUB_EVENT_NAME;
 const recoveryTag = process.env.RECOVERY_TAG ?? '';
@@ -61,8 +62,9 @@ if (event === 'workflow_dispatch') {
   process.exit(0);
 }
 
-// Normal push: the commit must be the merge commit of a reviewed Version
-// Packages PR — anything else is an ordinary push.
+// Normal push to main: the commit must be the merge commit of the reviewed
+// dev -> main release promotion PR (title bound to the exact package
+// version). Anything else — including direct pushes — is not a release.
 let pulls;
 try {
   pulls = JSON.parse(gh(`repos/${repository}/commits/${sha}/pulls`));
@@ -71,17 +73,27 @@ try {
   process.exit(1);
 }
 
+const { readFile } = await import('node:fs/promises');
+const version = JSON.parse(
+  await readFile(new URL('../packages/sdk/package.json', import.meta.url), 'utf8'),
+).version;
+const expectedTitle = `chore(release): @viceme-ai/sdk@${version}`;
+
 const releasePr = pulls.find(
   (pr) =>
     pr.state === 'closed' &&
     pr.merged_at !== null &&
     pr.base?.ref === 'main' &&
-    pr.title === VERSION_PR_TITLE &&
+    pr.head?.ref === 'dev' &&
+    pr.head?.repo?.full_name === repository &&
+    pr.title === expectedTitle &&
     pr.merge_commit_sha === sha,
 );
 
 if (!releasePr) {
-  console.log(`no merged '${VERSION_PR_TITLE}' PR for ${sha}; ordinary push — no release`);
+  console.log(
+    `no merged dev->main promotion PR '${expectedTitle}' for ${sha}; ordinary push — no release`,
+  );
   output({ skip: 'true' });
   process.exit(0);
 }

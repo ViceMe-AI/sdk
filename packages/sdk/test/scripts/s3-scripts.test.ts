@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -93,14 +93,14 @@ beforeAll(async () => {
   // Public entry: serves the same store the fake aws writes into, with the
   // headers verify-cdn expects.
   const httpServer: Server = createServer((req, res) => {
-    const path = decodeURIComponent((req.url ?? '').replace(/^\/+/, ''));
+    const path = decodeURIComponent((req.url ?? '').replace(/^\/viceme-sdk\//, ''));
     try {
       const body = readFileSync(join(storeRoot, path));
       const type = path.endsWith('.json')
         ? 'application/json; charset=utf-8'
         : 'text/javascript; charset=utf-8';
       res.writeHead(200, {
-        'content-type': path === 'sdk/-/aliases/v1' ? 'text/plain; charset=utf-8' : type,
+        'content-type': path === '-/aliases/v1' ? 'text/plain; charset=utf-8' : type,
         'cache-control': 'public,max-age=31536000,immutable',
         'access-control-allow-origin': '*',
       });
@@ -154,9 +154,9 @@ describe('publish-s3-region.mjs', () => {
             '--dist',
             distDir,
             '--prefix',
-            'sdk/0.1.0/',
+            '0.1.0/',
             '--public-base',
-            `${publicServer!.url}/sdk/0.1.0/`,
+            `${publicServer!.url}/viceme-sdk/0.1.0/`,
             '--label',
             'CN',
           ],
@@ -174,9 +174,9 @@ describe('publish-s3-region.mjs', () => {
           '--dist',
           distDir,
           '--prefix',
-          'sdk/0.1.0/',
+          '0.1.0/',
           '--public-base',
-          `${publicServer!.url}/sdk/0.1.0/`,
+          `${publicServer!.url}/viceme-sdk/0.1.0/`,
           '--label',
           'CN',
         ],
@@ -190,9 +190,9 @@ describe('publish-s3-region.mjs', () => {
       '--dist',
       distDir,
       '--prefix',
-      'sdk/0.1.0/',
+      '0.1.0/',
       '--public-base',
-      `${publicServer!.url}/sdk/0.1.0/`,
+      `${publicServer!.url}/viceme-sdk/0.1.0/`,
       '--label',
       'CN',
     ];
@@ -205,11 +205,11 @@ describe('publish-s3-region.mjs', () => {
     expect(second.stdout).toContain('CN: 0 uploaded, 3 already identical');
 
     // Tamper one object: the immutable violation fails closed.
-    writeFileSync(join(storeRoot, 'sdk/0.1.0/index.js'), 'tampered\n');
+    writeFileSync(join(storeRoot, '0.1.0/index.js'), 'tampered\n');
     await expect(runS3('publish-s3-region.mjs', args, REGION_ENV)).rejects.toMatchObject({
       code: 1,
     });
-    writeFileSync(join(storeRoot, 'sdk/0.1.0/index.js'), indexBody);
+    writeFileSync(join(storeRoot, '0.1.0/index.js'), indexBody);
   });
 });
 
@@ -268,10 +268,94 @@ describe('s3-alias-pointer.mjs', () => {
     ).rejects.toMatchObject({ code: 1 });
   });
 
+  it('a partial-success rerun converges remaining regions (same version = converged)', async () => {
+    // CN fully at 0.2.0 (previous run wrote loader + pointer), GLOBAL unset
+    // (previous run failed midway). The rerun must treat CN as converged
+    // and finish GLOBAL.
+    mkdirSync(join(storeRoot, '0.2.0'), { recursive: true });
+    writeFileSync(join(storeRoot, '0.2.0', 'viceme.min.js'), loaderBody);
+    mkdirSync(join(storeRoot, 'v1'), { recursive: true });
+    writeFileSync(join(storeRoot, 'v1', 'viceme.min.js'), loaderBody);
+    mkdirSync(join(storeRoot, '-', 'aliases'), { recursive: true });
+    writeFileSync(join(storeRoot, '-', 'aliases', 'v1'), '0.2.0');
+
+    const rerun = await exec(
+      'node',
+      [
+        join(scriptsDir, 's3-alias-pointer.mjs'),
+        '--version',
+        '0.2.0',
+        '--regions',
+        'cn,global',
+        '--public-base-cn',
+        publicServer!.url,
+        '--public-base-global',
+        publicServer!.url,
+        '--converge-timeout-ms',
+        '5000',
+      ],
+      {
+        env: {
+          ...process.env,
+          AWS_BIN: fakeAws,
+          FAKE_AWS_STORE: storeRoot,
+          EXPECT_BUCKET: 'viceme-sdk',
+          ...ALIAS_ENV,
+        },
+      },
+    );
+    expect(rerun.stdout).toContain('pointer already at 0.2.0 (region converged)');
+    expect(rerun.stdout).toContain('alias written and verified in 2 region(s)');
+  });
+
+  it('fails closed when the live pointer read errors (no unset fallback)', async () => {
+    // A pointer endpoint returning 503 must NOT be treated as "unset":
+    // an older-version rerun could otherwise overwrite a newer pointer.
+    const failing = createServer((_req, res) => {
+      res.writeHead(503);
+      res.end('unavailable');
+    });
+    await new Promise<void>((resolve) => failing.listen(0, '127.0.0.1', resolve));
+    const failingAddress = failing.address();
+    if (failingAddress === null || typeof failingAddress === 'string') throw new Error('bind');
+    const failingUrl = `http://127.0.0.1:${failingAddress.port}`;
+    try {
+      const result = await exec(
+        'node',
+        [
+          join(scriptsDir, 's3-alias-pointer.mjs'),
+          '--version',
+          '0.1.0',
+          '--regions',
+          'cn',
+          '--public-base-cn',
+          failingUrl,
+          '--converge-timeout-ms',
+          '5000',
+        ],
+        {
+          env: {
+            ...process.env,
+            AWS_BIN: fakeAws,
+            FAKE_AWS_STORE: storeRoot,
+            EXPECT_BUCKET: 'viceme-sdk',
+            ...ALIAS_ENV,
+          },
+        },
+      ).catch((error: { code?: number; stderr?: string }) => error);
+      expect(result).toMatchObject({ code: 1 });
+      expect(String((result as { stderr?: string }).stderr)).toContain('failing closed');
+    } finally {
+      await new Promise<void>((done) => failing.close(() => done()));
+    }
+  });
+
   it('promotes forward after the exact version exists, then refuses a backward promote', async () => {
-    // Publish exact versions first (0.1.0 already stored above; add 0.2.0).
-    mkdirSync(join(storeRoot, 'sdk', '0.2.0'), { recursive: true });
-    writeFileSync(join(storeRoot, 'sdk', '0.2.0', 'viceme.min.js'), loaderBody);
+    // Isolate the pointer for this scenario's lifecycle.
+    rmSync(join(storeRoot, '-', 'aliases', 'v1'), { force: true });
+    rmSync(join(storeRoot, 'v1', 'viceme.min.js'), { force: true });
+    mkdirSync(join(storeRoot, '0.2.0'), { recursive: true });
+    writeFileSync(join(storeRoot, '0.2.0', 'viceme.min.js'), loaderBody);
 
     const promote = await runS3(
       's3-alias-pointer.mjs',
@@ -288,8 +372,8 @@ describe('s3-alias-pointer.mjs', () => {
       ALIAS_ENV,
     );
     expect(promote.stdout).toContain('pointer unset; promoting to 0.1.0');
-    expect(readFileSync(join(storeRoot, 'sdk/-/aliases/v1'), 'utf8')).toBe('0.1.0');
-    expect(readFileSync(join(storeRoot, 'sdk/v1/viceme.min.js'), 'utf8')).toBe(
+    expect(readFileSync(join(storeRoot, '-', 'aliases', 'v1'), 'utf8')).toBe('0.1.0');
+    expect(readFileSync(join(storeRoot, 'v1/viceme.min.js'), 'utf8')).toBe(
       loaderBody.toString('utf8'),
     );
 
@@ -338,6 +422,6 @@ describe('s3-alias-pointer.mjs', () => {
     expect(String((failure as { stderr?: string }).stderr)).toContain(
       'refusing to move pointer backward',
     );
-    expect(readFileSync(join(storeRoot, 'sdk/-/aliases/v1'), 'utf8')).toBe('0.2.0');
+    expect(readFileSync(join(storeRoot, '-', 'aliases', 'v1'), 'utf8')).toBe('0.2.0');
   });
 });

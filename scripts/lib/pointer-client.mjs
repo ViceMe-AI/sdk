@@ -2,19 +2,44 @@
  * Shared pointer read/poll helpers for the stable-alias writers.
  */
 
-/** Best-effort single read of a pointer URL (undefined when unset/absent). */
-export async function readPointerValue(url) {
+const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+/**
+ * Strict single read of a pointer URL.
+ *
+ * Returns:
+ *   { kind: 'value', value }  — pointer is set to a valid version string;
+ *   { kind: 'unset' }         — the origin answered 404 (genuinely absent);
+ *   { kind: 'error', detail } — 403/5xx/timeouts/garbage bodies. Callers
+ *                               MUST fail closed: treating these as "unset"
+ *                               would let a stale run overwrite a newer
+ *                               live pointer during a transient read fault.
+ */
+export async function readPointerState(url) {
+  let response;
   try {
-    const response = await fetch(url, {
+    response = await fetch(url, {
       credentials: 'omit',
       headers: { 'cache-control': 'no-cache' },
     });
-    if (!response.ok) return undefined;
-    const text = (await response.text()).trim();
-    return text === '' ? undefined : text;
-  } catch {
-    return undefined;
+  } catch (error) {
+    return { kind: 'error', detail: `fetch failed: ${String(error)}` };
   }
+  if (response.status === 404) return { kind: 'unset' };
+  if (!response.ok) {
+    return { kind: 'error', detail: `HTTP ${response.status}` };
+  }
+  const text = (await response.text()).trim();
+  if (!SEMVER.test(text)) {
+    return { kind: 'error', detail: `unparseable pointer body '${text.slice(0, 40)}'` };
+  }
+  return { kind: 'value', value: text };
+}
+
+/** Back-compat helper for callers that already fail closed upstream. */
+export async function readPointerValue(url) {
+  const state = await readPointerState(url);
+  return state.kind === 'value' ? state.value : undefined;
 }
 
 /**

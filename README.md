@@ -26,7 +26,7 @@ pnpm add @viceme-ai/sdk
 <div id="viceme-danmaku"></div>
 <script
   defer
-  src="https://s3.viceme.cn/sdk/v1/viceme.min.js"
+  src="https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js"
   integrity="sha384-..."
   crossorigin="anonymous"
   data-viceme-work="wrk_public_xxx"
@@ -41,7 +41,7 @@ pnpm add @viceme-ai/sdk
 
 ```html
 <script type="module">
-  import { createViceMe } from 'https://s3.viceme.cn/sdk/1.0.0/index.js';
+  import { createViceMe } from 'https://s3.viceme.cn/viceme-sdk/1.0.0/index.js';
 
   const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
   await client.ready();

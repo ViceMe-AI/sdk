@@ -101,7 +101,7 @@ async function verifyRemote(base, { expectVersion, allowMutableCache }) {
     // fully verifies the pointed-to exact version (the alias path itself
     // holds no manifest copy).
     const aliasBase = new URL(base.endsWith('/') ? base : `${base}/`);
-    if (!/^\/sdk\/\d+\.\d+\.\d+[^/]*\//.test(aliasBase.pathname)) {
+    if (!/^\/viceme-sdk\/\d+\.\d+\.\d+[^/]*\//.test(aliasBase.pathname)) {
       return verifyAliasByPointer(aliasBase, expectVersion);
     }
   }
@@ -110,7 +110,7 @@ async function verifyRemote(base, { expectVersion, allowMutableCache }) {
 
 /** Alias mode: pointer must equal the expected version; then verify it. */
 async function verifyAliasByPointer(aliasBase, expectVersion) {
-  const pointerUrl = new URL('/sdk/-/aliases/v1', aliasBase);
+  const pointerUrl = new URL('/viceme-sdk/-/aliases/v1', aliasBase);
   const { buffer: pointerBuffer } = await fetchOrThrow(pointerUrl);
   const pointerVersion = pointerBuffer.toString('utf8').trim();
   check(
@@ -118,7 +118,7 @@ async function verifyAliasByPointer(aliasBase, expectVersion) {
     `alias pointer is '${pointerVersion}', expected '${expectVersion}'`,
   );
   console.log(`alias pointer verified -> ${pointerVersion}`);
-  const exactBase = new URL(`/sdk/${expectVersion}/`, aliasBase);
+  const exactBase = new URL(`/viceme-sdk/${expectVersion}/`, aliasBase);
   return verifyExactVersion(exactBase.toString(), {
     expectVersion,
     allowMutableCache: false,
@@ -141,7 +141,7 @@ async function verifyExactVersion(base, { expectVersion, allowMutableCache }) {
       `alias manifest version ${manifest.version} != expected ${expectVersion}`,
     );
   }
-  const isExactVersion = /^\/sdk\/\d+\.\d+\.\d+[^/]*\//.test(manifestUrl.pathname);
+  const isExactVersion = /^\/viceme-sdk\/\d+\.\d+\.\d+[^/]*\//.test(manifestUrl.pathname);
   if (isExactVersion && !allowMutableCache) {
     const cacheControl = manifestResponse.headers.get('cache-control') ?? '';
     check(

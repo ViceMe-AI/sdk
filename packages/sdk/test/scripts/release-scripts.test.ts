@@ -125,7 +125,7 @@ beforeAll(async () => {
 
   // Remote starts empty; tests mutate it.
   const httpServer: Server = createServer((req, res) => {
-    const path = decodeURIComponent((req.url ?? '').replace(/^\/sdk\/[^/]+\//, ''));
+    const path = decodeURIComponent((req.url ?? '').replace(/^\/viceme-sdk\/[^/]+\//, ''));
     const file = remote.get(path);
     if (!file) {
       res.writeHead(404);
@@ -159,7 +159,7 @@ describe('upload-plan.mjs', () => {
       '--dist',
       distDir,
       '--base',
-      `${server!.url}/sdk/0.1.0/`,
+      `${server!.url}/viceme-sdk/0.1.0/`,
     );
     // manifest.json is a first-class immutable object even though it is not
     // listed inside manifest.files: verify-cdn reads it from this path.
@@ -180,7 +180,7 @@ describe('upload-plan.mjs', () => {
       '--dist',
       distDir,
       '--base',
-      `${server!.url}/sdk/0.1.0/`,
+      `${server!.url}/viceme-sdk/0.1.0/`,
     );
     expect(stdout.split('\n').filter(Boolean).sort()).toEqual(['manifest.json', 'viceme.min.js']);
   });
@@ -191,7 +191,7 @@ describe('upload-plan.mjs', () => {
       contentType: 'text/javascript; charset=utf-8',
     });
     await expect(
-      run('upload-plan.mjs', '--dist', distDir, '--base', `${server!.url}/sdk/0.1.0/`),
+      run('upload-plan.mjs', '--dist', distDir, '--base', `${server!.url}/viceme-sdk/0.1.0/`),
     ).rejects.toMatchObject({ code: 1 });
     remote.delete('index.js');
   });
@@ -202,7 +202,7 @@ describe('upload-plan.mjs', () => {
       contentType: 'application/json; charset=utf-8',
     });
     await expect(
-      run('upload-plan.mjs', '--dist', distDir, '--base', `${server!.url}/sdk/0.1.0/`),
+      run('upload-plan.mjs', '--dist', distDir, '--base', `${server!.url}/viceme-sdk/0.1.0/`),
     ).rejects.toMatchObject({ code: 1 });
     remote.delete('manifest.json');
   });
@@ -314,9 +314,7 @@ describe('write-alias-pointer.mjs', () => {
       );
       expect(stdout).toContain('alias pointer written and verified in 2 region(s)');
       for (const region of ['cn', 'global']) {
-        expect(readFileSync(join(tmpRoot, region, 'sdk', '-', 'aliases', 'v1'), 'utf8')).toBe(
-          '0.2.0',
-        );
+        expect(readFileSync(join(tmpRoot, region, '-', 'aliases', 'v1'), 'utf8')).toBe('0.2.0');
       }
     } finally {
       await cn.close();
@@ -330,7 +328,7 @@ describe('write-alias-pointer.mjs', () => {
       // Pre-seed a wrong pointer and make the upload a no-op; a tiny
       // convergence budget keeps the test fast.
       mkdirSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases'), { recursive: true });
-      writeFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), '9.9.9');
+      writeFileSync(join(tmpRoot, 'cn', '-', 'aliases', 'v1'), '9.9.9');
       await expect(
         exec(
           'node',
@@ -418,7 +416,7 @@ describe('write-alias-pointer.mjs', () => {
     );
     // Isolate the pointer: earlier tests may have left a newer value, which
     // the promote policy would (correctly) refuse to move backward from.
-    rmSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), { force: true });
+    rmSync(join(tmpRoot, 'cn', '-', 'aliases', 'v1'), { force: true });
     const cn = await startRegionServer('cn');
     try {
       await exec(
@@ -438,7 +436,7 @@ describe('write-alias-pointer.mjs', () => {
         ],
         { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot, PURGE_MARKER: purgeMarker } },
       );
-      expect(readFileSync(purgeMarker, 'utf8')).toBe('cn sdk/-/aliases/v1\n');
+      expect(readFileSync(purgeMarker, 'utf8')).toBe('cn -/aliases/v1\n');
     } finally {
       await cn.close();
     }
@@ -466,7 +464,7 @@ describe('write-alias-pointer.mjs', () => {
       // Current pointer is NEWER than the target; upload is a no-op so a
       // policy bug could never silently "fix" the pointer.
       mkdirSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases'), { recursive: true });
-      writeFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), '0.3.0');
+      writeFileSync(join(tmpRoot, 'cn', '-', 'aliases', 'v1'), '0.3.0');
       const failure = await exec(
         'node',
         [
@@ -489,7 +487,7 @@ describe('write-alias-pointer.mjs', () => {
         'refusing to move pointer backward',
       );
       // Pointer untouched.
-      expect(readFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), 'utf8')).toBe('0.3.0');
+      expect(readFileSync(join(tmpRoot, 'cn', '-', 'aliases', 'v1'), 'utf8')).toBe('0.3.0');
     } finally {
       await cn.close();
     }
@@ -499,7 +497,7 @@ describe('write-alias-pointer.mjs', () => {
     const cn = await startRegionServer('cn');
     try {
       mkdirSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases'), { recursive: true });
-      writeFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), '0.3.0');
+      writeFileSync(join(tmpRoot, 'cn', '-', 'aliases', 'v1'), '0.3.0');
 
       // Stale-job guard: the declared current does not match the live value.
       await expect(
@@ -545,7 +543,7 @@ describe('write-alias-pointer.mjs', () => {
         { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot } },
       );
       expect(stdout).toContain('authorized rollback');
-      expect(readFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), 'utf8')).toBe('0.2.0');
+      expect(readFileSync(join(tmpRoot, 'cn', '-', 'aliases', 'v1'), 'utf8')).toBe('0.2.0');
     } finally {
       await cn.close();
     }

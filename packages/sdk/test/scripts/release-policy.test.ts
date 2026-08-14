@@ -40,16 +40,21 @@ describe('decideMutableTagMove', () => {
     ).toBe(true);
   });
 
-  it('promote: refuses backward and same-version moves (stale rerun guard)', () => {
+  it('promote: refuses backward moves (stale rerun guard)', () => {
     expect(
       decideMutableTagMove({ mode: 'promote', current: '1.1.0', target: '1.0.0' }).allowed,
     ).toBe(false);
     expect(
-      decideMutableTagMove({ mode: 'promote', current: '1.0.0', target: '1.0.0' }).allowed,
-    ).toBe(false);
-    expect(
       decideMutableTagMove({ mode: 'promote', current: '0.2.0', target: '0.1.9' }).allowed,
     ).toBe(false);
+  });
+
+  it('promote: same version means the region already converged (idempotent rerun)', () => {
+    const same = decideMutableTagMove({ mode: 'promote', current: '1.0.0', target: '1.0.0' });
+    expect(same.allowed).toBe(false);
+    expect(same.converged).toBe(true);
+    // Callers must verify and continue, never fail the run.
+    expect(same.reason).toContain('converged');
   });
 
   it('rollback: requires the exact declared current value', () => {

@@ -111,16 +111,16 @@ jobs:
               cn) host=s3.viceme.cn ;;
               global) host=s3.viceme.ai ;;
             esac
-            node scripts/verify-cdn.mjs --base "https://${host}/sdk/v1/" --expect-version "$VERSION"
+            node scripts/verify-cdn.mjs --base "https://${host}/viceme-sdk/v1/" --expect-version "$VERSION"
           done
       - name: Loader smoke against the live alias
         run: |
           node - <<'EOF'
-          const base = 'https://s3.viceme.ai/sdk/v1/';
+          const base = 'https://s3.viceme.ai/viceme-sdk/v1/';
           const res = await fetch(new URL('viceme.min.js', base));
           if (!res.ok) throw new Error(`loader HTTP ${res.status}`);
           const text = await res.text();
           if (!text.includes('data-viceme')) throw new Error('loader bundle looks wrong');
-          const pointer = await (await fetch('https://s3.viceme.ai/sdk/-/aliases/v1')).text();
+          const pointer = await (await fetch('https://s3.viceme.ai/viceme-sdk/-/aliases/v1')).text();
           console.log('cdn smoke ok, alias ->', pointer.trim());
           EOF

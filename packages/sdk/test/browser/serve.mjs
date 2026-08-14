@@ -4,8 +4,8 @@
  *
  * Reproduces the CDN layout (§14.3) against local build output:
  *
- *   /sdk/<version>/viceme.min.js  -> dist/viceme.min.js
- *   /sdk/v1/...                   -> same content (stable alias)
+ *   /viceme-sdk/<version>/viceme.min.js -> dist/viceme.min.js
+ *   /viceme-sdk/v1/...            -> same content (stable alias)
  *   any manifest.json             -> dist/manifest.json with the test-only
  *                                    fixture capability injected (the "local
  *                                    fixture manifest" — never shipped)
@@ -55,7 +55,7 @@ createServer(async (req, res) => {
     }
 
     let file = null;
-    if (path === '/sdk/-/aliases/v1') {
+    if (path === '/viceme-sdk/-/aliases/v1') {
       // Stable-alias version pointer (the loader resolves it when the alias
       // path carries no manifest).
       res.writeHead(200, {
@@ -68,7 +68,7 @@ createServer(async (req, res) => {
     }
     if (path.startsWith('/pages/')) {
       file = join(pagesDir, normalize(path.slice('/pages/'.length)));
-    } else if (/^\/sdk\/(v1|\d+\.\d+\.\d+[^/]*)\//.test(path)) {
+    } else if (/^\/viceme-sdk\/(v1|\d+\.\d+\.\d+[^/]*)\//.test(path)) {
       const rest = path.split('/').slice(3).join('/');
       if (rest === 'manifest.json') {
         res.writeHead(200, {

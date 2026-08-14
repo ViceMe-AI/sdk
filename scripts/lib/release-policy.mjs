@@ -63,7 +63,9 @@ function parse(version) {
  *              must declare the exact `expectedCurrent` it expects to move
  *              away from, and the live value must match (stale-job guard).
  *
- * Returns { allowed, reason }.
+ * Returns { allowed, converged, reason }. `converged: true` means the
+ * live value already equals the target: the caller must VERIFY the
+ * existing objects and continue (idempotent recovery), never fail.
  */
 export function decideMutableTagMove({ mode, current, target, expectedCurrent }) {
   if (mode === 'rollback') {
@@ -76,6 +78,7 @@ export function decideMutableTagMove({ mode, current, target, expectedCurrent })
     if (current !== expectedCurrent) {
       return {
         allowed: false,
+        converged: false,
         reason: `rollback expected current '${expectedCurrent}' but live value is '${current ?? 'unset'}' (stale or concurrent move?)`,
       };
     }
@@ -85,21 +88,30 @@ export function decideMutableTagMove({ mode, current, target, expectedCurrent })
         reason: `rollback target ${target} must be older than current ${current}`,
       };
     }
-    return { allowed: true, reason: `authorized rollback ${current} -> ${target}` };
+    return {
+      allowed: true,
+      converged: false,
+      reason: `authorized rollback ${current} -> ${target}`,
+    };
   }
   // promote
   if (current === undefined || current === null || current === '') {
-    return { allowed: true, reason: `pointer unset; promoting to ${target}` };
+    return { allowed: true, converged: false, reason: `pointer unset; promoting to ${target}` };
   }
   const ordering = compareSemver(target, current);
   if (ordering > 0) {
-    return { allowed: true, reason: `forward move ${current} -> ${target}` };
+    return { allowed: true, converged: false, reason: `forward move ${current} -> ${target}` };
   }
   if (ordering === 0) {
-    return { allowed: false, reason: `pointer already at ${target}` };
+    return {
+      allowed: false,
+      converged: true,
+      reason: `pointer already at ${target} (region converged)`,
+    };
   }
   return {
     allowed: false,
+    converged: false,
     reason: `refusing to move pointer backward ${current} -> ${target}; use explicit rollback mode`,
   };
 }

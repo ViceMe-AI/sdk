@@ -9,4 +9,4 @@ export function decideMutableTagMove(options: {
   current?: string;
   target: string;
   expectedCurrent?: string;
-}): { allowed: boolean; reason: string };
+}): { allowed: boolean; converged: boolean; reason: string };

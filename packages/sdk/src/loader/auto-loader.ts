@@ -207,7 +207,7 @@ async function fetchReleaseManifest(
   if (!response.ok) {
     const aliasVersion = await resolveAliasPointer(manifestUrl);
     if (aliasVersion !== undefined) {
-      const aliasUrl = new URL(`/sdk/${aliasVersion}/manifest.json`, manifestUrl);
+      const aliasUrl = new URL(`/viceme-sdk/${aliasVersion}/manifest.json`, manifestUrl);
       return { manifest: await parseManifest(await fetchWithTimeout(aliasUrl)), baseUrl: aliasUrl };
     }
   }
@@ -224,11 +224,11 @@ function fetchWithTimeout(url: URL): Promise<Response> {
 
 /** Read /sdk/-/aliases/v1 when the loader itself sits under /sdk/v1/. */
 async function resolveAliasPointer(manifestUrl: URL): Promise<string | undefined> {
-  if (!/\/sdk\/[^/]+\/manifest\.json$/.test(manifestUrl.pathname)) return undefined;
-  const segment = manifestUrl.pathname.split('/sdk/')[1]?.split('/')[0];
+  if (!/\/viceme-sdk\/[^/]+\/manifest\.json$/.test(manifestUrl.pathname)) return undefined;
+  const segment = manifestUrl.pathname.split('/viceme-sdk/')[1]?.split('/')[0];
   if (segment !== `v${API_MAJOR}`) return undefined;
   try {
-    const response = await fetchWithTimeout(new URL('/sdk/-/aliases/v1', manifestUrl));
+    const response = await fetchWithTimeout(new URL('/viceme-sdk/-/aliases/v1', manifestUrl));
     if (!response.ok) return undefined;
     const version = (await response.text()).trim();
     return /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version) ? version : undefined;

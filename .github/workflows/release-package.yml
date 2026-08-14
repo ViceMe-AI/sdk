@@ -4,8 +4,9 @@ name: Release Package
 # reviewed ViceMe-AI/cli baseline (Release App, OIDC npm publication, dual
 # region S3, Feishu notification) with the SDK's own artifact steps:
 #
-#   reviewed Version Packages PR (Release App token)
-#     -> immutable tag at the exact SHA
+#   dev flow: Changesets Version Packages PRs target dev (Release App
+#     token); a reviewed dev -> main promotion PR is the ONLY release entry
+#     -> immutable tag at the exact promotion merge SHA
 #     -> fail-closed gates (license, forbidden patterns, full quality)
 #     -> npm publish-or-verify (OIDC, no tokens)
 #     -> GitHub release assets from the published npm tarball
@@ -20,7 +21,7 @@ name: Release Package
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
     inputs:
       tag:
@@ -39,7 +40,7 @@ concurrency:
 jobs:
   version-pr:
     name: Version Packages PR (Changesets via Release App, no publishing)
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -72,9 +73,57 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.release-app-token.outputs.token }}
 
+  promotion-pr:
+    name: dev -> main release promotion PR (Release App)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - id: release-app-token
+        name: Create repository-scoped Release App token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          token: ${{ steps.release-app-token.outputs.token }}
+          fetch-depth: 0
+      - name: Open or update the promotion PR when dev carries a new version
+        env:
+          GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          DEV_VERSION="$(node -p "require('./packages/sdk/package.json').version")"
+          MAIN_VERSION="$(git show origin/main:packages/sdk/package.json | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")"
+          if [ "$DEV_VERSION" = "$MAIN_VERSION" ]; then
+            echo "dev has no unreleased version (${DEV_VERSION}); no promotion PR"
+            exit 0
+          fi
+          TAG="@viceme-ai/sdk@${DEV_VERSION}"
+          BODY_FILE="${RUNNER_TEMP}/promotion.md"
+          {
+            echo "## Release promotion ${TAG}"
+            echo
+            echo "Merging this reviewed PR promotes dev to main and releases **${TAG}**:"
+            echo "immutable tag, OIDC npm publication, GitHub release assets, and the"
+            echo "CN + GLOBAL viceme-sdk S3 publication run automatically on merge."
+          } > "${BODY_FILE}"
+          PR_URL="$(gh pr list --state open --base main --head dev --json url --jq '.[0].url // empty')"
+          if [ -z "${PR_URL}" ]; then
+            gh pr create --base main --head dev --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
+          else
+            gh pr edit "${PR_URL}" --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
+          fi
+
   context:
-    name: Resolve merged Version Packages PR or recovery tag
-    if: github.event_name == 'push' || inputs.tag != ''
+    name: Resolve merged dev-to-main promotion PR or recovery tag
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -226,6 +275,7 @@ jobs:
   assets:
     name: Attach CDN assets + dist-tag read-back
     needs:
+      - context
       - metadata
       - npm-publish
     runs-on: ubuntu-latest
@@ -303,14 +353,14 @@ jobs:
             S3_ENDPOINT="$CN_ENDPOINT" S3_BUCKET="$CN_BUCKET" \
             S3_ACCESS_KEY_ID="$CN_ACCESS_KEY_ID" S3_SECRET_ACCESS_KEY="$CN_SECRET_ACCESS_KEY" \
               node scripts/publish-s3-region.mjs \
-                --dist verified-dist --prefix "sdk/${VERSION}/" \
-                --public-base "https://s3.viceme.cn/sdk/${VERSION}/" --label CN
+                --dist verified-dist --prefix "${VERSION}/" \
+                --public-base "https://s3.viceme.cn/viceme-sdk/${VERSION}/" --label CN
           )
           S3_ENDPOINT="$GLOBAL_ENDPOINT" S3_BUCKET="$GLOBAL_BUCKET" \
           S3_ACCESS_KEY_ID="$GLOBAL_ACCESS_KEY_ID" S3_SECRET_ACCESS_KEY="$GLOBAL_SECRET_ACCESS_KEY" \
             node scripts/publish-s3-region.mjs \
-              --dist verified-dist --prefix "sdk/${VERSION}/" \
-              --public-base "https://s3.viceme.ai/sdk/${VERSION}/" --label GLOBAL
+              --dist verified-dist --prefix "${VERSION}/" \
+              --public-base "https://s3.viceme.ai/viceme-sdk/${VERSION}/" --label GLOBAL
 
   notify:
     name: Feishu release notification

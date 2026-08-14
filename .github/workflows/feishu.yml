@@ -2,7 +2,7 @@ name: Feishu PR notifications
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     types: [opened]
 
   issue_comment:
@@ -41,7 +41,7 @@ jobs:
             if (eventName === 'pull_request') {
               shouldNotify =
                 context.payload.action === 'opened' &&
-                context.payload.pull_request?.base?.ref === 'main'
+                (context.payload.pull_request?.base?.ref === 'main' || context.payload.pull_request?.base?.ref === 'dev')
             } else if (eventName === 'issue_comment') {
               if (context.payload.issue?.pull_request) {
                 const { data: pr } = await github.rest.pulls.get({
@@ -49,14 +49,14 @@ jobs:
                   repo: context.repo.repo,
                   pull_number: context.payload.issue.number,
                 })
-                shouldNotify = pr.base.ref === 'main' && !isBotActor
+                shouldNotify = (pr.base.ref === 'main' || pr.base.ref === 'dev') && !isBotActor
               }
             } else if (eventName === 'pull_request_review_comment') {
-              shouldNotify = context.payload.pull_request?.base?.ref === 'main' && !isBotActor
+              shouldNotify = (context.payload.pull_request?.base?.ref === 'main' || context.payload.pull_request?.base?.ref === 'dev') && !isBotActor
             } else if (eventName === 'pull_request_review') {
               const reviewState = context.payload.review?.state
               shouldNotify =
-                context.payload.pull_request?.base?.ref === 'main' &&
+                (context.payload.pull_request?.base?.ref === 'main' || context.payload.pull_request?.base?.ref === 'dev') &&
                 (
                   reviewState === 'approved' ||
                   reviewState === 'changes_requested' ||

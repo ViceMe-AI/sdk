@@ -26,7 +26,7 @@
  *     --upload-command "<cmd invoked as: cmd <region> <local-file> <object-key>>" \
  *     [--mode promote|rollback] [--from-current 1.2.2] \
  *     [--purge-command "<cmd invoked as: cmd <region> <object-key>>"] \
- *     [--pointer-key sdk/-/aliases/v1] [--converge-timeout-ms 330000]
+ *     [--pointer-key -/aliases/v1] [--converge-timeout-ms 330000]
  *
  * Exit 1 on any unknown region, missing host mapping, upload failure,
  * policy refusal, or non-convergence — before the next region is touched.
@@ -35,12 +35,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as wait } from 'node:timers/promises';
+import { awaitPointerConvergence, readPointerState } from './lib/pointer-client.mjs';
 import { decideMutableTagMove } from './lib/release-policy.mjs';
 
-const DEFAULT_POINTER_KEY = 'sdk/-/aliases/v1';
+const DEFAULT_POINTER_KEY = '-/aliases/v1';
 const DEFAULT_CONVERGE_TIMEOUT_MS = 330_000;
-const POLL_INTERVAL_MS = 3_000;
 const KNOWN_REGIONS = new Set(['cn', 'global']);
 
 function parseArgs(argv) {
@@ -104,52 +103,6 @@ for (const region of regions) {
   }
 }
 
-/** Best-effort single read of the current pointer (undefined when unset). */
-async function readPointer(pointerUrl) {
-  try {
-    const response = await fetch(pointerUrl, {
-      credentials: 'omit',
-      headers: { 'cache-control': 'no-cache' },
-    });
-    if (response.status === 404) return undefined;
-    if (!response.ok) return undefined;
-    const text = (await response.text()).trim();
-    return text === '' ? undefined : text;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Poll the public pointer until it equals the version, within a budget. */
-async function awaitPointerConvergence(pointerUrl, expected) {
-  const deadline = Date.now() + args.convergeTimeoutMs;
-  let lastObserved = '(no response)';
-  let lastStatus = 0;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(pointerUrl, {
-        credentials: 'omit',
-        headers: { 'cache-control': 'no-cache' },
-      });
-      lastStatus = response.status;
-      if (response.ok) {
-        lastObserved = (await response.text()).trim();
-        if (lastObserved === expected) return;
-      }
-    } catch (error) {
-      lastObserved = `(fetch error: ${String(error)})`;
-    }
-    await wait(POLL_INTERVAL_MS);
-  }
-  console.error(`pointer did not converge within ${args.convergeTimeoutMs}ms: ${pointerUrl}`);
-  console.error(`  expected:   '${expected}'`);
-  console.error(`  last seen:  '${lastObserved}' (HTTP ${lastStatus})`);
-  console.error(
-    '  A stale value usually means the CDN edge still serves the previous pointer within its TTL — configure CDN_PURGE_COMMAND, or wait for the TTL.',
-  );
-  process.exit(1);
-}
-
 const tmp = mkdtempSync(join(tmpdir(), 'viceme-alias-'));
 try {
   // The pointer body is exactly the version string — nothing else.
@@ -160,10 +113,15 @@ try {
     const host = hosts.get(region).replace(/\/+$/, '');
     const pointerUrl = `${host}/${args.pointerKey}`;
 
-    // Policy check BEFORE any write: promote only moves forward; rollback
-    // requires the live pointer to equal the explicitly declared current
-    // value (stale/concurrent-move guard).
-    const current = await readPointer(pointerUrl);
+    // Policy check BEFORE any write. The read is strict: only an explicit
+    // 404 means "unset"; 403/5xx/timeouts/garbage fail closed so a stale
+    // run can never overwrite a newer pointer during a read fault.
+    const state = await readPointerState(pointerUrl);
+    if (state.kind === 'error') {
+      console.error(`pointer read failed for ${region}: ${state.detail} — failing closed`);
+      process.exit(1);
+    }
+    const current = state.kind === 'value' ? state.value : undefined;
     const decision = decideMutableTagMove({
       mode: args.mode,
       current,
@@ -171,6 +129,13 @@ try {
       expectedCurrent: args.fromCurrent,
     });
     if (!decision.allowed) {
+      if (decision.converged) {
+        // Partial-success rerun: this region already serves the target;
+        // verify and continue with the remaining regions.
+        await awaitPointerConvergence(pointerUrl, args.version, 2000, 500);
+        console.log(`alias policy ${region}: ${decision.reason}`);
+        continue;
+      }
       console.error(`alias policy refused for ${region}: ${decision.reason}`);
       process.exit(1);
     }
@@ -183,7 +148,7 @@ try {
     if (args.purgeCommand) {
       execFileSync('bash', ['-lc', `${args.purgeCommand} ${region} ${args.pointerKey}`]);
     }
-    await awaitPointerConvergence(pointerUrl, args.version);
+    await awaitPointerConvergence(pointerUrl, args.version, args.convergeTimeoutMs);
     console.log(`alias pointer ${region}: ${pointerUrl} -> ${args.version}`);
   }
   console.log(`alias pointer written and verified in ${regions.length} region(s)`);

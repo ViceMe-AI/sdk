@@ -31,10 +31,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { decideMutableTagMove } from './lib/release-policy.mjs';
-import { awaitPointerConvergence, readPointerValue } from './lib/pointer-client.mjs';
+import { awaitPointerConvergence, readPointerState } from './lib/pointer-client.mjs';
 
-const POINTER_KEY = 'sdk/-/aliases/v1';
+const POINTER_KEY = '-/aliases/v1';
 const ALIAS_SEGMENT = 'v1';
+const BUCKET_PATH = 'viceme-sdk';
 const EXPECTED_BUCKET = process.env.EXPECT_BUCKET ?? 'viceme-sdk';
 const awsBin = process.env.AWS_BIN ?? 'aws';
 const DEFAULT_BASES = { cn: 'https://s3.viceme.cn', global: 'https://s3.viceme.ai' };
@@ -124,10 +125,18 @@ try {
   for (const region of regions) {
     const config = regionConfig(region);
     const aws = makeAws(config);
-    const pointerUrl = `${config.publicBase}/${POINTER_KEY}`;
+    const pointerUrl = `${config.publicBase}/${BUCKET_PATH}/${POINTER_KEY}`;
 
-    // 1. Policy against the live public pointer, BEFORE any write.
-    const current = await readPointerValue(pointerUrl);
+    // 1. Policy against the live public pointer, BEFORE any write. The
+    // read is strict: only an explicit 404 means "unset"; 403/5xx/timeouts
+    // or a garbage body fail closed, so a stale run can never overwrite a
+    // newer pointer during a transient read fault.
+    const state = await readPointerState(pointerUrl);
+    if (state.kind === 'error') {
+      console.error(`pointer read failed for ${region}: ${state.detail} — failing closed`);
+      process.exit(1);
+    }
+    const current = state.kind === 'value' ? state.value : undefined;
     const decision = decideMutableTagMove({
       mode: args.mode,
       current,
@@ -135,6 +144,19 @@ try {
       expectedCurrent: args.fromCurrent,
     });
     if (!decision.allowed) {
+      if (decision.converged) {
+        // Partial-success rerun: this region already serves the target;
+        // verify loader + pointer, then continue with the other regions.
+        const aliasLoaderUrl = `${config.publicBase}/${BUCKET_PATH}/${ALIAS_SEGMENT}/viceme.min.js`;
+        const loaderCheck = await fetch(aliasLoaderUrl, { credentials: 'omit' }).catch(() => null);
+        if (loaderCheck === null || !loaderCheck.ok) {
+          console.error(`converged region ${region}: alias loader missing at ${aliasLoaderUrl}`);
+          process.exit(1);
+        }
+        await awaitPointerConvergence(pointerUrl, args.version, 2_000, 500);
+        console.log(`alias policy ${region}: ${decision.reason}`);
+        continue;
+      }
       console.error(`alias policy refused for ${region}: ${decision.reason}`);
       process.exit(1);
     }
@@ -146,17 +168,17 @@ try {
     const loaderGet = aws(
       's3',
       'cp',
-      `s3://${config.bucket}/sdk/${args.version}/viceme.min.js`,
+      `s3://${config.bucket}/${args.version}/viceme.min.js`,
       loaderLocal,
       '--only-show-errors',
     );
     if (loaderGet.status !== 0) {
       console.error(
-        `s3-alias-pointer: loader object missing at sdk/${args.version}/viceme.min.js for ${region} — publish the exact version first`,
+        `s3-alias-pointer: loader object missing at ${args.version}/viceme.min.js for ${region} — publish the exact version first`,
       );
       process.exit(1);
     }
-    const aliasLoaderKey = `sdk/${ALIAS_SEGMENT}/viceme.min.js`;
+    const aliasLoaderKey = `${ALIAS_SEGMENT}/viceme.min.js`;
     const aliasHead = aws(
       's3api',
       'head-object',
