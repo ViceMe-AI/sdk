@@ -60,11 +60,22 @@ export class ViceMeClientImpl implements ViceMeClient {
       signal: this.#internalSignal.signal,
       ...(deps.now !== undefined ? { now: deps.now } : {}),
     });
-    deps.config.signal?.addEventListener(
-      'abort',
-      () => this.#internalSignal.abort(new DOMException('Caller signal aborted.', 'AbortError')),
-      { once: true },
-    );
+    const callerSignal = deps.config.signal;
+    if (callerSignal) {
+      // Propagate the caller's own abort reason when one was set.
+      const abortInternal = () => {
+        this.#internalSignal.abort(
+          callerSignal.reason instanceof Error
+            ? callerSignal.reason
+            : new DOMException('Caller signal aborted.', 'AbortError'),
+        );
+      };
+      // An already-aborted signal never fires the listener; check
+      // synchronously so a pre-cancelled caller cannot issue session
+      // requests or reach the network at all.
+      if (callerSignal.aborted) abortInternal();
+      else callerSignal.addEventListener('abort', abortInternal, { once: true });
+    }
   }
 
   get version(): string {

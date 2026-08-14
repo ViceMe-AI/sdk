@@ -87,20 +87,37 @@ function parseSessionResponse(body: unknown, workKey: string): WorkSessionSnapsh
 
 export class SessionManager {
   readonly #options: SessionManagerOptions;
+  readonly #now: () => number;
   #snapshot: WorkSessionSnapshot | undefined;
   #pending: Promise<WorkSessionSnapshot> | undefined;
 
   constructor(options: SessionManagerOptions) {
     this.#options = options;
+    this.#now = options.now ?? (() => Date.now());
   }
 
   get snapshot(): WorkSessionSnapshot | undefined {
     return this.#snapshot;
   }
 
-  /** Establish (or return the established) public session. */
+  /** True when the cached snapshot's server-provided expiry has passed. */
+  #isExpired(): boolean {
+    const expiresAt = this.#snapshot?.expiresAt;
+    return expiresAt !== undefined && expiresAt <= this.#now();
+  }
+
+  /**
+   * Establish (or return the established) public session.
+   *
+   * A cached snapshot is reused only while it is unexpired; an expired
+   * snapshot is dropped and re-authenticated. Concurrent callers share one
+   * in-flight request (single flight).
+   */
   establish(): Promise<WorkSessionSnapshot> {
-    if (this.#snapshot) return Promise.resolve(this.#snapshot);
+    if (this.#snapshot) {
+      if (!this.#isExpired()) return Promise.resolve(this.#snapshot);
+      this.#snapshot = undefined;
+    }
     this.#pending ??= this.#options.transport
       .request({
         method: 'POST',

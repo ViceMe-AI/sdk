@@ -66,4 +66,22 @@ describe('ViceMeClient', () => {
       return err instanceof ViceMeError && err.code === 'CLIENT_DESTROYED';
     });
   });
+
+  it('a pre-aborted caller signal never issues a session request', async () => {
+    const transport = createMemoryTransport({ work: FIXTURE_WORK });
+    const controller = new AbortController();
+    controller.abort(new DOMException('cancelled before start', 'AbortError'));
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport,
+      signal: controller.signal,
+    });
+
+    await expect(client.ready()).rejects.toSatisfy((err: unknown) => {
+      return err instanceof DOMException && err.name === 'AbortError';
+    });
+    expect(transport.requests).toHaveLength(0);
+    expect(client.state).toBe('FAILED');
+  });
 });

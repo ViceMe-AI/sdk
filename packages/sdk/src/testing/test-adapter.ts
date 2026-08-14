@@ -49,13 +49,13 @@ export function createMemoryTransport(options: MemoryTransportOptions): MemoryTr
   return {
     requests,
     async request(request: TransportRequest): Promise<TransportResponse> {
+      // A pre-aborted signal never counts as an issued request.
+      if (request.signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
       requests.push(request);
       await new Promise<void>((resolve, reject) => {
         const signal = request.signal;
-        if (signal?.aborted) {
-          reject(new DOMException('Aborted', 'AbortError'));
-          return;
-        }
         const timer = setTimeout(() => resolve(), latencyMs);
         signal?.addEventListener(
           'abort',

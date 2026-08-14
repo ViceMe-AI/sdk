@@ -122,4 +122,27 @@ describe('FetchTransport', () => {
     controller.abort();
     await expect(p).rejects.toSatisfy((e: unknown) => (e as DOMException).name === 'AbortError');
   });
+
+  it('rejects before issuing a request when the signal is already aborted', async () => {
+    const fetchImpl = vi.fn();
+    const transport = createFetchTransport({
+      apiBaseUrl: 'https://api.viceme.cn',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const controller = new AbortController();
+    controller.abort(new DOMException('cancelled early', 'AbortError'));
+
+    await expect(
+      transport.request({
+        method: 'POST',
+        path: '/public/v1/work-sessions',
+        signal: controller.signal,
+      }),
+    ).rejects.toSatisfy((e: unknown) => {
+      return (
+        e instanceof DOMException && e.name === 'AbortError' && e.message === 'cancelled early'
+      );
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

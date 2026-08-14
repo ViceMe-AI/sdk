@@ -117,6 +117,11 @@ export class FetchTransport implements Transport {
   }
 
   async request(request: TransportRequest): Promise<TransportResponse> {
+    // A pre-aborted signal must never reach the network. Preserve the
+    // caller's abort reason when one was set.
+    if (request.signal?.aborted) {
+      throw this.#callerAbortError(request.signal);
+    }
     const timeoutMs = request.timeoutMs ?? this.#defaultTimeoutMs;
     const controller = new AbortController();
     // Engine notes: Chrome/Firefox reject fetch with the abort reason and
@@ -148,7 +153,7 @@ export class FetchTransport implements Transport {
       });
     } catch (cause) {
       if (request.signal?.aborted) {
-        throw new DOMException('ViceMe request aborted by caller.', 'AbortError');
+        throw this.#callerAbortError(request.signal);
       }
       if (timedOut) {
         throw new ViceMeError({
@@ -171,7 +176,6 @@ export class FetchTransport implements Transport {
       clearTimeout(timer);
       request.signal?.removeEventListener('abort', onOuterAbort);
     }
-
     const serverRequestId = response.headers.get('x-request-id') ?? undefined;
     let body: unknown;
     try {
@@ -191,6 +195,13 @@ export class FetchTransport implements Transport {
       });
     }
     return { status: response.status, body, requestId: serverRequestId };
+  }
+
+  /** Caller-abort error that preserves the caller's own abort reason. */
+  #callerAbortError(signal: AbortSignal): unknown {
+    return signal.reason instanceof Error
+      ? signal.reason
+      : new DOMException('ViceMe request aborted by caller.', 'AbortError');
   }
 }
 

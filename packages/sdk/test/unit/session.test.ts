@@ -52,4 +52,46 @@ describe('SessionManager', () => {
     await session.establish();
     expect(transport.requests).toHaveLength(2);
   });
+
+  it('reuses a snapshot that has not expired', async () => {
+    let clock = 1_000_000;
+    const transport = createMemoryTransport({
+      work: { ...FIXTURE_WORK, expiresAt: clock + 10_000 },
+    });
+    const session = new SessionManager({ workKey: 'wrk_test', transport, now: () => clock });
+
+    await session.establish();
+    clock += 5_000;
+    await session.establish();
+    expect(transport.requests).toHaveLength(1);
+  });
+
+  it('refreshes an expired snapshot instead of returning it forever', async () => {
+    let clock = 1_000_000;
+    const transport = createMemoryTransport({
+      work: { ...FIXTURE_WORK, expiresAt: clock + 5_000 },
+    });
+    const session = new SessionManager({ workKey: 'wrk_test', transport, now: () => clock });
+
+    await session.establish();
+    clock += 6_000;
+    await session.establish();
+    expect(transport.requests).toHaveLength(2);
+  });
+
+  it('single-flights a concurrent refresh after expiry', async () => {
+    let clock = 1_000_000;
+    const transport = createMemoryTransport({
+      work: { ...FIXTURE_WORK, expiresAt: clock + 1_000 },
+      latencyMs: 30,
+    });
+    const session = new SessionManager({ workKey: 'wrk_test', transport, now: () => clock });
+
+    await session.establish();
+    clock += 2_000;
+    const [first, second] = await Promise.all([session.establish(), session.establish()]);
+    expect(first).toBe(second);
+    // One initial request + exactly one refresh.
+    expect(transport.requests).toHaveLength(2);
+  });
 });
