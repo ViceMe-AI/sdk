@@ -1,40 +1,42 @@
 #!/usr/bin/env node
 /**
- * Atomic stable-alias pointer writer.
+ * Atomic stable-alias pointer writer with monotonic-forward / authorized
+ * rollback semantics (review P1: a stale rerun must never pull `/sdk/v1`
+ * backward, and rollback must be an explicit, preconditions-checked
+ * operation).
  *
- * Moves the `/sdk/v1` stable alias by writing ONE pointer object per region
- * (`sdk/-/aliases/v1`, body = exactly the version string) through the
- * region-scoped upload contract, then verifies the write. No files are ever
- * copied under `/sdk/v1`; the CDN edge resolves `/sdk/v1/<file>` from the
- * pointer (see docs/RELEASE.md).
+ * Modes:
+ *   --mode promote (default): read the current pointer first; the move is
+ *     allowed only when the target is strictly newer (or the pointer is
+ *     unset). Refuses to move backward or to the same version.
+ *   --mode rollback: requires --from-current <version>; the live pointer
+ *     must equal that exact value (stale/concurrent-move guard) and the
+ *     target must be older. This is the only path allowed to go backward.
  *
- * Convergence model (review P1): the public pointer URL is cacheable (short
- * TTL), so an immediate single read cannot prove the write landed — a stale
- * edge would report failure while origin already switched. Instead:
- *   - `--purge-command` (optional, `purge <region> <key>`) runs right after
- *     the write to drop the edge cache;
- *   - the pointer is then polled with a bounded budget
- *     (`--converge-timeout-ms`, default 330s > the pointer's 300s TTL) and
- *     must converge to the version; on timeout the failure reports the last
- *     observed value so operators can tell a stale edge from an origin
- *     problem.
+ * Convergence model: the public pointer URL is cacheable (short TTL), so
+ * `--purge-command` (optional, `purge <region> <key>`) runs right after the
+ * write, and the pointer is then polled with a bounded budget
+ * (`--converge-timeout-ms`, default 330s > the 300s TTL); on timeout the
+ * failure reports the last observed value (stale edge vs origin problem).
  *
  * Usage:
  *   node scripts/write-alias-pointer.mjs --version 1.2.3 \
  *     --regions cn,global \
  *     --hosts cn=https://cdn.viceme.cn,global=https://cdn.viceme.ai \
  *     --upload-command "<cmd invoked as: cmd <region> <local-file> <object-key>>" \
+ *     [--mode promote|rollback] [--from-current 1.2.2] \
  *     [--purge-command "<cmd invoked as: cmd <region> <object-key>>"] \
  *     [--pointer-key sdk/-/aliases/v1] [--converge-timeout-ms 330000]
  *
- * Exit 1 on any unknown region, missing host mapping, upload failure, or
- * non-convergence — before the next region is touched.
+ * Exit 1 on any unknown region, missing host mapping, upload failure,
+ * policy refusal, or non-convergence — before the next region is touched.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
+import { decideMutableTagMove } from './lib/release-policy.mjs';
 
 const DEFAULT_POINTER_KEY = 'sdk/-/aliases/v1';
 const DEFAULT_CONVERGE_TIMEOUT_MS = 330_000;
@@ -45,6 +47,7 @@ function parseArgs(argv) {
   const args = {
     pointerKey: DEFAULT_POINTER_KEY,
     convergeTimeoutMs: DEFAULT_CONVERGE_TIMEOUT_MS,
+    mode: 'promote',
   };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--version') args.version = argv[++i];
@@ -53,6 +56,8 @@ function parseArgs(argv) {
     else if (argv[i] === '--upload-command') args.uploadCommand = argv[++i];
     else if (argv[i] === '--purge-command') args.purgeCommand = argv[++i];
     else if (argv[i] === '--pointer-key') args.pointerKey = argv[++i];
+    else if (argv[i] === '--mode') args.mode = argv[++i];
+    else if (argv[i] === '--from-current') args.fromCurrent = argv[++i];
     else if (argv[i] === '--converge-timeout-ms') {
       args.convergeTimeoutMs = Number(argv[++i]);
     }
@@ -70,9 +75,15 @@ function parseHosts(raw) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-if (!args.version || !args.regions || !args.hosts || !args.uploadCommand) {
+if (
+  !args.version ||
+  !args.regions ||
+  !args.hosts ||
+  !args.uploadCommand ||
+  !['promote', 'rollback'].includes(args.mode)
+) {
   console.error(
-    'usage: write-alias-pointer.mjs --version <v> --regions cn,global --hosts cn=<url>,global=<url> --upload-command <cmd> [--purge-command <cmd>]',
+    'usage: write-alias-pointer.mjs --version <v> --regions cn,global --hosts cn=<url>,global=<url> --upload-command <cmd> [--mode promote|rollback] [--from-current <v>] [--purge-command <cmd>]',
   );
   process.exit(2);
 }
@@ -90,6 +101,22 @@ for (const region of regions) {
   if (!hosts.get(region)) {
     console.error(`no --hosts entry for region '${region}'`);
     process.exit(1);
+  }
+}
+
+/** Best-effort single read of the current pointer (undefined when unset). */
+async function readPointer(pointerUrl) {
+  try {
+    const response = await fetch(pointerUrl, {
+      credentials: 'omit',
+      headers: { 'cache-control': 'no-cache' },
+    });
+    if (response.status === 404) return undefined;
+    if (!response.ok) return undefined;
+    const text = (await response.text()).trim();
+    return text === '' ? undefined : text;
+  } catch {
+    return undefined;
   }
 }
 
@@ -130,6 +157,25 @@ try {
   writeFileSync(pointerFile, args.version);
 
   for (const region of regions) {
+    const host = hosts.get(region).replace(/\/+$/, '');
+    const pointerUrl = `${host}/${args.pointerKey}`;
+
+    // Policy check BEFORE any write: promote only moves forward; rollback
+    // requires the live pointer to equal the explicitly declared current
+    // value (stale/concurrent-move guard).
+    const current = await readPointer(pointerUrl);
+    const decision = decideMutableTagMove({
+      mode: args.mode,
+      current,
+      target: args.version,
+      expectedCurrent: args.fromCurrent,
+    });
+    if (!decision.allowed) {
+      console.error(`alias policy refused for ${region}: ${decision.reason}`);
+      process.exit(1);
+    }
+    console.log(`alias policy ${region}: ${decision.reason}`);
+
     execFileSync('bash', [
       '-lc',
       `${args.uploadCommand} ${region} ${pointerFile} ${args.pointerKey}`,
@@ -137,9 +183,8 @@ try {
     if (args.purgeCommand) {
       execFileSync('bash', ['-lc', `${args.purgeCommand} ${region} ${args.pointerKey}`]);
     }
-    const host = hosts.get(region).replace(/\/+$/, '');
-    await awaitPointerConvergence(`${host}/${args.pointerKey}`, args.version);
-    console.log(`alias pointer ${region}: ${host}/${args.pointerKey} -> ${args.version}`);
+    await awaitPointerConvergence(pointerUrl, args.version);
+    console.log(`alias pointer ${region}: ${pointerUrl} -> ${args.version}`);
   }
   console.log(`alias pointer written and verified in ${regions.length} region(s)`);
 } finally {

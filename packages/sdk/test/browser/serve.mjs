@@ -4,7 +4,7 @@
  *
  * Reproduces the CDN layout (§14.3) against local build output:
  *
- *   /sdk/<version>/viceme.min.js  -> dist/loader/viceme.min.js
+ *   /sdk/<version>/viceme.min.js  -> dist/viceme.min.js
  *   /sdk/v1/...                   -> same content (stable alias)
  *   any manifest.json             -> dist/manifest.json with the test-only
  *                                    fixture capability injected (the "local
@@ -70,9 +70,9 @@ createServer(async (req, res) => {
       }
       if (rest === 'fixture.js') {
         file = join(fixturesDist, 'fixture.js');
-      } else if (rest === 'viceme.min.js' || rest === 'viceme.min.js.map') {
-        file = join(distDir, 'loader', rest);
       } else {
+        // Loader, core, and manifest all live at the dist root — the same
+        // flat public layout the CDN serves.
         file = join(distDir, rest);
       }
     }

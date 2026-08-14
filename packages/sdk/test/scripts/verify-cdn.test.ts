@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, writeFileSync as writeFile } from 'node:fs';
+import { mkdtempSync, writeFileSync as writeFile } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -48,14 +48,13 @@ beforeAll(async () => {
   const loaderBody = Buffer.from('(function(){/* data-viceme loader */})();\n');
   const chunkBody = Buffer.from('export {};\n');
 
-  mkdirSync(join(distDir, 'loader'), { recursive: true });
   await writeFile(join(distDir, 'index.js'), indexBody);
   await writeFile(join(distDir, 'testing.js'), chunkBody);
-  await writeFile(join(distDir, 'loader', 'viceme.min.js'), loaderBody);
+  await writeFile(join(distDir, 'viceme.min.js'), loaderBody);
 
   files.set('index.js', { body: indexBody, contentType: 'text/javascript; charset=utf-8' });
   files.set('testing.js', { body: chunkBody, contentType: 'text/javascript; charset=utf-8' });
-  files.set('loader/viceme.min.js', {
+  files.set('viceme.min.js', {
     body: loaderBody,
     contentType: 'text/javascript; charset=utf-8',
   });
@@ -63,12 +62,12 @@ beforeAll(async () => {
   const manifest = {
     version: '0.1.0',
     apiMajor: 1,
-    loader: 'loader/viceme.min.js',
+    loader: 'viceme.min.js',
     features: {},
     files: {
       'index.js': await digestInfo(indexBody),
       'testing.js': await digestInfo(chunkBody),
-      'loader/viceme.min.js': await digestInfo(loaderBody),
+      'viceme.min.js': await digestInfo(loaderBody),
     },
   };
   const manifestBody = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);

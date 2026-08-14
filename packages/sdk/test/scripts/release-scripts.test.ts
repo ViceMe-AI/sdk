@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -104,19 +104,18 @@ beforeAll(async () => {
     gzipBytes: body.length,
   });
   writeFileSync(join(distDir, 'index.js'), indexBody);
-  mkdirSync(join(distDir, 'loader'), { recursive: true });
-  writeFileSync(join(distDir, 'loader', 'viceme.min.js'), loaderBody);
+  writeFileSync(join(distDir, 'viceme.min.js'), loaderBody);
   writeFileSync(
     join(distDir, 'manifest.json'),
     `${JSON.stringify(
       {
         version: '0.1.0',
         apiMajor: 1,
-        loader: 'loader/viceme.min.js',
+        loader: 'viceme.min.js',
         features: {},
         files: {
           'index.js': digest(indexBody),
-          'loader/viceme.min.js': digest(loaderBody),
+          'viceme.min.js': digest(loaderBody),
         },
       },
       null,
@@ -166,8 +165,8 @@ describe('upload-plan.mjs', () => {
     // listed inside manifest.files: verify-cdn reads it from this path.
     expect(stdout.split('\n').filter(Boolean).sort()).toEqual([
       'index.js',
-      'loader/viceme.min.js',
       'manifest.json',
+      'viceme.min.js',
     ]);
   });
 
@@ -183,10 +182,7 @@ describe('upload-plan.mjs', () => {
       '--base',
       `${server!.url}/sdk/0.1.0/`,
     );
-    expect(stdout.split('\n').filter(Boolean).sort()).toEqual([
-      'loader/viceme.min.js',
-      'manifest.json',
-    ]);
+    expect(stdout.split('\n').filter(Boolean).sort()).toEqual(['manifest.json', 'viceme.min.js']);
   });
 
   it('fails closed when the remote object has different bytes', async () => {
@@ -420,6 +416,9 @@ describe('write-alias-pointer.mjs', () => {
         "writeFileSync(process.env.PURGE_MARKER ?? '', `${region} ${key}\\n`);",
       ].join('\n'),
     );
+    // Isolate the pointer: earlier tests may have left a newer value, which
+    // the promote policy would (correctly) refuse to move backward from.
+    rmSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), { force: true });
     const cn = await startRegionServer('cn');
     try {
       await exec(
@@ -459,6 +458,97 @@ describe('write-alias-pointer.mjs', () => {
         'true',
       ),
     ).rejects.toMatchObject({ code: 1 });
+  });
+
+  it('promote refuses to move the pointer backward', async () => {
+    const cn = await startRegionServer('cn');
+    try {
+      // Current pointer is NEWER than the target; upload is a no-op so a
+      // policy bug could never silently "fix" the pointer.
+      mkdirSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases'), { recursive: true });
+      writeFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), '0.3.0');
+      const failure = await exec(
+        'node',
+        [
+          join(scriptsDir, 'write-alias-pointer.mjs'),
+          '--version',
+          '0.2.0',
+          '--regions',
+          'cn',
+          '--hosts',
+          `cn=${cn.url}`,
+          '--upload-command',
+          'true',
+          '--mode',
+          'promote',
+        ],
+        { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot } },
+      ).catch((error: { code?: number; stderr?: string }) => error);
+      expect(failure).toMatchObject({ code: 1 });
+      expect(String((failure as { stderr?: string }).stderr)).toContain(
+        'refusing to move pointer backward',
+      );
+      // Pointer untouched.
+      expect(readFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), 'utf8')).toBe('0.3.0');
+    } finally {
+      await cn.close();
+    }
+  });
+
+  it('rollback requires the declared current pointer and moves backward', async () => {
+    const cn = await startRegionServer('cn');
+    try {
+      mkdirSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases'), { recursive: true });
+      writeFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), '0.3.0');
+
+      // Stale-job guard: the declared current does not match the live value.
+      await expect(
+        exec(
+          'node',
+          [
+            join(scriptsDir, 'write-alias-pointer.mjs'),
+            '--version',
+            '0.2.0',
+            '--regions',
+            'cn',
+            '--hosts',
+            `cn=${cn.url}`,
+            '--upload-command',
+            `node ${fakeUpload}`,
+            '--mode',
+            'rollback',
+            '--from-current',
+            '0.4.0',
+          ],
+          { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot } },
+        ),
+      ).rejects.toMatchObject({ code: 1 });
+
+      // Authorized rollback: declared current matches; pointer moves back.
+      const { stdout } = await exec(
+        'node',
+        [
+          join(scriptsDir, 'write-alias-pointer.mjs'),
+          '--version',
+          '0.2.0',
+          '--regions',
+          'cn',
+          '--hosts',
+          `cn=${cn.url}`,
+          '--upload-command',
+          `node ${fakeUpload}`,
+          '--mode',
+          'rollback',
+          '--from-current',
+          '0.3.0',
+        ],
+        { env: { ...process.env, FAKE_CDN_ROOT: tmpRoot } },
+      );
+      expect(stdout).toContain('authorized rollback');
+      expect(readFileSync(join(tmpRoot, 'cn', 'sdk', '-', 'aliases', 'v1'), 'utf8')).toBe('0.2.0');
+    } finally {
+      await cn.close();
+    }
   });
 });
 

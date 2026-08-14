@@ -2,45 +2,34 @@ name: Promote CDN
 
 # Promotes an already-published npm release to the CDN (§14.2 steps 7-10).
 #
-# Flow: strictly validate inputs -> download the exact GitHub release
-# artifacts -> re-verify digests locally -> per region, plan immutable
-# uploads (missing => upload, byte-identical => skip, different => fail
-# closed) -> upload -> public read-back -> (explicit input) move the stable
-# `v1` alias by writing ONE pointer object per region -> bounded-convergence
-# pointer/alias verification -> real-network loader smoke.
+# Artifact integrity chain (review P1): the verify-artifacts job downloads
+# the GitHub release zip, verifies every digest locally, and forwards THOSE
+# EXACT bytes to the upload job as a workflow artifact. The upload job
+# re-verifies the same directory locally before any immutable write and
+# never re-downloads from the release — a swapped or corrupted release
+# asset can therefore never reach the immutable /sdk/<version>/ paths.
 #
-# Atomicity model:
-#   - Exact versions live only under immutable /sdk/<version>/ objects and
-#     are never overwritten (scripts/upload-plan.mjs enforces this).
-#   - /sdk/v1 is NOT a copy of the files. Each region exposes a small public
-#     pointer object `sdk/-/aliases/v1` whose body is exactly the version
-#     string; the CDN edge resolves /sdk/v1/<file> to
-#     /sdk/<pointer-version>/<file>. Moving the alias = one atomic object
-#     write per region. Rollback = point at an older verified version.
+# Alias semantics (review P1): the /sdk/v1 pointer only moves FORWARD
+# during a normal promote; moving it backward is a separate, explicit
+# rollback action (aliasAction=rollback + aliasExpectedCurrent=<the exact
+# version being rolled back FROM>), guarded against stale/concurrent moves.
 #
-# Security model (review P1):
-#   - workflow_dispatch inputs are attacker-controllable text: they are
-#     passed to scripts via env and referenced as double-quoted shell
-#     variables, NEVER interpolated into script text by ${{ }}.
-#   - Every job validates version/regions with scripts/validate-release-
-#     inputs.mjs before any network, file, or credential operation.
-#   - CDN_UPLOAD_COMMAND / CDN_PURGE_COMMAND secrets are expanded only
-#     inside their explicit bash -lc invocation, never into script bodies.
+# Security model (review P1): workflow_dispatch inputs are passed via env
+# and validated (strict semver + region set) before any network, file, or
+# credential operation; secrets expand only inside explicit bash -lc
+# invocations. Actions are pinned to reviewed commit SHAs.
 #
 # Required org configuration (§21.2):
 #   - CDN buckets for cdn.viceme.cn (region `cn`) and cdn.viceme.ai
 #     (region `global`).
 #   - `CDN_UPLOAD_COMMAND` secret: invoked as `upload <region> <local-file>
-#     <object-key>` (bash -lc). The region argument (`cn` | `global`)
-#     selects that region's own bucket and credentials; the command must not
-#     write outside the given object key and must set immutable long-cache
-#     headers for /sdk/<version>/ keys and a short TTL for the pointer key.
+#     <object-key>` (bash -lc); the region selects its own bucket and
+#     credentials; immutable long-cache headers for /sdk/<version>/ keys,
+#     short TTL for the pointer key.
 #   - Optional `CDN_PURGE_COMMAND` secret: invoked as `purge <region> <key>`;
-#     when present it runs after each pointer write so the read-back sees
-#     origin state instead of a stale edge cache.
-#   - Edge prerequisite: /sdk/v1/<file> resolution from the pointer above.
-#     Until the edge implements it, alias verification fails closed — by
-#     design, never silently.
+#     when present it runs after each pointer write.
+#   - Edge prerequisite: /sdk/v1/<file> resolution from the pointer. Until
+#     the edge implements it, alias verification fails closed by design.
 
 on:
   workflow_dispatch:
@@ -59,6 +48,17 @@ on:
         required: true
         default: false
         type: boolean
+      aliasAction:
+        description: 'Pointer action: promote (forward only) or rollback (explicit, backward)'
+        required: true
+        default: promote
+        type: choice
+        options: [promote, rollback]
+      aliasExpectedCurrent:
+        description: 'rollback only: the exact version the pointer must currently hold'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -69,11 +69,11 @@ concurrency:
 
 jobs:
   verify-artifacts:
-    name: Validate inputs, download + locally verify release artifacts
+    name: Validate inputs, verify artifacts, forward exact bytes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24 }
       - name: Strict input validation (before anything else)
         env:
@@ -89,28 +89,30 @@ jobs:
           gh release download "@viceme-ai/sdk@${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern 'dist-*.zip' --dir release
-          unzip -q release/dist-*.zip -d release/dist
-          mkdir -p packages/sdk/dist && cp -r release/dist/. packages/sdk/dist/
-          node scripts/verify-cdn.mjs --local packages/sdk/dist
+          unzip -q release/dist-*.zip -d verified-dist
+          node scripts/verify-cdn.mjs --local verified-dist
+      # Forward the EXACT verified bytes; the upload job never re-downloads.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-dist
+          path: verified-dist/
+          if-no-files-found: error
+          retention-days: 1
 
   upload:
     name: Immutable exact-version upload + read-back (per region)
     needs: verify-artifacts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24 }
-      - name: Download release artifacts
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          gh release download "@viceme-ai/sdk@${VERSION}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern 'dist-*.zip' --dir release
-          unzip -q release/dist-*.zip -d release/dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-dist
+          path: verified-dist
+      - name: Re-verify the forwarded artifacts BEFORE any immutable write
+        run: node scripts/verify-cdn.mjs --local verified-dist
       - name: Plan immutable uploads, upload, and read back (per region)
         shell: bash
         env:
@@ -132,10 +134,10 @@ jobs:
               global) host=cdn.viceme.ai ;;
             esac
             echo "::group::region ${region} (${host})"
-            plan="$(node scripts/upload-plan.mjs --dist release/dist --base "https://${host}/sdk/${VERSION}/")"
+            plan="$(node scripts/upload-plan.mjs --dist verified-dist --base "https://${host}/sdk/${VERSION}/")"
             if [ -n "$plan" ]; then
               echo "$plan" | while IFS= read -r file; do
-                upload "$region" "release/dist/$file" "sdk/${VERSION}/$file"
+                upload "$region" "verified-dist/$file" "sdk/${VERSION}/$file"
                 echo "uploaded sdk/${VERSION}/$file"
               done
             else
@@ -146,23 +148,28 @@ jobs:
           done
 
   alias:
-    name: Move stable v1 pointer (explicit) + bounded verification + smoke
+    name: Move /sdk/v1 pointer (promote forward, or explicit rollback)
     needs: upload
     if: ${{ inputs.moveStableAlias }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24 }
-      - name: Write the pointer (one atomic object per region) with convergence
+      - name: Write the pointer (policy-checked) with bounded convergence
         env:
           VERSION: ${{ inputs.version }}
           REGIONS: ${{ inputs.regions }}
+          ALIAS_ACTION: ${{ inputs.aliasAction }}
+          ALIAS_EXPECTED_CURRENT: ${{ inputs.aliasExpectedCurrent }}
           CDN_UPLOAD_COMMAND: ${{ secrets.CDN_UPLOAD_COMMAND }}
           CDN_PURGE_COMMAND: ${{ secrets.CDN_PURGE_COMMAND }}
         run: |
           set -euo pipefail
           node scripts/validate-release-inputs.mjs --version "$VERSION" --regions "$REGIONS"
+          if [ "$ALIAS_ACTION" = "rollback" ]; then
+            node scripts/validate-release-inputs.mjs --version "$ALIAS_EXPECTED_CURRENT"
+          fi
           if [ -z "$CDN_UPLOAD_COMMAND" ]; then
             echo "::error::CDN_UPLOAD_COMMAND secret is not configured"
             exit 1
@@ -172,9 +179,11 @@ jobs:
             --regions "$REGIONS"
             --hosts cn=https://cdn.viceme.cn,global=https://cdn.viceme.ai
             --upload-command "$CDN_UPLOAD_COMMAND"
+            --mode "$ALIAS_ACTION"
           )
-          # Optional purge hook: without it, the pointer read-back converges
-          # within the pointer's cache TTL instead of immediately.
+          if [ "$ALIAS_ACTION" = "rollback" ]; then
+            args+=(--from-current "$ALIAS_EXPECTED_CURRENT")
+          fi
           if [ -n "$CDN_PURGE_COMMAND" ]; then
             args+=(--purge-command "$CDN_PURGE_COMMAND")
           fi

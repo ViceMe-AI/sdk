@@ -2,13 +2,13 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 /**
- * CDN auto-loader build: small IIFE `dist/loader/viceme.min.js`.
+ * CDN auto-loader build: small IIFE `dist/viceme.min.js`.
  * Capability code must never be inlined here — features load at runtime via
  * the release manifest.
  */
 export default defineConfig({
   build: {
-    outDir: 'dist/loader',
+    outDir: 'dist',
     emptyOutDir: false,
     sourcemap: true,
     minify: 'esbuild',

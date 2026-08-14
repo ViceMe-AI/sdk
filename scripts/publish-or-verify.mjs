@@ -21,6 +21,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as wait } from 'node:timers/promises';
+import { decideMutableTagMove } from './lib/release-policy.mjs';
 
 const registry = 'https://registry.npmjs.org';
 const registryArguments = [`--registry=${registry}`, `--@viceme-ai:registry=${registry}`];
@@ -34,7 +35,10 @@ if (!SEMVER.test(packageDocument.version)) {
   throw new Error('refusing to publish a non-exact semver version');
 }
 const packageID = `${packageDocument.name}@${packageDocument.version}`;
-const distTag = process.env.VICEME_SDK_DIST_TAG ?? 'next';
+// Single authoritative source: the workflow-level DIST_TAG env (inherited
+// by every step). Flipping it to `latest` at 1.0.0 changes publish AND all
+// verification consistently.
+const distTag = process.env.DIST_TAG ?? 'next';
 
 function run(command, arguments_, inherit = true) {
   const result = spawnSync(command, arguments_, {
@@ -89,11 +93,25 @@ async function readDistTags() {
 async function enforceDistTagPolicy() {
   let tags = await readDistTags();
   if (tags[distTag] !== packageDocument.version) {
+    // Monotonic forward move only: a stale rerun of an older release must
+    // never pull the dist-tag backward past a newer release.
+    const decision = decideMutableTagMove({
+      mode: 'promote',
+      current: tags[distTag],
+      target: packageDocument.version,
+    });
+    if (!decision.allowed) {
+      // A stale rerun for an already-superseded version is still converged:
+      // the exact package is on npm with matching integrity; only the tag
+      // stays with the newer release.
+      process.stdout.write(`dist-tag '${distTag}' stays at ${tags[distTag]}: ${decision.reason}\n`);
+      return;
+    }
     run('npm', ['dist-tag', 'add', packageID, distTag, ...registryArguments]);
     tags = await readDistTags();
-  }
-  if (tags[distTag] !== packageDocument.version) {
-    throw new Error(`dist-tag '${distTag}' still does not point at ${packageID}`);
+    if (tags[distTag] !== packageDocument.version) {
+      throw new Error(`dist-tag '${distTag}' still does not point at ${packageID}`);
+    }
   }
   if (distTag !== 'latest' && tags.latest === packageDocument.version) {
     throw new Error(

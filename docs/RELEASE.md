@@ -65,12 +65,21 @@ package.json`, binds it to an **immutable annotated tag**
     success (convergent rerun);
   - already published with different integrity → fail (immutable);
   - not published → `npm publish --provenance` (OIDC trusted publishing).
-- The 0.x dist-tag policy is enforced by the same script: `next` must point
-  at the version and `latest` must never point at it (`.changeset/pre.json`
-  keeps Changesets in pre-release mode; flip to `latest` at `1.0.0` in the
-  same release PR that exits pre mode).
+- The 0.x dist-tag policy is enforced by the same script: `next` moves
+  forward only (a stale rerun of an older release never pulls it back), and
+  `latest` must never point at a `next` release (`.changeset/pre.json`
+  keeps Changesets in pre-release mode; flip `DIST_TAG` to `latest` at
+  `1.0.0` in the same release PR that exits pre mode — `DIST_TAG` is the
+  single variable both publish and read-back read).
 - CDN artifacts are then attached to the GitHub release from the published
   npm tarball (immutable, idempotent).
+
+Release binding: the pipeline runs only for the merge commit of a reviewed
+**Version Packages** PR (`scripts/resolve-release-context.mjs`); ordinary
+feature/doc pushes resolve to skip and never touch tags or npm. All
+fail-closed gates (license gate, forbidden-pattern scan, full quality gate)
+run at the exact release SHA BEFORE the immutable tag or the registry is
+written.
 
 Flow:
 
@@ -97,8 +106,11 @@ Flow:
 Run the **Promote CDN** workflow with the exact released `version` (and the
 target `regions`, validated as `cn`/`global`):
 
-1. Downloads the GitHub release artifacts and re-verifies every digest
-   locally.
+1. Downloads the GitHub release artifacts, verifies every digest locally,
+   and forwards THOSE exact bytes to the upload job as a workflow artifact —
+   the upload job re-verifies the same directory before any write and never
+   re-downloads, so a swapped release asset can never reach the immutable
+   CDN paths.
 2. Per region: `scripts/upload-plan.mjs` probes each public target —
    missing ⇒ upload, byte-identical ⇒ skip, **different ⇒ fail closed**
    (exact versions are never overwritten) — then uploads exactly the planned
@@ -118,20 +130,24 @@ GET https://<cdn-host>/sdk/-/aliases/v1   ->   "<version>"
 ```
 
 The CDN edge resolves `/sdk/v1/<file>` to `/sdk/<pointer-version>/<file>`.
-With `moveStableAlias=true`, the workflow writes that single pointer object
-per region (an atomic object write — no per-file copying, no torn state),
-then verifies **with bounded convergence**: the public pointer URL is
-cacheable (short TTL), so `write-alias-pointer.mjs` optionally purges the
-edge (`CDN_PURGE_COMMAND`) and otherwise polls until the read matches the
-version, within a budget longer than the TTL. The alias-level
-`verify-cdn --expect-version` check retries with the same bounded budget.
-A timeout reports the last observed value, distinguishing a stale edge from
-an origin problem. Until the edge implements pointer resolution, this step
-fails closed by design.
+The pointer only moves **forward** during a normal promote
+(`aliasAction=promote`); `write-alias-pointer.mjs` refuses backward or
+same-version moves. The write is one atomic object per region, verified
+**with bounded convergence**: the public pointer URL is cacheable (short
+TTL), so an optional purge runs first (`CDN_PURGE_COMMAND`) and the pointer
+is otherwise polled until the read matches, within a budget longer than the
+TTL; the alias-level `verify-cdn --expect-version` check retries with the
+same bounded budget. A timeout reports the last observed value,
+distinguishing a stale edge from an origin problem. Until the edge
+implements pointer resolution, this step fails closed by design.
 
-**Rollback** = re-run Promote CDN with the previous verified version and
-`moveStableAlias=true`: only the pointer moves. Exact-version objects are
-never rewritten or deleted; npm versions are never unpublished or reused.
+**Rollback** is a separate, explicit operation: run Promote CDN with the
+previous verified version, `aliasAction=rollback`, and
+`aliasExpectedCurrent=<the exact version currently served>`. The live
+pointer must equal that declared value (stale/concurrent-move guard) and
+the target must be older; otherwise the run fails without writing. Exact-
+version objects are never rewritten or deleted; npm versions are never
+unpublished or reused.
 
 ## Verification tooling
 
