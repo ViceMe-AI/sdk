@@ -21,7 +21,7 @@
     "release:publish": "pnpm release:gate && pnpm build && pnpm pack:check && node scripts/publish-or-verify.mjs",
     "check": "pnpm format:check && pnpm workflows:check && pnpm lint && pnpm typecheck && pnpm contracts:check && pnpm test && pnpm build && pnpm test:browser && pnpm pack:check",
     "changeset": "changeset",
-    "workflows:check": "node scripts/check-workflows.mjs"
+    "workflows:check": "node scripts/check-workflows.mjs && ./scripts/run-actionlint.sh"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
