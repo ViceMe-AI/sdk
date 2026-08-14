@@ -192,12 +192,52 @@ function whenDomReady(): Promise<void> {
   });
 }
 
-async function fetchReleaseManifest(manifestUrl: URL): Promise<ReleaseManifest> {
+async function fetchReleaseManifest(
+  manifestUrl: URL,
+): Promise<{ manifest: ReleaseManifest; baseUrl: URL }> {
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(manifestUrl);
+  } catch {
+    response = { ok: false, status: 0 } as Response;
+  }
+  // Alias path (e.g. /sdk/v1/) holds no manifest on the S3 topology: it
+  // carries only the loader object plus the version POINTER. Resolve the
+  // pointer and load the exact version beside it.
+  if (!response.ok) {
+    const aliasVersion = await resolveAliasPointer(manifestUrl);
+    if (aliasVersion !== undefined) {
+      const aliasUrl = new URL(`/sdk/${aliasVersion}/manifest.json`, manifestUrl);
+      return { manifest: await parseManifest(await fetchWithTimeout(aliasUrl)), baseUrl: aliasUrl };
+    }
+  }
+  return { manifest: await parseManifest(response), baseUrl: manifestUrl };
+}
+
+function fetchWithTimeout(url: URL): Promise<Response> {
   const signal =
     typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
       ? AbortSignal.timeout(MANIFEST_TIMEOUT_MS)
       : undefined;
-  const response = await fetch(manifestUrl, { credentials: 'omit', signal });
+  return fetch(url, { credentials: 'omit', signal });
+}
+
+/** Read /sdk/-/aliases/v1 when the loader itself sits under /sdk/v1/. */
+async function resolveAliasPointer(manifestUrl: URL): Promise<string | undefined> {
+  if (!/\/sdk\/[^/]+\/manifest\.json$/.test(manifestUrl.pathname)) return undefined;
+  const segment = manifestUrl.pathname.split('/sdk/')[1]?.split('/')[0];
+  if (segment !== `v${API_MAJOR}`) return undefined;
+  try {
+    const response = await fetchWithTimeout(new URL('/sdk/-/aliases/v1', manifestUrl));
+    if (!response.ok) return undefined;
+    const version = (await response.text()).trim();
+    return /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version) ? version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function parseManifest(response: Response): Promise<ReleaseManifest> {
   if (!response.ok) {
     throw configInvalid(`Release manifest is not available (HTTP ${response.status}).`);
   }
@@ -219,8 +259,8 @@ async function fetchReleaseManifest(manifestUrl: URL): Promise<ReleaseManifest> 
   return manifest;
 }
 
-async function loadCore(manifestUrl: URL): Promise<CoreModule> {
-  const coreUrl = new URL('index.js', manifestUrl);
+async function loadCore(baseUrl: URL): Promise<CoreModule> {
+  const coreUrl = new URL('index.js', baseUrl);
   const core = (await import(/* @vite-ignore */ coreUrl.href)) as Partial<CoreModule>;
   if (typeof core.createViceMe !== 'function') {
     throw configInvalid('SDK core chunk does not export createViceMe().');
@@ -291,8 +331,9 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
   const manifestUrl = new URL('manifest.json', script.src);
 
   let manifest: ReleaseManifest;
+  let releaseBase: URL;
   try {
-    manifest = await fetchReleaseManifest(manifestUrl);
+    ({ manifest, baseUrl: releaseBase } = await fetchReleaseManifest(manifestUrl));
   } catch (error) {
     emitError(document, error, {
       clientKey: clientKeyOf(API_MAJOR, attributes.region, attributes.workKey),
@@ -334,7 +375,7 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
   } else {
     let core: CoreModule;
     try {
-      core = await loadCore(manifestUrl);
+      core = await loadCore(releaseBase);
     } catch (error) {
       emitError(host, error, { clientKey });
       return;
@@ -383,7 +424,7 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
     }
 
     try {
-      const chunkUrl = new URL(fileName, manifestUrl);
+      const chunkUrl = new URL(fileName, releaseBase);
       const module = (await import(/* @vite-ignore */ chunkUrl.href)) as {
         mount?: unknown;
       };

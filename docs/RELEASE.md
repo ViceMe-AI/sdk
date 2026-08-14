@@ -1,8 +1,8 @@
-# Release & CDN Runbook
+# Release & Delivery Runbook
 
-Operational runbook for releasing `@viceme-ai/sdk` and promoting it to the
-CDN. Architecture is fixed in the SDK plan (§14); this documents _how to run
-it_.
+Operational runbook for releasing `@viceme-ai/sdk` and delivering it to the
+dual-region S3 topology. Architecture is fixed in the SDK plan (§14); this
+documents _how to run it_.
 
 ## Prerequisites (one-time, owner permissions)
 
@@ -10,144 +10,108 @@ it_.
       at the repo root. The build copies it into `packages/sdk/LICENSE`
       (gitignored) so the tarball ships it; `pnpm release:gate` and the
       tarball audit both block publishing until then.
-- [ ] GitHub environment `npm` with required reviewers.
+- [ ] GitHub environments `npm` (publication) and `cdn` (S3 writes), each
+      with required reviewers.
 - [ ] `@viceme-ai` npm scope configured for OIDC trusted publishing
       (repository `ViceMe-AI/sdk`, workflow `release-package.yml`,
       environment `npm`). No long-lived npm tokens.
-- [ ] CDN buckets for `cdn.viceme.cn` (region `cn`) and `cdn.viceme.ai`
-      (region `global`), plus the `CDN_UPLOAD_COMMAND` secret implementing
-      the contract below.
-- [ ] CDN edge resolves `/sdk/v1/<file>` from the alias pointer (see
-      "Stable alias model").
+- [ ] Release App (`RELEASE_APP_ID` var + `RELEASE_APP_PRIVATE_KEY` secret)
+      so the Version Packages PR chain triggers required checks.
+- [ ] Dual-region S3 secrets (names are fixed): `VICEME_RELEASE_S3_
+{ENDPOINT,BUCKET,ACCESS_KEY_ID,SECRET_ACCESS_KEY}_{CN,GLOBAL}` plus
+      `CN_S3_HTTPS_PROXY`. Each region's bucket is the dedicated
+      `viceme-sdk` bucket (never shared with Shop skill ZIPs, media, or
+      installer assets); credentials must be scoped to that bucket.
+- [ ] Feishu/AI secrets: `FEISHU_BOT_WEBHOOK`, `FEISHU_RELEASE_WEBHOOK`,
+      `AI_API_KEY`, `AI_MODEL`, `AI_BASE_URL` (no defaults — the release
+      notification fails closed when any is missing).
 
-### `CDN_UPLOAD_COMMAND` contract
+## Public delivery topology
 
-A one-line command (bash `-lc`) invoked as:
-
-```text
-upload <region> <local-file> <object-key>
-```
-
-- `<region>` is `cn` or `global` and MUST select that region's own bucket
-  and credentials — regions never share a target implicitly.
-- For `sdk/<version>/…` keys: content-type by extension,
-  `cache-control: public, max-age=31536000, immutable`,
-  `access-control-allow-origin: *`, and no overwrite of existing objects
-  (bucket-side object-lock / deny-overwrite is ideal).
-- For the pointer key `sdk/-/aliases/v1`: `text/plain`, short TTL
-  (`max-age=300`), overwriting is expected — it is the one mutable object.
-
-### Optional `CDN_PURGE_COMMAND` contract
+The current public entries are the S3 path-style hosts:
 
 ```text
-purge <region> <object-key>
+https://s3.viceme.cn/viceme-sdk/sdk/<version>/...   (region cn)
+https://s3.viceme.ai/viceme-sdk/sdk/<version>/...   (region global)
 ```
 
-When configured, the alias step runs it right after each pointer write so
-the read-back observes origin state immediately. Without it, pointer and
-alias verification converge within the pointer's cache TTL (bounded wait,
-see "Stable alias model") — slower but still correct.
+`/sdk/v1` is an alias, NOT a copy of a version: it carries the loader
+object plus a single version pointer at `sdk/-/aliases/v1` (the one
+mutable object). The loader resolves the pointer at runtime (see
+`resolveAliasPointer` in `packages/sdk/src/loader/auto-loader.ts`), so
+moving the alias is one atomic pointer write per region. If a CDN edge
+(`cdn.viceme.cn` / `cdn.viceme.ai`) is introduced later, keep these exact
+paths and add edge caching in front — the URL contract must not change.
 
-## Releasing an npm version (0.x → `next` dist-tag)
+## Releasing an npm version (0.x -> `next` dist-tag)
 
-Publication follows the reviewed `ViceMe-AI/cli` OIDC baseline — **no npm
-tokens anywhere**:
+The Release Package workflow is the single authoritative state machine
+(all steps bind to the reviewed Version Packages PR merge SHA):
 
-- Changesets only opens **Version Packages** PRs; it never publishes.
-- On merge, the workflow resolves the version from `packages/sdk/
-package.json`, binds it to an **immutable annotated tag**
-  `@viceme-ai/sdk@<version>` at the exact reviewed SHA (recovery runs
-  require the tag to exist and point at that SHA), reruns the full quality
-  gate at that SHA, installs the pinned OIDC-capable npm CLI (`npm@11.12.1`),
-  verifies the OIDC context, and publishes via
-  `scripts/publish-or-verify.mjs`:
-  - already published with matching integrity → dist-tag policy verified,
-    success (convergent rerun);
-  - already published with different integrity → fail (immutable);
-  - not published → `npm publish --provenance` (OIDC trusted publishing).
-- The 0.x dist-tag policy is enforced by the same script: `next` moves
-  forward only (a stale rerun of an older release never pulls it back), and
-  `latest` must never point at a `next` release (`.changeset/pre.json`
-  keeps Changesets in pre-release mode; flip `DIST_TAG` to `latest` at
-  `1.0.0` in the same release PR that exits pre mode — `DIST_TAG` is the
-  single variable both publish and read-back read).
-- CDN artifacts are then attached to the GitHub release from the published
-  npm tarball (immutable, idempotent).
+1. **Version PR**: Changesets opens/updates the **Version Packages** PR via
+   the Release App token (branches pushed by `GITHUB_TOKEN` would not
+   trigger the required pull_request checks).
+2. **Identity**: on merge, `resolve-release-context.mjs` binds the run to
+   that exact merge commit; the immutable annotated tag
+   `@viceme-ai/sdk@<version>` is created only after all fail-closed gates
+   (license gate, forbidden-pattern scan, full quality gate) pass at that
+   SHA.
+3. **npm**: pinned OIDC-capable npm CLI (`npm@11.12.1`), verified OIDC
+   context, `publish-or-verify.mjs` — no tokens anywhere. Convergent:
+   already published with matching integrity = success; different
+   integrity = fail; not published = `npm publish --provenance`. The
+   `next` dist-tag moves forward only; `latest` must never point at a
+   `next` release (flip the workflow-level `DIST_TAG` to `latest` at
+   1.0.0, same PR that exits `.changeset/pre.json` pre mode).
+4. **GitHub assets**: release assets are attached from the published npm
+   tarball (`fetch-npm-dist.mjs` + `attach-release-assets.mjs`),
+   idempotent and immutable.
+5. **CN + GLOBAL S3** (`environment: cdn`): the same npm-tarball bytes are
+   published to both `viceme-sdk` buckets with immutable-put semantics
+   (absent -> upload with immutable headers; identical -> skip; different
+   -> fail closed; `head-bucket` first; CN calls egress through
+   `CN_S3_HTTPS_PROXY`), then verified from the public S3 entries.
+6. **Notification**: the Feishu release summary fires only after npm AND
+   both S3 regions succeeded; AI changelog settings must be fully
+   configured or the job fails closed.
 
-Release binding: the pipeline runs only for the merge commit of a reviewed
-**Version Packages** PR (`scripts/resolve-release-context.mjs`); ordinary
-feature/doc pushes resolve to skip and never touch tags or npm. All
-fail-closed gates (license gate, forbidden-pattern scan, full quality gate)
-run at the exact release SHA BEFORE the immutable tag or the registry is
-written.
-
-Flow:
-
-1. Merge feature PRs; each carries its Changeset.
-2. Review and merge the **Version Packages** PR.
-3. The workflow runs the whole pipeline above and attaches CDN artifacts.
-4. Nothing about the CDN changes yet.
+A release is DONE only when step 6 has run. Exact-version artifacts are
+never left as a manual follow-up.
 
 ## Recovery
 
-- **Any step after a successful npm publish failed**: re-run the Release
-  Package workflow with the `tag` input (`@viceme-ai/sdk@<version>`) —
-  recovery mode reuses the immutable tag/SHA, skips the immediate
-  dist-tag gate, and converges assets. For asset-only repair on ANY
-  historical version, run the **Release Assets (recovery)** workflow (it
-  only requires the exact version to exist on npm, not any dist-tag).
-- Drill: delete the `dist-<version>.zip` release asset and re-run the
-  recovery workflow; it must restore the byte-identical asset.
-  `attach-release-assets.mjs --dry-run` stages and digest-verifies without
-  GitHub API calls.
+Re-run the Release Package workflow with the `tag` input
+(`@viceme-ai/sdk@<version>`): recovery reuses the immutable tag/SHA and
+re-runs every step convergently — npm (integrity match), GitHub assets
+(idempotent), and both S3 regions (immutable-put semantics). For
+asset-only repair on ANY historical version, the **Release Assets
+(recovery)** workflow requires only that the exact version exists on npm.
 
-## Promoting a version to the CDN
+Drill: delete the `dist-<version>.zip` release asset, re-run recovery, and
+confirm the byte-identical asset is restored (`attach-release-assets.mjs
+--dry-run` stages and digest-verifies without GitHub API calls).
 
-Run the **Promote CDN** workflow with the exact released `version` (and the
-target `regions`, validated as `cn`/`global`):
+## Moving the stable alias (`/sdk/v1`)
 
-1. Downloads the GitHub release artifacts, verifies every digest locally,
-   and forwards THOSE exact bytes to the upload job as a workflow artifact —
-   the upload job re-verifies the same directory before any write and never
-   re-downloads, so a swapped release asset can never reach the immutable
-   CDN paths.
-2. Per region: `scripts/upload-plan.mjs` probes each public target —
-   missing ⇒ upload, byte-identical ⇒ skip, **different ⇒ fail closed**
-   (exact versions are never overwritten) — then uploads exactly the planned
-   files through the region-scoped upload contract, and re-reads everything
-   from the public network (`verify-cdn.mjs`: sha256/SRI/bytes/content-type/
-   immutable cache headers/CORS).
-3. Leave `moveStableAlias` off unless the release is meant to become the
-   stable major.
+The **Promote CDN** workflow only manages the alias pointer (exact-version
+delivery is automatic in Release Package):
 
-### Stable alias model (`/sdk/v1`)
+- `aliasAction=promote` (default): forward-only move. The live pointer is
+  read first and the shared policy refuses backward or same-version moves,
+  so a stale rerun can never roll the alias back.
+- `aliasAction=rollback` + `aliasExpectedCurrent=<exact current version>`:
+  the only path allowed to move backward. The live pointer must equal the
+  declared value (stale/concurrent guard) and the target must be older.
 
-`/sdk/v1` is **not** a copy of a version's files. Each region serves one
-small public pointer object:
-
-```text
-GET https://<cdn-host>/sdk/-/aliases/v1   ->   "<version>"
-```
-
-The CDN edge resolves `/sdk/v1/<file>` to `/sdk/<pointer-version>/<file>`.
-The pointer only moves **forward** during a normal promote
-(`aliasAction=promote`); `write-alias-pointer.mjs` refuses backward or
-same-version moves. The write is one atomic object per region, verified
-**with bounded convergence**: the public pointer URL is cacheable (short
-TTL), so an optional purge runs first (`CDN_PURGE_COMMAND`) and the pointer
-is otherwise polled until the read matches, within a budget longer than the
-TTL; the alias-level `verify-cdn --expect-version` check retries with the
-same bounded budget. A timeout reports the last observed value,
-distinguishing a stale edge from an origin problem. Until the edge
-implements pointer resolution, this step fails closed by design.
-
-**Rollback** is a separate, explicit operation: run Promote CDN with the
-previous verified version, `aliasAction=rollback`, and
-`aliasExpectedCurrent=<the exact version currently served>`. The live
-pointer must equal that declared value (stale/concurrent-move guard) and
-the target must be older; otherwise the run fails without writing. Exact-
-version objects are never rewritten or deleted; npm versions are never
-unpublished or reused.
+Mechanics per region (credentials via the fixed S3 secret names, dedicated
+`viceme-sdk` bucket, CN through its HTTPS proxy): the content-stable
+loader object is placed at `sdk/v1/viceme.min.js` with immutable-put
+semantics, then the single pointer object `sdk/-/aliases/v1` is written
+(`text/plain`, short TTL) and the public URL is polled until it matches.
+The loader itself resolves `/sdk/v1` by reading the pointer at runtime, so
+even a torn write stays functional. Reads are origin-fresh on the S3
+entries (no edge cache yet); when a CDN edge is introduced, add edge
+caching without changing the URL contract.
 
 ## Verification tooling
 
@@ -155,15 +119,14 @@ unpublished or reused.
 pnpm release:gate        # license + package metadata preconditions
 node scripts/validate-release-inputs.mjs --version 1.2.3 --regions cn,global
 node scripts/verify-cdn.mjs --local packages/sdk/dist
-node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/1.2.3/
-node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/v1/ --expect-version 1.2.3 --allow-mutable-cache
-node scripts/upload-plan.mjs --dist packages/sdk/dist --base https://cdn.viceme.cn/sdk/1.2.3/
-node scripts/write-alias-pointer.mjs --version 1.2.3 --regions cn --hosts cn=... --upload-command "..." [--purge-command "..."]
+node scripts/verify-cdn.mjs --base https://s3.viceme.cn/sdk/1.2.3/
+node scripts/verify-cdn.mjs --base https://s3.viceme.cn/sdk/v1/ --expect-version 1.2.3
+node scripts/fetch-npm-dist.mjs --version 1.2.3 --out verified-dist
 node scripts/attach-release-assets.mjs --version 1.2.3 --dry-run
 node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag next
 ```
 
 Manifest digests come from `scripts/build-manifest.mjs` during the release
-build; the npm tarball and CDN objects always originate from that one build.
-The plan always includes `manifest.json` itself as a first-class immutable
-object (an empty CDN must receive it before `verify-cdn` can read it).
+build; the npm tarball, GitHub assets, and both S3 regions all originate
+from that one build, and every region upload includes `manifest.json`
+itself as a first-class immutable object.

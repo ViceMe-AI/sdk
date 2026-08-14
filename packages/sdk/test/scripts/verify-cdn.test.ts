@@ -147,6 +147,23 @@ describe('verify-cdn.mjs', () => {
     ).rejects.toMatchObject({ code: 1 });
   });
 
+  it('alias mode resolves the version pointer and verifies the target', async () => {
+    // Without --allow-mutable-cache, the alias check reads
+    // /sdk/-/aliases/v1 and fully verifies /sdk/<pointer-version>/.
+    files.set('aliases/v1', {
+      body: Buffer.from('0.1.0\n'),
+      contentType: 'text/plain; charset=utf-8',
+    });
+    const { stdout } = await run('--base', `${server!.url}/sdk/v1/`, '--expect-version', '0.1.0');
+    expect(stdout).toContain('alias pointer verified -> 0.1.0');
+
+    // Pointer mismatch fails closed.
+    await expect(
+      run('--base', `${server!.url}/sdk/v1/`, '--expect-version', '0.2.0'),
+    ).rejects.toMatchObject({ code: 1 });
+    files.delete('aliases/v1');
+  });
+
   it('local mode verifies the fixture directory', async () => {
     const { stdout } = await run('--local', distDir);
     expect(stdout).toContain('local verification passed');

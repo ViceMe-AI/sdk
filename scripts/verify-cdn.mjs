@@ -96,6 +96,36 @@ async function fetchOrThrow(url) {
 }
 
 async function verifyRemote(base, { expectVersion, allowMutableCache }) {
+  if (expectVersion !== undefined && !allowMutableCache) {
+    // Alias verification on the S3 topology resolves the POINTER, then
+    // fully verifies the pointed-to exact version (the alias path itself
+    // holds no manifest copy).
+    const aliasBase = new URL(base.endsWith('/') ? base : `${base}/`);
+    if (!/^\/sdk\/\d+\.\d+\.\d+[^/]*\//.test(aliasBase.pathname)) {
+      return verifyAliasByPointer(aliasBase, expectVersion);
+    }
+  }
+  return verifyExactVersion(base, { expectVersion, allowMutableCache });
+}
+
+/** Alias mode: pointer must equal the expected version; then verify it. */
+async function verifyAliasByPointer(aliasBase, expectVersion) {
+  const pointerUrl = new URL('/sdk/-/aliases/v1', aliasBase);
+  const { buffer: pointerBuffer } = await fetchOrThrow(pointerUrl);
+  const pointerVersion = pointerBuffer.toString('utf8').trim();
+  check(
+    pointerVersion === expectVersion,
+    `alias pointer is '${pointerVersion}', expected '${expectVersion}'`,
+  );
+  console.log(`alias pointer verified -> ${pointerVersion}`);
+  const exactBase = new URL(`/sdk/${expectVersion}/`, aliasBase);
+  return verifyExactVersion(exactBase.toString(), {
+    expectVersion,
+    allowMutableCache: false,
+  });
+}
+
+async function verifyExactVersion(base, { expectVersion, allowMutableCache }) {
   const manifestUrl = new URL('manifest.json', base.endsWith('/') ? base : `${base}/`);
   const { response: manifestResponse, buffer: manifestBuffer } = await fetchOrThrow(manifestUrl);
   const manifest = JSON.parse(manifestBuffer.toString('utf8'));

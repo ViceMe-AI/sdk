@@ -58,23 +58,14 @@ function gh(...cliArgs) {
 }
 
 try {
-  // 1. Download the exact published tarball from npm.
-  execFileSync('npm', ['pack', `@viceme-ai/sdk@${args.version}`, '--pack-destination', tmp], {
-    cwd: tmp,
-    stdio: 'inherit',
-  });
-  const tarball = readdirSync(tmp).find((f) => f.endsWith('.tgz'));
-  if (!tarball) throw new Error('npm pack produced no tarball');
-
-  // 2. Extract and verify digests against the release manifest inside it.
-  const extractDir = join(tmp, 'extracted');
-  mkdirSync(extractDir, { recursive: true });
-  execFileSync('tar', ['-xzf', join(tmp, tarball), '-C', extractDir], { stdio: 'inherit' });
-  const packageDir = join(extractDir, 'package');
-  const distDir = join(packageDir, 'dist');
-  execFileSync('node', [join(root, 'scripts', 'verify-cdn.mjs'), '--local', distDir], {
-    stdio: 'inherit',
-  });
+  // 1+2. Fetch the exact published tarball from npm and verify digests
+  // (shared with the S3 publication path — one authoritative byte source).
+  const distDir = join(tmp, 'verified-dist');
+  execFileSync(
+    process.execPath,
+    [join(root, 'scripts', 'fetch-npm-dist.mjs'), '--version', args.version, '--out', distDir],
+    { stdio: 'inherit' },
+  );
 
   // 3. Stage assets: dist zip + the manifest itself.
   const assetsDir = join(tmp, 'assets');

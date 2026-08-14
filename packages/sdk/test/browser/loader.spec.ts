@@ -169,6 +169,20 @@ test.describe('successful auto-mount', () => {
     await waitForEvent(page, 'viceme:ready');
     expect(await page.evaluate(() => !!document.querySelector('#host-a')!.shadowRoot)).toBe(true);
   });
+
+  test('v1 alias without a manifest resolves through the version pointer', async ({ page }) => {
+    await mockApi(page);
+    // Alias topology: /sdk/v1/ serves ONLY the loader; manifest.json under
+    // the alias must 404 so the loader falls back to /sdk/-/aliases/v1 and
+    // loads the exact version beside it.
+    await page.route('**/sdk/v1/manifest.json', (route) => route.fulfill({ status: 404 }));
+    await page.goto(cfgUrl(VALID_ATTRS));
+
+    const events = await waitForEvent(page, 'viceme:ready');
+    const ready = events.find((e) => e.type === 'viceme:ready')!;
+    expect(ready.detail.version).toBe('0.1.0');
+    expect(await page.evaluate(() => !!document.querySelector('#host-a')!.shadowRoot)).toBe(true);
+  });
 });
 
 test.describe('attribute validation (fail closed)', () => {

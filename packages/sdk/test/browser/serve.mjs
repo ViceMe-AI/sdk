@@ -55,6 +55,17 @@ createServer(async (req, res) => {
     }
 
     let file = null;
+    if (path === '/sdk/-/aliases/v1') {
+      // Stable-alias version pointer (the loader resolves it when the alias
+      // path carries no manifest).
+      res.writeHead(200, {
+        'content-type': 'text/plain; charset=utf-8',
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-store',
+      });
+      res.end(manifest.version);
+      return;
+    }
     if (path.startsWith('/pages/')) {
       file = join(pagesDir, normalize(path.slice('/pages/'.length)));
     } else if (/^\/sdk\/(v1|\d+\.\d+\.\d+[^/]*)\//.test(path)) {

@@ -18,7 +18,10 @@ const FORBIDDEN = [
   {
     name: 'credential-shaped assignments',
     pattern: /(api[_-]?secret|private[_-]?key|webhook[_-]?secret|Bearer\s+[A-Za-z0-9._-]{20,})/i,
-    allow: /(^|\/)(test|scripts)\/|\.test\.ts$|\.spec\.ts$|SECURITY\.md$|CONTRIBUTING\.md$/,
+    // Workflows and the runbook reference SECRET NAMES only (values stay in
+    // GitHub); tests and docs of policy are also textual.
+    allow:
+      /(^|\/)(test|scripts)\/|\.test\.ts$|\.spec\.ts$|SECURITY\.md$|CONTRIBUTING\.md$|\.github\/workflows\/|docs\/RELEASE\.md$/,
   },
 ];
 

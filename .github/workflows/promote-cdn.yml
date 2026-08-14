@@ -1,55 +1,37 @@
 name: Promote CDN
 
-# Promotes an already-published npm release to the CDN (§14.2 steps 7-10).
+# Stable-alias management only. Exact-version artifacts are published to
+# both regions automatically by the Release Package workflow (npm ->
+# CN/Global S3 -> public read-back); this workflow moves the single
+# `/sdk/v1` alias pointer:
 #
-# Artifact integrity chain (review P1): the verify-artifacts job downloads
-# the GitHub release zip, verifies every digest locally, and forwards THOSE
-# EXACT bytes to the upload job as a workflow artifact. The upload job
-# re-verifies the same directory locally before any immutable write and
-# never re-downloads from the release — a swapped or corrupted release
-# asset can therefore never reach the immutable /sdk/<version>/ paths.
+#   promote  — forward only (stale reruns can never pull the alias back);
+#   rollback — explicit, requires aliasExpectedCurrent to match the live
+#              pointer (stale/concurrent-move guard) and an older target.
 #
-# Alias semantics (review P1): the /sdk/v1 pointer only moves FORWARD
-# during a normal promote; moving it backward is a separate, explicit
-# rollback action (aliasAction=rollback + aliasExpectedCurrent=<the exact
-# version being rolled back FROM>), guarded against stale/concurrent moves.
+# The alias path also receives the (content-stable) loader object with
+# immutable semantics; the loader resolves /sdk/v1 by reading the version
+# pointer at /sdk/-/aliases/v1, so a torn write stays functional.
 #
-# Security model (review P1): workflow_dispatch inputs are passed via env
-# and validated (strict semver + region set) before any network, file, or
-# credential operation; secrets expand only inside explicit bash -lc
-# invocations. Actions are pinned to reviewed commit SHAs.
-#
-# Required org configuration (§21.2):
-#   - CDN buckets for cdn.viceme.cn (region `cn`) and cdn.viceme.ai
-#     (region `global`).
-#   - `CDN_UPLOAD_COMMAND` secret: invoked as `upload <region> <local-file>
-#     <object-key>` (bash -lc); the region selects its own bucket and
-#     credentials; immutable long-cache headers for /sdk/<version>/ keys,
-#     short TTL for the pointer key.
-#   - Optional `CDN_PURGE_COMMAND` secret: invoked as `purge <region> <key>`;
-#     when present it runs after each pointer write.
-#   - Edge prerequisite: /sdk/v1/<file> resolution from the pointer. Until
-#     the edge implements it, alias verification fails closed by design.
+# Inputs are env-passed and strictly validated (semver + regions) before
+# any credential operation; secrets are consumed by scripts as structured
+# env (S3 endpoints/buckets/keys), never as shell command text. Actions are
+# pinned to reviewed commit SHAs.
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact released version (e.g. 1.2.3)'
+        description: 'Exact released version to point /sdk/v1 at (e.g. 1.2.3)'
         required: true
         type: string
       regions:
-        description: 'Regions to promote (comma-separated: cn,global)'
+        description: 'Regions (comma-separated: cn,global)'
         required: true
         default: 'cn,global'
         type: string
-      moveStableAlias:
-        description: 'Also move the /sdk/v1 pointer to this version after verification'
-        required: true
-        default: false
-        type: boolean
       aliasAction:
-        description: 'Pointer action: promote (forward only) or rollback (explicit, backward)'
+        description: 'promote (forward only) or rollback (explicit backward move)'
         required: true
         default: promote
         type: choice
@@ -68,165 +50,77 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify-artifacts:
-    name: Validate inputs, verify artifacts, forward exact bytes
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with: { node-version: 24 }
-      - name: Strict input validation (before anything else)
-        env:
-          VERSION: ${{ inputs.version }}
-          REGIONS: ${{ inputs.regions }}
-        run: node scripts/validate-release-inputs.mjs --version "$VERSION" --regions "$REGIONS"
-      - name: Download release artifacts and verify digests
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          gh release download "@viceme-ai/sdk@${VERSION}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern 'dist-*.zip' --dir release
-          unzip -q release/dist-*.zip -d verified-dist
-          node scripts/verify-cdn.mjs --local verified-dist
-      # Forward the EXACT verified bytes; the upload job never re-downloads.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: verified-dist
-          path: verified-dist/
-          if-no-files-found: error
-          retention-days: 1
-
-  upload:
-    name: Immutable exact-version upload + read-back (per region)
-    needs: verify-artifacts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with: { node-version: 24 }
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: verified-dist
-          path: verified-dist
-      - name: Re-verify the forwarded artifacts BEFORE any immutable write
-        run: node scripts/verify-cdn.mjs --local verified-dist
-      - name: Plan immutable uploads, upload, and read back (per region)
-        shell: bash
-        env:
-          VERSION: ${{ inputs.version }}
-          REGIONS: ${{ inputs.regions }}
-          CDN_UPLOAD_COMMAND: ${{ secrets.CDN_UPLOAD_COMMAND }}
-        run: |
-          set -euo pipefail
-          node scripts/validate-release-inputs.mjs --version "$VERSION" --regions "$REGIONS"
-          if [ -z "$CDN_UPLOAD_COMMAND" ]; then
-            echo "::error::CDN_UPLOAD_COMMAND secret is not configured (bucket provider pending — see promote-cdn.yml header and docs/RELEASE.md)"
-            exit 1
-          fi
-          # The secret is expanded only inside this explicit bash invocation.
-          upload() { bash -lc "$CDN_UPLOAD_COMMAND $1 $2 $3"; }
-          for region in $(echo "$REGIONS" | tr ',' ' '); do
-            case "$region" in
-              cn) host=cdn.viceme.cn ;;
-              global) host=cdn.viceme.ai ;;
-            esac
-            echo "::group::region ${region} (${host})"
-            plan="$(node scripts/upload-plan.mjs --dist verified-dist --base "https://${host}/sdk/${VERSION}/")"
-            if [ -n "$plan" ]; then
-              echo "$plan" | while IFS= read -r file; do
-                upload "$region" "verified-dist/$file" "sdk/${VERSION}/$file"
-                echo "uploaded sdk/${VERSION}/$file"
-              done
-            else
-              echo "all objects already present and byte-identical (idempotent re-run)"
-            fi
-            node scripts/verify-cdn.mjs --base "https://${host}/sdk/${VERSION}/"
-            echo "::endgroup::"
-          done
-
   alias:
-    name: Move /sdk/v1 pointer (promote forward, or explicit rollback)
-    needs: upload
-    if: ${{ inputs.moveStableAlias }}
+    name: Move /sdk/v1 pointer (policy-checked, both regions)
     runs-on: ubuntu-latest
+    environment: cdn
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24 }
-      - name: Write the pointer (policy-checked) with bounded convergence
+      - name: Validate inputs (strict, before anything else)
         env:
           VERSION: ${{ inputs.version }}
           REGIONS: ${{ inputs.regions }}
-          ALIAS_ACTION: ${{ inputs.aliasAction }}
           ALIAS_EXPECTED_CURRENT: ${{ inputs.aliasExpectedCurrent }}
-          CDN_UPLOAD_COMMAND: ${{ secrets.CDN_UPLOAD_COMMAND }}
-          CDN_PURGE_COMMAND: ${{ secrets.CDN_PURGE_COMMAND }}
+          ALIAS_ACTION: ${{ inputs.aliasAction }}
         run: |
           set -euo pipefail
           node scripts/validate-release-inputs.mjs --version "$VERSION" --regions "$REGIONS"
           if [ "$ALIAS_ACTION" = "rollback" ]; then
             node scripts/validate-release-inputs.mjs --version "$ALIAS_EXPECTED_CURRENT"
           fi
-          if [ -z "$CDN_UPLOAD_COMMAND" ]; then
-            echo "::error::CDN_UPLOAD_COMMAND secret is not configured"
-            exit 1
-          fi
+      - name: Move the pointer on both regions (S3, origin-fresh read-back)
+        env:
+          VERSION: ${{ inputs.version }}
+          REGIONS: ${{ inputs.regions }}
+          ALIAS_ACTION: ${{ inputs.aliasAction }}
+          ALIAS_EXPECTED_CURRENT: ${{ inputs.aliasExpectedCurrent }}
+          S3_ENDPOINT_CN: ${{ secrets.VICEME_RELEASE_S3_ENDPOINT_CN }}
+          S3_BUCKET_CN: ${{ secrets.VICEME_RELEASE_S3_BUCKET_CN }}
+          S3_ACCESS_KEY_ID_CN: ${{ secrets.VICEME_RELEASE_S3_ACCESS_KEY_ID_CN }}
+          S3_SECRET_ACCESS_KEY_CN: ${{ secrets.VICEME_RELEASE_S3_SECRET_ACCESS_KEY_CN }}
+          CN_S3_HTTPS_PROXY: ${{ secrets.CN_S3_HTTPS_PROXY }}
+          S3_ENDPOINT_GLOBAL: ${{ secrets.VICEME_RELEASE_S3_ENDPOINT_GLOBAL }}
+          S3_BUCKET_GLOBAL: ${{ secrets.VICEME_RELEASE_S3_BUCKET_GLOBAL }}
+          S3_ACCESS_KEY_ID_GLOBAL: ${{ secrets.VICEME_RELEASE_S3_ACCESS_KEY_ID_GLOBAL }}
+          S3_SECRET_ACCESS_KEY_GLOBAL: ${{ secrets.VICEME_RELEASE_S3_SECRET_ACCESS_KEY_GLOBAL }}
+          CN_S3_HTTPS_PROXY: ${{ secrets.CN_S3_HTTPS_PROXY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+        run: |
+          set -euo pipefail
           args=(
             --version "$VERSION"
             --regions "$REGIONS"
-            --hosts cn=https://cdn.viceme.cn,global=https://cdn.viceme.ai
-            --upload-command "$CDN_UPLOAD_COMMAND"
             --mode "$ALIAS_ACTION"
           )
           if [ "$ALIAS_ACTION" = "rollback" ]; then
             args+=(--from-current "$ALIAS_EXPECTED_CURRENT")
           fi
-          if [ -n "$CDN_PURGE_COMMAND" ]; then
-            args+=(--purge-command "$CDN_PURGE_COMMAND")
-          fi
-          node scripts/write-alias-pointer.mjs "${args[@]}"
-      - name: Verify the alias on every region (bounded retry for edge TTL)
+          # The script applies the CN HTTPS proxy to CN region calls only.
+          node scripts/s3-alias-pointer.mjs "${args[@]}"
+      - name: Verify the alias on every region
         env:
           VERSION: ${{ inputs.version }}
           REGIONS: ${{ inputs.regions }}
         run: |
           set -euo pipefail
-          # The edge may serve the previous alias resolution for up to the
-          # pointer TTL; retry the whole verification with a bounded budget
-          # (~5 minutes) instead of treating a stale edge as failure.
           for region in $(echo "$REGIONS" | tr ',' ' '); do
             case "$region" in
-              cn) host=cdn.viceme.cn ;;
-              global) host=cdn.viceme.ai ;;
+              cn) host=s3.viceme.cn ;;
+              global) host=s3.viceme.ai ;;
             esac
-            attempt=1
-            until node scripts/verify-cdn.mjs \
-                --base "https://${host}/sdk/v1/" \
-                --expect-version "$VERSION" --allow-mutable-cache; do
-              if [ "$attempt" -ge 10 ]; then
-                echo "::error::alias did not converge to $VERSION on ${host} within the retry budget"
-                exit 1
-              fi
-              echo "alias on ${host} not converged yet (attempt ${attempt}); waiting 30s"
-              attempt=$((attempt + 1))
-              sleep 30
-            done
+            node scripts/verify-cdn.mjs --base "https://${host}/sdk/v1/" --expect-version "$VERSION"
           done
-      - name: Loader smoke against the live CDN
+      - name: Loader smoke against the live alias
         run: |
-          # B0.3 rehearsal: the loader must download and parse from the real
-          # CDN through the v1 alias. Full capability E2E arrives with B1/B2.
           node - <<'EOF'
-          const base = 'https://cdn.viceme.ai/sdk/v1/';
-          const res = await fetch(new URL('manifest.json', base));
-          if (!res.ok) throw new Error(`manifest HTTP ${res.status}`);
-          const manifest = await res.json();
-          const loader = await fetch(new URL(manifest.loader, base));
-          if (!loader.ok) throw new Error(`loader HTTP ${loader.status}`);
-          const text = await loader.text();
+          const base = 'https://s3.viceme.ai/sdk/v1/';
+          const res = await fetch(new URL('viceme.min.js', base));
+          if (!res.ok) throw new Error(`loader HTTP ${res.status}`);
+          const text = await res.text();
           if (!text.includes('data-viceme')) throw new Error('loader bundle looks wrong');
-          console.log('cdn smoke ok', manifest.version);
+          const pointer = await (await fetch('https://s3.viceme.ai/sdk/-/aliases/v1')).text();
+          console.log('cdn smoke ok, alias ->', pointer.trim());
           EOF
