@@ -1,0 +1,163 @@
+name: Promote CDN
+
+# Promotes an already-published npm release to the CDN (§14.2 steps 7-10).
+#
+# Flow: download the exact GitHub release artifacts -> re-verify digests
+# locally -> upload to CN/GLOBAL exact paths (immutable) -> verify from the
+# public network -> (optional, explicit input) move the stable `v1` alias ->
+# verify the alias + real-browser smoke. Exact versions are never overwritten;
+# rollback re-runs this workflow with an older verified version and
+# moveStableAlias=true (see docs/RELEASE.md).
+#
+# Required org configuration (one-time, needs owner permissions, §21.2):
+#   - CDN buckets for cdn.viceme.cn (CN) and cdn.viceme.ai (GLOBAL).
+#   - `CDN_UPLOAD_COMMAND` secret: a one-line command contract invoked as
+#     `upload <local-file> <object-key>` (bash -lc). Until the bucket/provider
+#     is chosen, this workflow fails explicitly instead of pretending.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact released version (e.g. 1.2.3)'
+        required: true
+        type: string
+      regions:
+        description: 'Regions to promote (comma-separated: cn,global)'
+        required: true
+        default: 'cn,global'
+        type: string
+      moveStableAlias:
+        description: 'Also move the /sdk/v1 alias to this version after verification'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-cdn
+  cancel-in-progress: false
+
+jobs:
+  verify-artifacts:
+    name: Download + locally verify release artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Download release artifacts and verify digests
+        run: |
+          gh release download "@viceme-ai/sdk@${{ inputs.version }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'dist-*.zip' --dir release
+          unzip -q release/dist-*.zip -d release/dist
+          mkdir -p packages/sdk/dist && cp -r release/dist/. packages/sdk/dist/
+          node scripts/verify-cdn.mjs --local packages/sdk/dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  upload:
+    name: Upload exact version + public read-back
+    needs: verify-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Download release artifacts
+        run: |
+          gh release download "@viceme-ai/sdk@${{ inputs.version }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'dist-*.zip' --dir release
+          unzip -q release/dist-*.zip -d release/dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload immutable objects, then verify from the public network
+        run: |
+          if [ -z "${{ secrets.CDN_UPLOAD_COMMAND }}" ]; then
+            echo "::error::CDN_UPLOAD_COMMAND secret is not configured (bucket provider pending — see promote-cdn.yml header and docs/RELEASE.md)"
+            exit 1
+          fi
+          upload() { bash -lc "${{ secrets.CDN_UPLOAD_COMMAND }} $1 $2"; }
+          cd release/dist
+          find . -type f ! -name '*.map' | while read -r f; do
+            key="${f#./}"
+            for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
+              case "$region" in
+                cn) host=cdn.viceme.cn ;;
+                global) host=cdn.viceme.ai ;;
+                *) echo "unknown region: $region"; exit 1 ;;
+              esac
+              upload "$f" "/sdk/${{ inputs.version }}/$key"
+              echo "uploaded ${{ inputs.version }}/$key for $region ($host)"
+            done
+          done
+          # Object metadata (content-type/cache-control/CORS) is enforced from
+          # the network by the read-back step below, per region.
+          for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
+            case "$region" in
+              cn) host=cdn.viceme.cn ;;
+              global) host=cdn.viceme.ai ;;
+            esac
+            node "$GITHUB_WORKSPACE/scripts/verify-cdn.mjs" \
+              --base "https://${host}/sdk/${{ inputs.version }}/"
+          done
+
+  alias:
+    name: Move stable v1 alias (explicit) + verify + smoke
+    needs: upload
+    if: ${{ inputs.moveStableAlias }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Download release artifacts
+        run: |
+          gh release download "@viceme-ai/sdk@${{ inputs.version }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'dist-*.zip' --dir release
+          unzip -q release/dist-*.zip -d release/dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Point /sdk/v1 at the verified version
+        run: |
+          if [ -z "${{ secrets.CDN_UPLOAD_COMMAND }}" ]; then
+            echo "::error::CDN_UPLOAD_COMMAND secret is not configured"
+            exit 1
+          fi
+          upload() { bash -lc "${{ secrets.CDN_UPLOAD_COMMAND }} $1 $2"; }
+          cd release/dist
+          find . -type f ! -name '*.map' | while read -r f; do
+            key="${f#./}"
+            upload "$f" "/sdk/v1/$key"
+          done
+      - name: Verify the alias on every region
+        run: |
+          for region in $(echo '${{ inputs.regions }}' | tr ',' ' '); do
+            case "$region" in
+              cn) host=cdn.viceme.cn ;;
+              global) host=cdn.viceme.ai ;;
+            esac
+            node scripts/verify-cdn.mjs \
+              --base "https://${host}/sdk/v1/" \
+              --expect-version '${{ inputs.version }}' --allow-mutable-cache
+          done
+      - name: Loader smoke against the live CDN
+        run: |
+          # B0.3 rehearsal: the loader must download and parse from the real
+          # CDN. Full capability E2E arrives with B1/B2 real backends.
+          node - <<'EOF'
+          const base = 'https://cdn.viceme.ai/sdk/v1/';
+          const res = await fetch(new URL('manifest.json', base));
+          if (!res.ok) throw new Error(`manifest HTTP ${res.status}`);
+          const manifest = await res.json();
+          const loader = await fetch(new URL(manifest.loader, base));
+          if (!loader.ok) throw new Error(`loader HTTP ${loader.status}`);
+          const text = await loader.text();
+          if (!text.includes('data-viceme')) throw new Error('loader bundle looks wrong');
+          console.log('cdn smoke ok', manifest.version);
+          EOF

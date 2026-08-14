@@ -1,0 +1,93 @@
+name: Release Package
+
+# Changesets flow (§14.2):
+#   1. PR merged to main with pending changesets -> this workflow opens the
+#      "Version Packages" PR (no publish).
+#   2. Version PR merged -> tag exists on main -> quality gates rerun, then
+#      npm publish via OIDC trusted publishing with provenance.
+#   3. The same build's CDN artifacts are attached to the GitHub release for
+#      the promote-cdn workflow — npm tarball and CDN objects always come
+#      from one build.
+#
+# Required org configuration (one-time, needs owner permissions):
+#   - GitHub environment `npm` with required reviewers.
+#   - `@viceme-ai` npm scope configured for trusted publishing
+#     (repository + workflow + environment), no long-lived tokens.
+#   - LICENSE finalized (LICENSE-PENDING.md removed) — publishing is blocked
+#     by policy until then.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Version / publish (OIDC + provenance)
+    runs-on: ubuntu-latest
+    environment: npm
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      tag: ${{ steps.release-tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Release quality gate (all PR checks rerun)
+        run: |
+          pnpm --filter '@viceme-ai/sdk' exec playwright install --with-deps chromium firefox webkit
+          pnpm check
+
+      - name: Changesets (version PR or publish)
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm release:version
+          publish: pnpm release:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'
+
+      - name: Resolve release tag
+        if: steps.changesets.outputs.published == 'true'
+        id: release-tag
+        run: |
+          version="$(node -p "require('./packages/sdk/package.json').version")"
+          echo "tag=@viceme-ai/sdk@${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Attach CDN artifacts to the GitHub release
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          version="$(node -p "require('./packages/sdk/package.json').version")"
+          mkdir -p release-artifacts
+          cp packages/sdk/dist/manifest.json release-artifacts/
+          (cd packages/sdk/dist && zip -qr "$GITHUB_WORKSPACE/release-artifacts/dist-${version}.zip" .)
+          pnpm --filter '@viceme-ai/sdk' pack --pack-destination release-artifacts
+          gh release create "@viceme-ai/sdk@${version}" --verify-tag --title "@viceme-ai/sdk@${version}" --notes "Release artifacts for ${version}. CDN promotion: run the Promote CDN workflow against this tag." || true
+          gh release upload "@viceme-ai/sdk@${version}" release-artifacts/* --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
