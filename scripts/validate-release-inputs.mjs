@@ -4,12 +4,12 @@
  * or credential operation (shell-injection defense in depth: even with
  * env-passed inputs, malformed values are rejected here).
  *
- *   --version x.y.z[-prerelease]   exact release version
+ *   --version x.y.z                exact stable release version
  *   --regions cn,global            optional region subset
  *
  * Exit 0 = valid; exit 1 prints every violation.
  */
-const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const STABLE_SEMVER = /^\d+\.\d+\.\d+$/;
 const KNOWN_REGIONS = new Set(['cn', 'global']);
 
 const args = {};
@@ -20,10 +20,8 @@ for (let i = 0; i < process.argv.length; i += 1) {
 
 const failures = [];
 
-if (typeof args.version !== 'string' || !SEMVER.test(args.version)) {
-  failures.push(
-    `--version must be an exact semver x.y.z[-prerelease], got: ${String(args.version)}`,
-  );
+if (typeof args.version !== 'string' || !STABLE_SEMVER.test(args.version)) {
+  failures.push(`--version must be an exact stable semver x.y.z, got: ${String(args.version)}`);
 }
 
 if (args.regions !== undefined) {

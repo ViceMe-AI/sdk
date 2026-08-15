@@ -5,9 +5,8 @@
  * Ported from ViceMe-AI/cli npm/scripts/publish-or-verify.mjs (the reviewed
  * OIDC baseline), adapted for this package:
  *   - package lives at packages/sdk;
- *   - 0.x publishes under the `next` dist-tag and `latest` must never point
- *     at it (the cli moves latest forward; here we fail closed instead);
- *   - prerelease versions (x.y.z-next.N from Changesets pre mode) are valid.
+ *   - every reviewed release is a stable semantic version published under
+ *     `latest`, matching the CLI release channel;
  *
  * Flow (OIDC, with a fail-closed one-time package bootstrap token):
  *   1. Resolve package existence and enforce the authentication boundary:
@@ -33,15 +32,17 @@ const packageDir = new URL('../packages/sdk/', import.meta.url).pathname;
 const packageDocument = JSON.parse(
   await readFile(new URL('../packages/sdk/package.json', import.meta.url), 'utf8'),
 );
-const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
-if (!SEMVER.test(packageDocument.version)) {
-  throw new Error('refusing to publish a non-exact semver version');
+const STABLE_SEMVER = /^\d+\.\d+\.\d+$/;
+if (!STABLE_SEMVER.test(packageDocument.version)) {
+  throw new Error('refusing to publish a non-stable semver version');
 }
 const packageID = `${packageDocument.name}@${packageDocument.version}`;
-// Single authoritative source: the workflow-level DIST_TAG env (inherited
-// by every step). Flipping it to `latest` at 1.0.0 changes publish AND all
-// verification consistently.
-const distTag = process.env.DIST_TAG ?? 'next';
+// Single authoritative source: every reviewed SDK release uses the same
+// stable npm channel as the CLI.
+const distTag = process.env.DIST_TAG ?? 'latest';
+if (distTag !== 'latest') {
+  throw new Error(`refusing to publish the SDK under non-stable dist-tag '${distTag}'`);
+}
 
 function packageExistsOnRegistry() {
   const result = viewJson(packageDocument.name, 'name');
@@ -141,11 +142,6 @@ async function enforceDistTagPolicy() {
     if (tags[distTag] !== packageDocument.version) {
       throw new Error(`dist-tag '${distTag}' still does not point at ${packageID}`);
     }
-  }
-  if (distTag !== 'latest' && tags.latest === packageDocument.version) {
-    throw new Error(
-      `dist-tag 'latest' must not point at ${packageID} while publishing '${distTag}'`,
-    );
   }
   process.stdout.write(`dist-tag ok: ${distTag} -> ${packageDocument.version}\n`);
 }

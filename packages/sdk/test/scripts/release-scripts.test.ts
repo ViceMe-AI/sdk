@@ -215,36 +215,24 @@ describe('verify-npm-dist-tag.mjs', () => {
     return run('verify-npm-dist-tag.mjs', '--dist-tags-json', json, ...args);
   }
 
-  it('passes when the tag points at the version and latest does not', async () => {
-    const { stdout } = await runJson(
-      '{"next":"0.1.1-next.0","latest":"0.0.9"}',
-      '--version',
-      '0.1.1-next.0',
-      '--tag',
-      'next',
-    );
-    expect(stdout).toContain('next -> 0.1.1-next.0');
+  it('passes when latest points at the stable version', async () => {
+    const { stdout } = await runJson('{"latest":"0.2.0"}', '--version', '0.2.0', '--tag', 'latest');
+    expect(stdout).toContain('latest -> 0.2.0');
   });
 
   it('fails when the tag is unset or points elsewhere', async () => {
     await expect(
-      runJson('{"latest":"0.0.9"}', '--version', '0.1.1-next.0', '--tag', 'next'),
+      runJson('{"latest":"0.1.0"}', '--version', '0.2.0', '--tag', 'latest'),
     ).rejects.toMatchObject({ code: 1 });
-    await expect(
-      runJson('{"next":"0.0.9"}', '--version', '0.1.1-next.0', '--tag', 'next'),
-    ).rejects.toMatchObject({ code: 1 });
+    await expect(runJson('{}', '--version', '0.2.0', '--tag', 'latest')).rejects.toMatchObject({
+      code: 1,
+    });
   });
 
-  it('fails when latest points at a next-tagged version', async () => {
+  it('rejects prerelease versions and non-latest tags', async () => {
     await expect(
-      runJson(
-        '{"next":"0.1.1-next.0","latest":"0.1.1-next.0"}',
-        '--version',
-        '0.1.1-next.0',
-        '--tag',
-        'next',
-      ),
-    ).rejects.toMatchObject({ code: 1 });
+      runJson('{"next":"0.2.0-next.0"}', '--version', '0.2.0-next.0', '--tag', 'next'),
+    ).rejects.toMatchObject({ code: 2 });
   });
 });
 
@@ -558,12 +546,12 @@ describe('validate-release-inputs.mjs', () => {
       stdout: expect.stringContaining('valid'),
     });
     await expect(
-      run('validate-release-inputs.mjs', '--version', '0.1.1-next.0', '--regions', 'cn,global'),
+      run('validate-release-inputs.mjs', '--version', '1.2.3', '--regions', 'cn,global'),
     ).resolves.toMatchObject({ stdout: expect.stringContaining('valid') });
   });
 
   it('rejects malformed versions and unknown or duplicate regions', async () => {
-    for (const bad of ['1.2', 'v1.2.3', '1.2.3;rm -rf', '../escape', '']) {
+    for (const bad of ['1.2', 'v1.2.3', '1.2.3-next.0', '1.2.3;rm -rf', '../escape', '']) {
       await expect(run('validate-release-inputs.mjs', '--version', bad)).rejects.toMatchObject({
         code: 1,
       });

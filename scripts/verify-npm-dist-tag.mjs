@@ -2,17 +2,17 @@
 /**
  * Post-publish npm dist-tag read-back.
  *
- * The 0.x phase publishes under the `next` dist-tag only (§14.1); `latest`
- * must never point at an unreleased-capability build. This script verifies
- * the live registry state after publishing:
+ * Every reviewed SDK release is stable and publishes under `latest`, matching
+ * the CLI release channel. This script verifies the live registry state:
  *
- *   - dist-tags[tag] === version            (required)
- *   - dist-tags.latest !== version          (when tag !== latest)
+ *   - version is an exact stable semantic version
+ *   - tag is exactly `latest`
+ *   - dist-tags.latest === version
  *
  * Usage:
- *   node scripts/verify-npm-dist-tag.mjs --package @viceme-ai/sdk --version 1.2.3 --tag next
- *   node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag next \
- *     --dist-tags-json '{"next":"1.2.3"}'   # tests: inject the registry state
+ *   node scripts/verify-npm-dist-tag.mjs --package @viceme-ai/sdk --version 1.2.3 --tag latest
+ *   node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag latest \
+ *     --dist-tags-json '{"latest":"1.2.3"}'   # tests: inject registry state
  */
 import { execFileSync } from 'node:child_process';
 
@@ -35,6 +35,11 @@ if (!args.version || !args.tag) {
   process.exit(2);
 }
 
+if (!/^\d+\.\d+\.\d+$/.test(args.version) || args.tag !== 'latest') {
+  console.error('npm dist-tag read-back requires a stable version published under latest');
+  process.exit(2);
+}
+
 let distTags;
 if (args.distTagsJson !== undefined) {
   distTags = JSON.parse(args.distTagsJson);
@@ -51,12 +56,6 @@ if (distTags[args.tag] !== args.version) {
     `dist-tag "${args.tag}" is ${distTags[args.tag] ?? 'unset'}, expected ${args.version}`,
   );
 }
-if (args.tag !== 'latest' && distTags.latest === args.version) {
-  failures.push(
-    `dist-tag "latest" must not point at ${args.version} while publishing "${args.tag}"`,
-  );
-}
-
 if (failures.length > 0) {
   console.error('npm dist-tag read-back failed:');
   for (const failure of failures) console.error(`  - ${failure}`);
