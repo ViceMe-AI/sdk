@@ -1,0 +1,6 @@
+# Default owners for everything in the repository.
+* @Dogtiti
+
+# Release workflow and npm publishing are high-risk surfaces.
+/.github/workflows/ @Dogtiti
+/scripts/ @Dogtiti

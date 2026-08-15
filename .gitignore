@@ -1,1 +1,17 @@
 .private/
+node_modules/
+dist/
+test-fixtures-dist/
+# Generated from the repo-root LICENSE at build time (single source of truth).
+packages/sdk/LICENSE
+coverage/
+test-results/
+playwright-report/
+*.tgz
+.DS_Store
+*.log
+.env
+.env.*
+.vercel
+.next/
+.turbo/

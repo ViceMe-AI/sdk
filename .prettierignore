@@ -1,0 +1,10 @@
+pnpm-lock.yaml
+dist/
+coverage/
+test-results/
+playwright-report/
+examples/nextjs/.next/
+# Generated contract types: content is guarded by the contracts drift gate
+# (scripts/generate-contracts.mjs check), not by formatting.
+packages/sdk/src/generated/
+*.tgz

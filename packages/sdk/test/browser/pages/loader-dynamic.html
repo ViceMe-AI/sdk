@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>loader dynamic (inserted after DOM ready)</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+      }
+      div[data-host] {
+        min-height: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Host page</h1>
+      <p id="status">untouched</p>
+      <div id="host-a"></div>
+      <div id="host-b"></div>
+      <div class="multi"></div>
+      <div class="multi"></div>
+    </main>
+    <script>
+      window.__events = [];
+      for (const type of [
+        'viceme:ready',
+        'viceme:capability-ready',
+        'viceme:error',
+        'viceme:destroyed',
+      ]) {
+        document.addEventListener(type, (event) => {
+          window.__events.push({ type, detail: event.detail });
+        });
+      }
+
+      const params = new URLSearchParams(location.search);
+
+      // Simulate another major already installed; the loader must not clobber it.
+      if (params.get('presetV2') === '1') {
+        Object.defineProperty(window, 'ViceMe', {
+          value: { versions: { v2: { marker: 'keep-me' } } },
+          enumerable: false,
+          configurable: true,
+          writable: true,
+        });
+      }
+
+      // Hostile global reset: page selectors must not pierce the Shadow Root,
+      // and the host element itself is page-owned (a page can always hide it).
+      if (params.get('hostileCss') === '1') {
+        const style = document.createElement('style');
+        style.textContent =
+          '*, *::before, *::after { box-sizing: content-box !important; margin: 0 !important; padding: 0 !important; }';
+        document.head.append(style);
+      }
+
+      const cfg = JSON.parse(decodeURIComponent(params.get('cfg') ?? '{}'));
+      const insert = (attrs) => {
+        const s = document.createElement('script');
+        s.src = params.get('src') ?? '/viceme-sdk/v1/viceme.min.js';
+        for (const [k, v] of Object.entries(attrs ?? {})) s.setAttribute(k, String(v));
+        document.body.append(s);
+      };
+
+      if (Array.isArray(cfg.scripts)) {
+        for (const attrs of cfg.scripts) insert(attrs);
+      } else {
+        insert(cfg.attrs);
+      }
+    </script>
+  </body>
+</html>

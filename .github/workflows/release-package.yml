@@ -1,0 +1,427 @@
+name: Release Package
+
+# Authoritative release state machine for @viceme-ai/sdk, following the
+# reviewed ViceMe-AI/cli baseline (Release App, OIDC npm publication, dual
+# region S3, Feishu notification) with the SDK's own artifact steps:
+#
+#   dev flow: Changesets Version Packages PRs target dev (Release App
+#     token); a reviewed dev -> main promotion PR is the ONLY release entry
+#     -> immutable tag at the exact promotion merge SHA
+#     -> fail-closed gates (license, forbidden patterns, full quality)
+#     -> npm publish-or-verify (OIDC, no tokens)
+#     -> GitHub release assets from the published npm tarball
+#     -> CN + GLOBAL exact-version S3 publication (environment: cdn)
+#     -> public read-back per region
+#     -> Feishu release notification (only after npm AND both regions)
+#
+# Recovery: workflow_dispatch with the existing tag converges every step —
+# npm (integrity match), release assets (idempotent), and both S3 regions
+# (immutable put semantics). The /sdk/v1 stable alias stays a separate,
+# explicit Promote CDN operation (promote forward / authorized rollback).
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to recover, e.g. @viceme-ai/sdk@0.1.1-next.0'
+        required: false
+        type: string
+
+env:
+  DIST_TAG: next
+
+concurrency:
+  # Serialize releases: npm dist-tags and the alias pointer have no CAS.
+  group: viceme-sdk-release
+  cancel-in-progress: false
+
+jobs:
+  version-pr:
+    name: Version Packages PR (Changesets via Release App, no publishing)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # The Release App token authors the version commits and the Version
+      # Packages PR: branches pushed by GITHUB_TOKEN would not reliably
+      # trigger the required pull_request Quality Gate.
+      - id: release-app-token
+        name: Create repository-scoped Release App token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          token: ${{ steps.release-app-token.outputs.token }}
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with: { version: 11 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action@8eb63fb4cfc7f9643537c7d39d0b68c835012a19 # v1.5.3
+        with:
+          version: pnpm release:version
+        env:
+          GITHUB_TOKEN: ${{ steps.release-app-token.outputs.token }}
+
+  promotion-pr:
+    name: dev -> main release promotion PR (Release App)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - id: release-app-token
+        name: Create repository-scoped Release App token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          token: ${{ steps.release-app-token.outputs.token }}
+          fetch-depth: 0
+      - name: Open or update the promotion PR when dev carries a new version
+        env:
+          GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          DEV_VERSION="$(node -p "require('./packages/sdk/package.json').version")"
+          MAIN_VERSION="$(git show origin/main:packages/sdk/package.json | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")"
+          if [ "$DEV_VERSION" = "$MAIN_VERSION" ]; then
+            echo "dev has no unreleased version (${DEV_VERSION}); no promotion PR"
+            exit 0
+          fi
+          TAG="@viceme-ai/sdk@${DEV_VERSION}"
+          BODY_FILE="${RUNNER_TEMP}/promotion.md"
+          {
+            echo "## Release promotion ${TAG}"
+            echo
+            echo "Merging this reviewed PR promotes dev to main and releases **${TAG}**:"
+            echo "immutable tag, OIDC npm publication, GitHub release assets, and the"
+            echo "CN + GLOBAL viceme-sdk S3 publication run automatically on merge."
+          } > "${BODY_FILE}"
+          PR_URL="$(gh pr list --state open --base main --head dev --json url --jq '.[0].url // empty')"
+          if [ -z "${PR_URL}" ]; then
+            gh pr create --base main --head dev --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
+          else
+            gh pr edit "${PR_URL}" --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
+          fi
+
+  context:
+    name: Resolve merged dev-to-main promotion PR or recovery tag
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      skip: ${{ steps.context.outputs.skip }}
+      recovery: ${{ steps.context.outputs.recovery }}
+      release_ref: ${{ steps.context.outputs.release_ref }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Resolve release context
+        id: context
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          RECOVERY_TAG: ${{ inputs.tag || '' }}
+        run: node scripts/resolve-release-context.mjs
+
+  metadata:
+    name: Resolve and validate immutable release identity
+    needs: context
+    if: needs.context.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.context.outputs.release_ref }}
+          fetch-depth: 0
+      - name: Resolve version and immutable tag binding
+        id: release
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./packages/sdk/package.json').version")"
+          TAG="@viceme-ai/sdk@${VERSION}"
+          SHA="$(git rev-parse HEAD)"
+          git fetch origin --tags
+
+          EXISTING_SHA="$(git rev-list -n 1 "${TAG}" 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ] && [ "$EXISTING_SHA" != "$SHA" ]; then
+            echo "::error::immutable tag ${TAG} already points to ${EXISTING_SHA}, not ${SHA}"
+            exit 1
+          fi
+          {
+            echo "version=${VERSION}"
+            echo "tag=${TAG}"
+            echo "sha=${SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Release quality + fail-closed gates (exact release SHA)
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.metadata.outputs.sha }}
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with: { version: 11 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: License gate (fail closed before any external write)
+        run: pnpm release:gate
+      - name: Forbidden-pattern scan
+        run: node scripts/scan-forbidden-patterns.mjs
+      - name: Full quality gate
+        run: |
+          pnpm --filter '@viceme-ai/sdk' exec playwright install --with-deps chromium firefox webkit
+          pnpm check
+
+  tag:
+    name: Create or verify immutable release tag
+    needs:
+      - metadata
+      - quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.metadata.outputs.sha }}
+          fetch-depth: 0
+      - name: Tag
+        env:
+          TAG: ${{ needs.metadata.outputs.tag }}
+          RELEASE_SHA: ${{ needs.metadata.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin --tags
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          EXISTING_SHA="$(git rev-list -n 1 "${TAG}" 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ]; then
+            test "$EXISTING_SHA" = "$RELEASE_SHA"
+            exit 0
+          fi
+          git tag --annotate "${TAG}" "${RELEASE_SHA}" --message "Release ${TAG}"
+          git push origin "refs/tags/${TAG}"
+
+  npm-publish:
+    name: npm publication (OIDC, no publish token)
+    needs:
+      - metadata
+      - tag
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.metadata.outputs.sha }}
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with: { version: 11 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install pinned OIDC-capable npm CLI
+        run: npm install --global npm@11.12.1
+      - name: Verify trusted publisher OIDC context
+        run: |
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+      - run: pnpm install --frozen-lockfile
+      - name: License gate (again, at publish time)
+        run: pnpm release:gate
+      - name: Build and audit the exact release artifacts
+        run: pnpm build && pnpm pack:check
+      - name: Publish or verify the exact npm version
+        run: node scripts/publish-or-verify.mjs
+
+  assets:
+    name: Attach CDN assets + dist-tag read-back
+    needs:
+      - context
+      - metadata
+      - npm-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.metadata.outputs.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - name: Attach CDN artifacts from the published npm tarball (immutable)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          RECOVERY: ${{ needs.context.outputs.recovery }}
+        run: |
+          # The dist-tag read-back is the immediate post-publish gate only;
+          # recovery runs go straight to convergent asset attachment.
+          if [ "$RECOVERY" != "true" ]; then
+            node scripts/verify-npm-dist-tag.mjs \
+              --package '@viceme-ai/sdk' --version "$VERSION" --tag "$DIST_TAG"
+          fi
+          node scripts/attach-release-assets.mjs --version "$VERSION"
+
+  s3-publication:
+    name: CN + GLOBAL exact-version S3 publication
+    needs:
+      - metadata
+      - npm-publish
+    runs-on: ubuntu-latest
+    environment: cdn
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.metadata.outputs.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      # The published npm tarball is the authoritative byte source for the
+      # CDN artifacts (§13.3) — same bytes the GitHub release assets carry.
+      - name: Fetch the exact published artifacts from npm
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: node scripts/fetch-npm-dist.mjs --version "$VERSION" --out verified-dist
+      - name: Verify digests before any immutable write
+        run: node scripts/verify-cdn.mjs --local verified-dist
+      - name: Publish both regions (CN via proxy) with public read-back
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          CN_ENDPOINT: ${{ secrets.VICEME_RELEASE_S3_ENDPOINT_CN }}
+          CN_BUCKET: ${{ secrets.VICEME_RELEASE_S3_BUCKET_CN }}
+          CN_ACCESS_KEY_ID: ${{ secrets.VICEME_RELEASE_S3_ACCESS_KEY_ID_CN }}
+          CN_SECRET_ACCESS_KEY: ${{ secrets.VICEME_RELEASE_S3_SECRET_ACCESS_KEY_CN }}
+          CN_S3_HTTPS_PROXY: ${{ secrets.CN_S3_HTTPS_PROXY }}
+          GLOBAL_ENDPOINT: ${{ secrets.VICEME_RELEASE_S3_ENDPOINT_GLOBAL }}
+          GLOBAL_BUCKET: ${{ secrets.VICEME_RELEASE_S3_BUCKET_GLOBAL }}
+          GLOBAL_ACCESS_KEY_ID: ${{ secrets.VICEME_RELEASE_S3_ACCESS_KEY_ID_GLOBAL }}
+          GLOBAL_SECRET_ACCESS_KEY: ${{ secrets.VICEME_RELEASE_S3_SECRET_ACCESS_KEY_GLOBAL }}
+          # The runner's AWS CLI enables optional streaming checksums by
+          # default; the S3-compatible origins reject that trailer protocol.
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+        run: |
+          set -euo pipefail
+          test -n "${CN_S3_HTTPS_PROXY}" || { echo "::error::CN_S3_HTTPS_PROXY is required"; exit 1; }
+          test -n "$CN_ENDPOINT" && test -n "$CN_BUCKET" && test -n "$CN_ACCESS_KEY_ID" && test -n "$CN_SECRET_ACCESS_KEY" \
+            || { echo "::error::CN S3 secrets are required"; exit 1; }
+          test -n "$GLOBAL_ENDPOINT" && test -n "$GLOBAL_BUCKET" && test -n "$GLOBAL_ACCESS_KEY_ID" && test -n "$GLOBAL_SECRET_ACCESS_KEY" \
+            || { echo "::error::GLOBAL S3 secrets are required"; exit 1; }
+
+          (
+            export HTTPS_PROXY="${CN_S3_HTTPS_PROXY}" https_proxy="${CN_S3_HTTPS_PROXY}"
+            S3_ENDPOINT="$CN_ENDPOINT" S3_BUCKET="$CN_BUCKET" \
+            S3_ACCESS_KEY_ID="$CN_ACCESS_KEY_ID" S3_SECRET_ACCESS_KEY="$CN_SECRET_ACCESS_KEY" \
+              node scripts/publish-s3-region.mjs \
+                --dist verified-dist --prefix "${VERSION}/" \
+                --public-base "https://s3.viceme.cn/viceme-sdk/${VERSION}/" --label CN
+          )
+          S3_ENDPOINT="$GLOBAL_ENDPOINT" S3_BUCKET="$GLOBAL_BUCKET" \
+          S3_ACCESS_KEY_ID="$GLOBAL_ACCESS_KEY_ID" S3_SECRET_ACCESS_KEY="$GLOBAL_SECRET_ACCESS_KEY" \
+            node scripts/publish-s3-region.mjs \
+              --dist verified-dist --prefix "${VERSION}/" \
+              --public-base "https://s3.viceme.ai/viceme-sdk/${VERSION}/" --label GLOBAL
+
+  notify:
+    name: Feishu release notification
+    needs:
+      - metadata
+      - npm-publish
+      - assets
+      - s3-publication
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.metadata.outputs.sha }}
+          fetch-depth: 0
+      - name: Fail closed on required notification configuration
+        env:
+          FEISHU_RELEASE_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+        run: |
+          # No silent defaults: every integration value must be configured.
+          test -n "$FEISHU_RELEASE_WEBHOOK" || { echo "::error::FEISHU_RELEASE_WEBHOOK is required"; exit 1; }
+          test -n "$AI_API_KEY" || { echo "::error::AI_API_KEY is required"; exit 1; }
+          test -n "$AI_MODEL" || { echo "::error::AI_MODEL is required"; exit 1; }
+          test -n "$AI_BASE_URL" || { echo "::error::AI_BASE_URL is required"; exit 1; }
+      - name: Resolve release range
+        id: range
+        env:
+          TAG: ${{ needs.metadata.outputs.tag }}
+        run: |
+          git fetch origin --tags --force
+          PREV_TAG="$(git describe --tags --abbrev=0 --match '@viceme-ai/sdk@*' "${TAG}^" 2>/dev/null || true)"
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS="$(git log --oneline --no-merges -50 "${TAG}")"
+            COMPARE_URL="${{ github.server_url }}/${{ github.repository }}/commits/${TAG}"
+          else
+            COMMITS="$(git log --oneline --no-merges "${PREV_TAG}..${TAG}")"
+            COMPARE_URL="${{ github.server_url }}/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
+          fi
+          COMMIT_COUNT="$(printf '%s\n' "$COMMITS" | grep -c '.' || true)"
+          DELIMITER="COMMITS_$(openssl rand -hex 16)"
+          {
+            echo "prev_tag=${PREV_TAG}"
+            echo "commit_count=${COMMIT_COUNT}"
+            echo "compare_url=${COMPARE_URL}"
+            echo "commits<<${DELIMITER}"
+            echo "${COMMITS}"
+            echo "${DELIMITER}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: Dogtiti/feishu-bot-webhook-action@fd68eb3a1e032761a500da0ec8ea82489a8b4d9c # main
+        with:
+          webhook: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          mode: release-changelog
+          ai_api_key: ${{ secrets.AI_API_KEY }}
+          ai_model: ${{ secrets.AI_MODEL }}
+          ai_base_url: ${{ secrets.AI_BASE_URL }}
+          service_name: viceme-sdk
+          tag_name: ${{ needs.metadata.outputs.tag }}
+          commits: ${{ steps.range.outputs.commits }}
+          commit_count: ${{ steps.range.outputs.commit_count }}
+          compare_url: ${{ steps.range.outputs.compare_url }}
