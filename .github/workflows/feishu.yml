@@ -1,0 +1,74 @@
+name: Feishu PR notifications
+
+on:
+  pull_request:
+    branches: [main, dev]
+    types: [opened]
+
+  issue_comment:
+    types: [created]
+
+  pull_request_review_comment:
+    types: [created]
+
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  send-event:
+    name: Feishu PR notification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide whether to notify
+        id: filter
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const eventName = context.eventName
+            const actor =
+              context.payload.sender?.login ||
+              context.payload.comment?.user?.login ||
+              context.payload.review?.user?.login ||
+              context.actor ||
+              ''
+            const isBotActor = actor.endsWith('[bot]')
+            let shouldNotify = false
+
+            if (eventName === 'pull_request') {
+              shouldNotify =
+                context.payload.action === 'opened' &&
+                (context.payload.pull_request?.base?.ref === 'main' || context.payload.pull_request?.base?.ref === 'dev')
+            } else if (eventName === 'issue_comment') {
+              if (context.payload.issue?.pull_request) {
+                const { data: pr } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.issue.number,
+                })
+                shouldNotify = (pr.base.ref === 'main' || pr.base.ref === 'dev') && !isBotActor
+              }
+            } else if (eventName === 'pull_request_review_comment') {
+              shouldNotify = (context.payload.pull_request?.base?.ref === 'main' || context.payload.pull_request?.base?.ref === 'dev') && !isBotActor
+            } else if (eventName === 'pull_request_review') {
+              const reviewState = context.payload.review?.state
+              shouldNotify =
+                (context.payload.pull_request?.base?.ref === 'main' || context.payload.pull_request?.base?.ref === 'dev') &&
+                (
+                  reviewState === 'approved' ||
+                  reviewState === 'changes_requested' ||
+                  Boolean(context.payload.review?.body?.trim())
+                ) &&
+                !isBotActor
+            }
+
+            core.setOutput('should_notify', shouldNotify ? 'true' : 'false')
+
+      - uses: Dogtiti/feishu-bot-webhook-action@0b4824f20b79cd42f0e9298cfd8a43d746d9563e # main
+        if: steps.filter.outputs.should_notify == 'true'
+        with:
+          webhook: ${{ secrets.FEISHU_BOT_WEBHOOK }}
+          signkey: ${{ secrets.FEISHU_BOT_SIGNKEY }}

@@ -169,6 +169,20 @@ test.describe('successful auto-mount', () => {
     await waitForEvent(page, 'viceme:ready');
     expect(await page.evaluate(() => !!document.querySelector('#host-a')!.shadowRoot)).toBe(true);
   });
+
+  test('v1 alias without a manifest resolves through the version pointer', async ({ page }) => {
+    await mockApi(page);
+    // Alias topology: /viceme-sdk/v1/ serves ONLY the loader; manifest.json under
+    // the alias must 404 so the loader falls back to /viceme-sdk/-/aliases/v1 and
+    // loads the exact version beside it.
+    await page.route('**/viceme-sdk/v1/manifest.json', (route) => route.fulfill({ status: 404 }));
+    await page.goto(cfgUrl(VALID_ATTRS));
+
+    const events = await waitForEvent(page, 'viceme:ready');
+    const ready = events.find((e) => e.type === 'viceme:ready')!;
+    expect(ready.detail.version).toBe('0.1.0');
+    expect(await page.evaluate(() => !!document.querySelector('#host-a')!.shadowRoot)).toBe(true);
+  });
 });
 
 test.describe('attribute validation (fail closed)', () => {
@@ -291,7 +305,9 @@ test.describe('failure isolation', () => {
   test('capability chunk failure degrades the client but keeps the host page', async ({ page }) => {
     await mockApi(page);
     // Serve the fixture chunk as 404 from the local server.
-    await page.route('**/sdk/*/fixture.js', (route) => route.fulfill({ status: 404, body: '' }));
+    await page.route('**/viceme-sdk/*/fixture.js', (route) =>
+      route.fulfill({ status: 404, body: '' }),
+    );
     await page.goto(cfgUrl(VALID_ATTRS));
 
     const events = await waitForEvent(page, 'viceme:error');
@@ -410,7 +426,7 @@ test.describe('destroy lifecycle', () => {
     // Re-inserting the loader script creates a fresh client + session.
     await page.evaluate(() => {
       const s = document.createElement('script');
-      s.src = '/sdk/v1/viceme.min.js';
+      s.src = '/viceme-sdk/v1/viceme.min.js';
       s.setAttribute('data-viceme-work', 'wrk_test');
       s.setAttribute('data-viceme-region', 'cn');
       s.setAttribute('data-viceme-features', 'fixture');

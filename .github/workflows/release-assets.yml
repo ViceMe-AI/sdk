@@ -1,0 +1,57 @@
+name: Release Assets (recovery)
+
+# Re-runnable recovery for "published to npm but the GitHub release/assets
+# are missing or failed" — for ANY previously published version, not just
+# the current dist-tag. Preconditions and flow:
+#
+#   1. validate the input (strict semver; env-passed, never interpolated
+#      into the script text);
+#   2. prove the exact @viceme-ai/sdk@<version> exists on npm and its
+#      tarball resolves (dist-tag checks belong to the immediate
+#      post-publish gate in release-package.yml, not to historical
+#      recovery);
+#   3. attach assets from the published npm tarball, idempotently
+#      (create-if-absent / identical-skip / differ-fail).
+#
+# Drill (docs/RELEASE.md): after any release, delete the dist-<version>.zip
+# asset and re-run this workflow — it must restore the byte-identical asset.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact published version (e.g. 1.2.3 or 0.1.1-next.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    name: Verify published version, attach assets from npm tarball
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - name: Validate input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: node scripts/validate-release-inputs.mjs --version "$VERSION"
+      - name: Verify the exact version exists on npm
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # Historical recovery must not depend on the current dist-tag:
+          # only the exact package version and its tarball matter here.
+          resolved="$(npm view "@viceme-ai/sdk@${VERSION}" version --json)"
+          test "$resolved" = "\"${VERSION}\"" || {
+            echo "::error::@viceme-ai/sdk@${VERSION} is not published"
+            exit 1
+          }
+      - name: Attach assets (idempotent, immutable)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: node scripts/attach-release-assets.mjs --version "$VERSION"

@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "ViceMe browser SDK: headless core, public session, and capability subpaths for static HTML, ESM, React, and Agent-generated sites.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ViceMe-AI/sdk.git",
+    "directory": "packages/sdk"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -29,12 +34,14 @@
   },
   "scripts": {
     "clean": "node ../../scripts/rmrf.mjs dist test-fixtures-dist",
-    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:types && pnpm build:fixture && pnpm build:manifest",
+    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:bootstrap && pnpm build:types && pnpm build:fixture && pnpm build:manifest && pnpm build:license",
     "build:esm": "vite build --config vite.config.esm.ts",
     "build:loader": "vite build --config vite.config.loader.ts",
+    "build:bootstrap": "vite build --config vite.config.bootstrap.ts",
     "build:types": "tsc -p tsconfig.build.json",
     "build:fixture": "vite build --config vite.config.fixture.ts",
     "build:manifest": "node ../../scripts/build-manifest.mjs",
+    "build:license": "node ../../scripts/sync-package-license.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

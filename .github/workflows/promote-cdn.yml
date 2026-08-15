@@ -1,0 +1,140 @@
+name: Promote CDN
+
+# Stable-alias management only. Exact-version artifacts are published to
+# both regions automatically by the Release Package workflow (npm ->
+# CN/Global S3 -> public read-back); this workflow moves the single
+# `/sdk/v1` alias pointer:
+#
+#   promote  — forward only (stale reruns can never pull the alias back);
+#   rollback — explicit, requires aliasExpectedCurrent to match the live
+#              pointer (stale/concurrent-move guard) and an older target.
+#
+# The alias path also receives the (content-stable) loader object with
+# immutable semantics; the loader resolves /sdk/v1 by reading the version
+# pointer at /sdk/-/aliases/v1, so a torn write stays functional.
+#
+# Inputs are env-passed and strictly validated (semver + regions) before
+# any credential operation; secrets are consumed by scripts as structured
+# env (S3 endpoints/buckets/keys), never as shell command text. Actions are
+# pinned to reviewed commit SHAs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact released version to point /sdk/v1 at (e.g. 1.2.3)'
+        required: true
+        type: string
+      regions:
+        description: 'Regions (comma-separated: cn,global)'
+        required: true
+        default: 'cn,global'
+        type: string
+      aliasAction:
+        description: 'promote (forward only) or rollback (explicit backward move)'
+        required: true
+        default: promote
+        type: choice
+        options: [promote, rollback]
+      aliasExpectedCurrent:
+        description: 'rollback only: the exact version the pointer must currently hold'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-cdn
+  cancel-in-progress: false
+
+jobs:
+  alias:
+    name: Move the /viceme-sdk/v1 pointer (policy-checked, both regions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: cdn
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - name: Validate inputs (strict, before anything else)
+        env:
+          VERSION: ${{ inputs.version }}
+          REGIONS: ${{ inputs.regions }}
+          ALIAS_EXPECTED_CURRENT: ${{ inputs.aliasExpectedCurrent }}
+          ALIAS_ACTION: ${{ inputs.aliasAction }}
+        run: |
+          set -euo pipefail
+          node scripts/validate-release-inputs.mjs --version "$VERSION" --regions "$REGIONS"
+          if [ "$ALIAS_ACTION" = "rollback" ]; then
+            node scripts/validate-release-inputs.mjs --version "$ALIAS_EXPECTED_CURRENT"
+          fi
+      - name: Move the pointer on both regions (S3, origin-fresh read-back)
+        env:
+          VERSION: ${{ inputs.version }}
+          REGIONS: ${{ inputs.regions }}
+          ALIAS_ACTION: ${{ inputs.aliasAction }}
+          ALIAS_EXPECTED_CURRENT: ${{ inputs.aliasExpectedCurrent }}
+          S3_ENDPOINT_CN: ${{ secrets.VICEME_RELEASE_S3_ENDPOINT_CN }}
+          S3_BUCKET_CN: ${{ secrets.VICEME_RELEASE_S3_BUCKET_CN }}
+          S3_ACCESS_KEY_ID_CN: ${{ secrets.VICEME_RELEASE_S3_ACCESS_KEY_ID_CN }}
+          S3_SECRET_ACCESS_KEY_CN: ${{ secrets.VICEME_RELEASE_S3_SECRET_ACCESS_KEY_CN }}
+          CN_S3_HTTPS_PROXY: ${{ secrets.CN_S3_HTTPS_PROXY }}
+          S3_ENDPOINT_GLOBAL: ${{ secrets.VICEME_RELEASE_S3_ENDPOINT_GLOBAL }}
+          S3_BUCKET_GLOBAL: ${{ secrets.VICEME_RELEASE_S3_BUCKET_GLOBAL }}
+          S3_ACCESS_KEY_ID_GLOBAL: ${{ secrets.VICEME_RELEASE_S3_ACCESS_KEY_ID_GLOBAL }}
+          S3_SECRET_ACCESS_KEY_GLOBAL: ${{ secrets.VICEME_RELEASE_S3_SECRET_ACCESS_KEY_GLOBAL }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+        run: |
+          set -euo pipefail
+          args=(
+            --version "$VERSION"
+            --regions "$REGIONS"
+            --mode "$ALIAS_ACTION"
+          )
+          if [ "$ALIAS_ACTION" = "rollback" ]; then
+            args+=(--from-current "$ALIAS_EXPECTED_CURRENT")
+          fi
+          # The script applies the CN HTTPS proxy to CN region calls only.
+          node scripts/s3-alias-pointer.mjs "${args[@]}"
+      - name: Verify the alias on every region
+        env:
+          VERSION: ${{ inputs.version }}
+          REGIONS: ${{ inputs.regions }}
+        run: |
+          set -euo pipefail
+          for region in $(echo "$REGIONS" | tr ',' ' '); do
+            case "$region" in
+              cn) host=s3.viceme.cn ;;
+              global) host=s3.viceme.ai ;;
+            esac
+            node scripts/verify-cdn.mjs --base "https://${host}/viceme-sdk/v1/" --expect-version "$VERSION"
+          done
+      - name: Bootstrap + loader smoke on every region
+        env:
+          REGIONS: ${{ inputs.regions }}
+        run: |
+          set -euo pipefail
+          for region in $(echo "$REGIONS" | tr ',' ' '); do
+            case "$region" in
+              cn) host=s3.viceme.cn ;;
+              global) host=s3.viceme.ai ;;
+            esac
+            node - "$host" <<'EOF'
+          const [host] = process.argv.slice(2);
+          const base = `https://${host}/viceme-sdk/v1/`;
+          const bootstrap = await fetch(new URL('viceme.min.js', base));
+          if (!bootstrap.ok) throw new Error(`bootstrap HTTP ${bootstrap.status}`);
+          const bootstrapText = await bootstrap.text();
+          if (!bootstrapText.includes('/viceme-sdk/-/aliases/v1')) {
+            throw new Error(`${host}: alias loader is not the fixed bootstrap`);
+          }
+          const pointer = await (await fetch(`https://${host}/viceme-sdk/-/aliases/v1`)).text();
+          const loader = await fetch(`https://${host}/viceme-sdk/${pointer.trim()}/viceme.min.js`);
+          if (!loader.ok) throw new Error(`versioned loader HTTP ${loader.status}`);
+          console.log(`${host} smoke ok, alias ->`, pointer.trim());
+          EOF
+          done

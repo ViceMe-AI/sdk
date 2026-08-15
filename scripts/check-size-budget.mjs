@@ -14,7 +14,7 @@ const distDir = join(here, '..', 'packages', 'sdk', 'dist');
 
 const BUDGETS = {
   'index.js': { gzip: 15 * 1024, label: 'core ESM' },
-  'loader/viceme.min.js': { gzip: 8 * 1024, label: 'CDN loader' },
+  'viceme.min.js': { gzip: 8 * 1024, label: 'CDN loader' },
   'testing.js': { gzip: 12 * 1024, label: 'testing adapter' },
 };
 

@@ -58,8 +58,8 @@ for (const unreleased of ['danmaku', 'payment']) {
     .catch(() => {});
 }
 
-await access(join(distDir, 'loader', 'viceme.min.js'), constants.R_OK).catch(() =>
-  failures.push('CDN loader dist/loader/viceme.min.js missing'),
+await access(join(distDir, 'viceme.min.js'), constants.R_OK).catch(() =>
+  failures.push('CDN loader dist/viceme.min.js missing'),
 );
 
 const versionSource = await readFile(join(sdkDir, 'src', 'version.ts'), 'utf8');

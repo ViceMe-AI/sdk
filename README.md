@@ -26,7 +26,7 @@ pnpm add @viceme-ai/sdk
 <div id="viceme-danmaku"></div>
 <script
   defer
-  src="https://cdn.viceme.cn/sdk/v1/viceme.min.js"
+  src="https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js"
   integrity="sha384-..."
   crossorigin="anonymous"
   data-viceme-work="wrk_public_xxx"
@@ -41,7 +41,7 @@ pnpm add @viceme-ai/sdk
 
 ```html
 <script type="module">
-  import { createViceMe } from 'https://cdn.viceme.cn/sdk/1.0.0/index.js';
+  import { createViceMe } from 'https://s3.viceme.cn/viceme-sdk/1.0.0/index.js';
 
   const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
   await client.ready();
@@ -123,11 +123,12 @@ contracts/        public API contract snapshots (added in B0.2)
 
 ```bash
 pnpm install
-pnpm check   # format + lint + typecheck + test + build + browser tests + tarball audit
+pnpm check   # format + lint + typecheck + contract drift + test + build + browser tests + tarball audit
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full workflow and capability
-module template.
+module template, and [docs/RELEASE.md](./docs/RELEASE.md) for the release and
+CDN promotion runbook.
 
 ## Security
 
