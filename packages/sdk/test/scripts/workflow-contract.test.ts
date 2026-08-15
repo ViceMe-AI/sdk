@@ -100,4 +100,15 @@ describe('workflow contracts', () => {
     expect(publication).not.toContain('release:gate');
     expect(publication).not.toContain('License gate');
   });
+
+  it('uses the same token-free npm Trusted Publisher flow as the CLI', () => {
+    const npmPublish = jobBlock(workflow('release.yml'), 'npm-publish');
+    expect(npmPublish).toContain('id-token: write');
+    expect(npmPublish).toContain('npm install --global npm@11.12.1');
+    expect(npmPublish).toContain('node scripts/publish-or-verify.mjs');
+    expect(npmPublish).not.toContain('environment: npm');
+    expect(npmPublish).not.toContain('NPM_TOKEN');
+    expect(npmPublish).not.toContain('NODE_AUTH_TOKEN');
+    expect(npmPublish).not.toContain('registry-url:');
+  });
 });
