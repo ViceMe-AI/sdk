@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.1.0, sha256 a9c5d56d90eb2654…)
+ * (contractVersion 0.2.0, sha256 c87a67c31e181f72…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -27,6 +27,86 @@ export interface paths {
          * @description Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS: exact registered origins only, credentials disabled.
          */
         post: operations["createWorkSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/v1/auth/wechat/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["authorizeWechat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/v1/auth/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["exchangeWechatCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/v1/follow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getFollowState"];
+        put: operations["followWorkOwner"];
+        post?: never;
+        delete: operations["unfollowWorkOwner"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/v1/access/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checkFeatureAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/v1/checkout/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createCheckoutSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -60,17 +140,80 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        ErrorBody: {
-            error: {
-                /** @enum {string} */
-                code: "CONFIG_INVALID" | "WORK_NOT_FOUND" | "ORIGIN_NOT_ALLOWED" | "CAPABILITY_DISABLED" | "SESSION_EXPIRED" | "RATE_LIMITED" | "NETWORK_TIMEOUT" | "CHECKOUT_UNAVAILABLE" | "INTERNAL_ERROR";
-                message?: string;
-                retryable?: boolean;
-                requestId?: string;
+        WorkUser: {
+            subject: string;
+            nickname: string | null;
+            /** Format: uri */
+            avatarUrl: string | null;
+        };
+        AuthAuthorizeRequest: {
+            codeChallenge: string;
+        };
+        AuthAuthorizeResponse: {
+            /** Format: uri */
+            authorizationUrl: string;
+        };
+        AuthExchangeRequest: {
+            code: string;
+            codeVerifier: string;
+        };
+        AuthExchangeResponse: {
+            token: string;
+            expiresAt: number;
+            user: components["schemas"]["WorkUser"];
+        };
+        FollowState: {
+            following: boolean;
+            /** Format: date-time */
+            followedAt: string | null;
+        };
+        AccessCheckRequest: {
+            featureKeys: string[];
+        };
+        AccessDecision: {
+            allowed: boolean;
+            /** @enum {string} */
+            reason: "OWNER" | "FOLLOWING" | "PURCHASED" | "AUTH_REQUIRED" | "FOLLOW_REQUIRED" | "PURCHASE_REQUIRED" | "FEATURE_NOT_FOUND" | "FEATURE_DISABLED" | "POLICY_UNSUPPORTED";
+            /** @enum {string|null} */
+            nextAction: "SIGN_IN" | "FOLLOW" | "CHECKOUT" | null;
+        };
+        AccessCheckResponse: {
+            decisions: {
+                [key: string]: components["schemas"]["AccessDecision"];
             };
+        };
+        CheckoutRequest: {
+            /**
+             * @default zh-CN
+             * @enum {string}
+             */
+            locale: "zh-CN" | "en-US";
+            /** Format: uri */
+            returnUrl?: string;
+        };
+        CheckoutResponse: {
+            /** Format: uri */
+            checkoutUrl: string;
+            alreadyOwned: boolean;
+        };
+        ErrorBody: {
+            statusCode: number;
+            /** @enum {string} */
+            code: "CONFIG_INVALID" | "WORK_NOT_FOUND" | "ORIGIN_NOT_ALLOWED" | "CAPABILITY_DISABLED" | "SESSION_EXPIRED" | "AUTH_REQUIRED" | "SDK_AUTH_CODE_INVALID" | "RETURN_URL_NOT_ALLOWED" | "RATE_LIMITED" | "NETWORK_TIMEOUT" | "CHECKOUT_UNAVAILABLE" | "INTERNAL_ERROR";
+            message: string;
+            requestId: string;
         };
     };
     responses: {
+        /** @description Public request rejected. */
+        PublicError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorBody"];
+            };
+        };
         /** @description Invalid configuration. */
         ValidationError: {
             headers: {
@@ -152,6 +295,172 @@ export interface operations {
             403: components["responses"]["OriginNotAllowed"];
             404: components["responses"]["WorkNotFound"];
             429: components["responses"]["RateLimited"];
+            "5xx": components["responses"]["InternalError"];
+        };
+    };
+    authorizeWechat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthAuthorizeRequest"];
+            };
+        };
+        responses: {
+            /** @description Hosted WeChat authorization URL. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthAuthorizeResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+            "5xx": components["responses"]["InternalError"];
+        };
+    };
+    exchangeWechatCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthExchangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Authenticated work session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthExchangeResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+            "5xx": components["responses"]["InternalError"];
+        };
+    };
+    getFollowState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current follow state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowState"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    followWorkOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Followed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowState"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    unfollowWorkOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unfollowed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowState"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    checkFeatureAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Access decisions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessCheckResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    createCheckoutSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutRequest"];
+            };
+        };
+        responses: {
+            /** @description First-party checkout URL resolved from the bound product. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
             "5xx": components["responses"]["InternalError"];
         };
     };

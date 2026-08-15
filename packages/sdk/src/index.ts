@@ -1,9 +1,8 @@
 /**
  * `@viceme-ai/sdk` public entry.
  *
- * Production consumers get exactly `createViceMe` plus types. Test injection
- * lives under `@viceme-ai/sdk/testing`. Capability subpaths (danmaku, payment)
- * are added only when the capability is real.
+ * Production consumers get `createViceMe` plus public types. Test injection
+ * lives under `@viceme-ai/sdk/testing`.
  */
 
 import { createFetchTransport } from './transport/transport.ts';
@@ -13,6 +12,19 @@ import { ViceMeError, isViceMeError, type ViceMeErrorCode } from './core/errors.
 import type { ViceMeClient, ViceMeMountedInstance } from './core/client.ts';
 import type { ViceMeRegion, ViceMeConfig } from './core/config.ts';
 import type { ViceMeClientState } from './core/lifecycle.ts';
+import type {
+  AccessCapability,
+  AccessDecision,
+  AccessReason,
+  AuthCapability,
+  AuthState,
+  CheckoutCapability,
+  CheckoutOptions,
+  CheckoutResult,
+  FollowCapability,
+  FollowState,
+} from './core/capabilities.ts';
+import type { WorkUser } from './session/session.ts';
 import { SDK_VERSION, API_MAJOR } from './version.ts';
 
 export { ViceMeError, isViceMeError, SDK_VERSION, API_MAJOR, resolveApiBaseUrl };
@@ -23,6 +35,17 @@ export type {
   ViceMeRegion,
   ViceMeClientState,
   ViceMeErrorCode,
+  AccessCapability,
+  AccessDecision,
+  AccessReason,
+  AuthCapability,
+  AuthState,
+  CheckoutCapability,
+  CheckoutOptions,
+  CheckoutResult,
+  FollowCapability,
+  FollowState,
+  WorkUser,
 };
 
 /**
@@ -37,8 +60,9 @@ export type {
  */
 export function createViceMe(config: unknown): ViceMeClient {
   const validated = validatePublicConfig(config);
+  const apiBaseUrl = resolveApiBaseUrl(validated.region);
   const transport = createFetchTransport({
-    apiBaseUrl: resolveApiBaseUrl(validated.region),
+    apiBaseUrl,
   });
-  return new ViceMeClientImpl({ config: validated, transport });
+  return new ViceMeClientImpl({ config: validated, transport, apiBaseUrl });
 }

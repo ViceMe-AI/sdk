@@ -13,7 +13,7 @@
  */
 
 import { ViceMeError } from '../core/errors.ts';
-import type { Transport } from '../transport/transport.ts';
+import type { Transport, TransportRequest, TransportResponse } from '../transport/transport.ts';
 import type { components } from '../generated/public-contract.ts';
 
 /**
@@ -36,6 +36,13 @@ export interface WorkSessionSnapshot {
   token?: string;
   /** Epoch milliseconds when the token expires, when provided by the server. */
   expiresAt?: number;
+  user?: WorkUser;
+}
+
+export interface WorkUser {
+  subject: string;
+  nickname: string | null;
+  avatarUrl: string | null;
 }
 
 export interface SessionManagerOptions {
@@ -139,6 +146,33 @@ export class SessionManager {
         this.#pending = undefined;
       });
     return this.#pending;
+  }
+
+  async request(
+    request: Omit<TransportRequest, 'authorization' | 'signal'>,
+  ): Promise<TransportResponse> {
+    const snapshot = await this.establish();
+    if (!snapshot.token) throw malformedSessionResponse();
+    return this.#options.transport.request({
+      ...request,
+      authorization: snapshot.token,
+      signal: this.#options.signal,
+    });
+  }
+
+  authenticate(input: { token: string; expiresAt: number; user: WorkUser }): void {
+    if (!this.#snapshot) throw malformedSessionResponse();
+    this.#snapshot = {
+      ...this.#snapshot,
+      token: input.token,
+      expiresAt: input.expiresAt,
+      user: input.user,
+    };
+  }
+
+  async signOut(): Promise<void> {
+    this.invalidate();
+    await this.establish();
   }
 
   /** Drop the token; next `establish()` re-authenticates. */

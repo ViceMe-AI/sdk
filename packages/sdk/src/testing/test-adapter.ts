@@ -122,6 +122,7 @@ export function createTestViceMe(options: CreateTestViceMeOptions): ViceMeClient
   return new ViceMeClientImpl({
     config: { workKey: options.workKey, region: options.region, signal: options.signal },
     transport: options.transport,
+    apiBaseUrl: 'https://api.test/v1',
     ...(options.now !== undefined ? { now: options.now } : {}),
   });
 }
