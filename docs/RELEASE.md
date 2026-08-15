@@ -6,16 +6,12 @@ documents _how to run it_.
 
 ## Prerequisites (one-time, owner permissions)
 
-- [ ] GitHub environments `npm` (publication) and `cdn` (S3 writes), each
-      with required reviewers.
-- [ ] npm bootstrap and Trusted Publisher completed:
-  - before `@viceme-ai/sdk` exists, add a short-lived granular `NPM_TOKEN` to
-    the GitHub `npm` environment for the first publication;
-  - immediately after that publication, configure Trusted Publisher for
-    repository `ViceMe-AI/sdk`, workflow `release.yml`, environment
-    `npm`, then delete the GitHub secret and revoke the npm token;
-  - every later publication is OIDC-only, and the release script fails closed
-    if the bootstrap token is still present.
+- [ ] GitHub environment `cdn` exists for S3 publication.
+- [ ] npm Trusted Publisher is configured exactly like the CLI release:
+      repository `ViceMe-AI/sdk`, workflow `release.yml`, with no GitHub
+      Environment restriction. The package bootstrap has completed; normal
+      releases are OIDC-only and must not expose an `NPM_TOKEN` or
+      `NODE_AUTH_TOKEN` to the workflow.
 - [ ] Release App (`RELEASE_APP_ID` var + `RELEASE_APP_PRIVATE_KEY` secret)
       installed with repository Contents write access. It commits generated
       version and changelog files to protected `dev`; PR updates use the
@@ -67,9 +63,8 @@ The release flow follows the same two-workflow state machine as the CLI:
    `@viceme-ai/sdk@<version>` is created only after the release-specific
    forbidden-pattern scan and full quality gate pass at that SHA.
 3. **npm**: pinned OIDC-capable npm CLI (`npm@11.12.1`), verified OIDC
-   context, `publish-or-verify.mjs`. The first package creation may use the
-   short-lived `NPM_TOKEN`; once the package exists the script rejects that
-   token and requires Trusted Publisher OIDC. Convergent:
+   context, and token-free `publish-or-verify.mjs`, matching the CLI.
+   Convergent:
    already published with matching integrity = success; different
    integrity = fail; not published = `npm publish --provenance`. The
    stable `latest` dist-tag moves forward only. SDK releases never generate
