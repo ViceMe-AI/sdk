@@ -9,19 +9,22 @@
  *     at it (the cli moves latest forward; here we fail closed instead);
  *   - prerelease versions (x.y.z-next.N from Changesets pre mode) are valid.
  *
- * Flow (no tokens: OIDC trusted publishing only):
- *   1. npm pack --dry-run locally -> integrity for the exact package id;
- *   2. npm view <id> dist.integrity:
+ * Flow (OIDC, with a fail-closed one-time package bootstrap token):
+ *   1. Resolve package existence and enforce the authentication boundary:
+ *        package absent  -> NPM_TOKEN required for this first publish only;
+ *        package present -> NPM_TOKEN forbidden, Trusted Publisher OIDC only;
+ *   2. npm pack --dry-run locally -> integrity for the exact package id;
+ *   3. npm view <id> dist.integrity:
  *        already published, same integrity  -> verify dist-tags, done (0);
  *        already published, other integrity -> refuse (immutable);
  *        not found                          -> npm publish --provenance;
- *   3. read the published integrity back (bounded retries) and require a
+ *   4. read the published integrity back (bounded retries) and require a
  *      match; then enforce the dist-tag policy.
  */
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as wait } from 'node:timers/promises';
-import { decideMutableTagMove } from './lib/release-policy.mjs';
+import { decideMutableTagMove, decideNpmPublicationAuth } from './lib/release-policy.mjs';
 
 const registry = 'https://registry.npmjs.org';
 const registryArguments = [`--registry=${registry}`, `--@viceme-ai:registry=${registry}`];
@@ -39,6 +42,23 @@ const packageID = `${packageDocument.name}@${packageDocument.version}`;
 // by every step). Flipping it to `latest` at 1.0.0 changes publish AND all
 // verification consistently.
 const distTag = process.env.DIST_TAG ?? 'next';
+
+function packageExistsOnRegistry() {
+  const result = viewJson(packageDocument.name, 'name');
+  if (result.status === 0) {
+    const publishedName = JSON.parse(result.stdout);
+    if (publishedName !== packageDocument.name) {
+      throw new Error(
+        `npm returned unexpected package identity ${JSON.stringify(publishedName)} for ${packageDocument.name}`,
+      );
+    }
+    return true;
+  }
+  if (isNotFound(`${result.stdout}\n${result.stderr}`)) return false;
+  throw new Error(
+    `could not safely determine whether ${packageDocument.name} exists:\n${result.stdout}\n${result.stderr}`,
+  );
+}
 
 function run(command, arguments_, inherit = true) {
   const result = spawnSync(command, arguments_, {
@@ -66,6 +86,15 @@ function viewJson(spec, field) {
 function isNotFound(output) {
   return /E404|not found|not exist/i.test(output);
 }
+
+const authDecision = decideNpmPublicationAuth({
+  packageExists: packageExistsOnRegistry(),
+  bootstrapTokenPresent: Boolean(process.env.NODE_AUTH_TOKEN?.trim()),
+});
+if (!authDecision.allowed) {
+  throw new Error(`npm publication credential policy failed: ${authDecision.reason}`);
+}
+process.stdout.write(`npm publication auth: ${authDecision.mode}\n`);
 
 async function readPublishedIntegrity() {
   // npm can accept a publish before the public metadata endpoint exposes it;
