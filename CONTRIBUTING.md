@@ -23,6 +23,8 @@ pnpm typecheck     # tsc --noEmit for packages
 pnpm test          # vitest unit tests
 pnpm test:browser  # Playwright fixture tests (local dist + mocked public API)
 pnpm pack:check    # tarball content audit + import smoke from the real tarball
+pnpm contracts:generate # snapshot -> generated TS types + contract manifest
+pnpm contracts:check   # drift gate: committed types/manifest must match snapshot
 pnpm check         # everything above, in CI order
 ```
 

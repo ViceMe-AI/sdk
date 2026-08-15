@@ -1,0 +1,176 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ViceMe Public Capabilities API",
+    "version": "0.1.0",
+    "summary": "Public, unauthenticated-visitor endpoints consumed by the ViceMe browser SDK.",
+    "description": "BASELINE SNAPSHOT (sdk-baseline): documents exactly what the SDK core (B0.1) consumes. The authority for this contract is the Shop API; this file will be replaced verbatim by the first Shop-generated export of /public/v1/** (see contracts/README.md). Compatibility rules follow public-sdk.md §12.3."
+  },
+  "servers": [
+    { "url": "https://api.viceme.cn", "description": "CN region public API" },
+    { "url": "https://api.viceme.ai", "description": "GLOBAL region public API" }
+  ],
+  "tags": [{ "name": "work-sessions", "description": "Public visitor sessions" }],
+  "paths": {
+    "/public/v1/work-sessions": {
+      "post": {
+        "tags": ["work-sessions"],
+        "operationId": "createWorkSession",
+        "summary": "Establish a public visitor session for a Work",
+        "description": "Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS: exact registered origins only, credentials disabled.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateWorkSessionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Session established.",
+            "headers": {
+              "x-request-id": {
+                "schema": { "type": "string" },
+                "description": "Server request id for support correlation."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/WorkSession" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "403": { "$ref": "#/components/responses/OriginNotAllowed" },
+          "404": { "$ref": "#/components/responses/WorkNotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "5xx": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "WorkKey": {
+        "type": "string",
+        "pattern": "^wrk_[A-Za-z0-9_-]{4,124}$",
+        "description": "Public opaque work key."
+      },
+      "CapabilityName": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{1,31}$",
+        "description": "Enabled capability name for the work."
+      },
+      "CreateWorkSessionRequest": {
+        "type": "object",
+        "required": ["workKey"],
+        "additionalProperties": false,
+        "properties": {
+          "workKey": { "$ref": "#/components/schemas/WorkKey" }
+        }
+      },
+      "WorkDescriptor": {
+        "type": "object",
+        "required": ["key", "capabilities"],
+        "additionalProperties": true,
+        "properties": {
+          "key": { "$ref": "#/components/schemas/WorkKey" },
+          "capabilities": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CapabilityName" },
+            "minItems": 0
+          }
+        }
+      },
+      "WorkSession": {
+        "type": "object",
+        "required": ["work"],
+        "additionalProperties": true,
+        "description": "Unknown additional fields are allowed and ignored by the SDK (forward compatibility).",
+        "properties": {
+          "work": { "$ref": "#/components/schemas/WorkDescriptor" },
+          "token": {
+            "type": "string",
+            "description": "Short-lived capability token; memory-only in the SDK."
+          },
+          "expiresAt": {
+            "type": "integer",
+            "description": "Epoch milliseconds when the token expires."
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "WORK_NOT_FOUND",
+                  "ORIGIN_NOT_ALLOWED",
+                  "CAPABILITY_DISABLED",
+                  "SESSION_EXPIRED",
+                  "RATE_LIMITED",
+                  "NETWORK_TIMEOUT",
+                  "CHECKOUT_UNAVAILABLE",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": { "type": "string", "maxLength": 200 },
+              "retryable": { "type": "boolean" },
+              "requestId": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Invalid configuration.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorBody" }
+          }
+        }
+      },
+      "OriginNotAllowed": {
+        "description": "Origin not registered for this work (fail closed).",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorBody" }
+          }
+        }
+      },
+      "WorkNotFound": {
+        "description": "Unknown, private, or disabled work.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorBody" }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded (retryable).",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorBody" }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Server error (retryable).",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorBody" }
+          }
+        }
+      }
+    }
+  }
+}
