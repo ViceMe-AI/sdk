@@ -10,10 +10,3 @@ export function decideMutableTagMove(options: {
   target: string;
   expectedCurrent?: string;
 }): { allowed: boolean; converged: boolean; reason: string };
-
-export function decideNpmPublicationAuth(options: {
-  packageExists: boolean;
-  bootstrapTokenPresent: boolean;
-}):
-  | { allowed: true; mode: 'bootstrap-token' | 'oidc'; reason: string }
-  | { allowed: false; reason: string };

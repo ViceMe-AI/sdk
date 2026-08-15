@@ -7,8 +7,7 @@ name: SDK release publication
 #   reviewed dev -> main promotion PR is the ONLY release entry
 #     -> immutable tag at the exact reviewed dev head
 #     -> fail-closed gates (license, forbidden patterns, full quality)
-#     -> npm publish-or-verify (OIDC; one-time token only while the package
-#        does not yet exist)
+#     -> npm publish-or-verify (Trusted Publisher OIDC, no publish token)
 #     -> GitHub release assets from the published npm tarball
 #     -> CN + GLOBAL exact-version S3 publication (environment: cdn)
 #     -> public read-back per region
@@ -169,12 +168,11 @@ jobs:
           git push origin "refs/tags/${TAG}"
 
   npm-publish:
-    name: npm publication (OIDC + one-time bootstrap)
+    name: npm publication
     needs:
       - metadata
       - tag
     runs-on: ubuntu-latest
-    environment: npm
     permissions:
       contents: read
       id-token: write
@@ -188,7 +186,6 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
       - name: Install pinned OIDC-capable npm CLI
         run: npm install --global npm@11.12.1
       - name: Verify trusted publisher OIDC context
@@ -199,11 +196,6 @@ jobs:
       - name: Build and audit the exact release artifacts
         run: pnpm build && pnpm pack:check
       - name: Publish or verify the exact npm version
-        env:
-          # One-time bootstrap only. publish-or-verify refuses this credential
-          # as soon as @viceme-ai/sdk exists, forcing every later release back
-          # onto Trusted Publisher OIDC.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node scripts/publish-or-verify.mjs
 
   assets:
