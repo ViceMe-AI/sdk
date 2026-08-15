@@ -306,14 +306,9 @@ jobs:
         env:
           FEISHU_RELEASE_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_MODEL: ${{ secrets.AI_MODEL }}
-          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
         run: |
-          # No silent defaults: every integration value must be configured.
           test -n "$FEISHU_RELEASE_WEBHOOK" || { echo "::error::FEISHU_RELEASE_WEBHOOK is required"; exit 1; }
           test -n "$AI_API_KEY" || { echo "::error::AI_API_KEY is required"; exit 1; }
-          test -n "$AI_MODEL" || { echo "::error::AI_MODEL is required"; exit 1; }
-          test -n "$AI_BASE_URL" || { echo "::error::AI_BASE_URL is required"; exit 1; }
       - name: Resolve release range
         id: range
         env:
@@ -343,8 +338,8 @@ jobs:
           webhook: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
           mode: release-changelog
           ai_api_key: ${{ secrets.AI_API_KEY }}
-          ai_model: ${{ secrets.AI_MODEL }}
-          ai_base_url: ${{ secrets.AI_BASE_URL }}
+          ai_model: ${{ secrets.AI_MODEL || 'deepseek-chat' }}
+          ai_base_url: ${{ secrets.AI_BASE_URL || 'https://api.deepseek.com/v1' }}
           service_name: viceme-sdk
           tag_name: ${{ needs.metadata.outputs.tag }}
           commits: ${{ steps.range.outputs.commits }}

@@ -48,6 +48,18 @@ describe('workflow contracts', () => {
     }
   });
 
+  it('release notification matches the CLI AI configuration defaults', () => {
+    const notify = jobBlock(workflow('release.yml'), 'notify');
+    expect(notify).toContain('FEISHU_RELEASE_WEBHOOK is required');
+    expect(notify).toContain('AI_API_KEY is required');
+    expect(notify).toContain("ai_model: ${{ secrets.AI_MODEL || 'deepseek-chat' }}");
+    expect(notify).toContain(
+      "ai_base_url: ${{ secrets.AI_BASE_URL || 'https://api.deepseek.com/v1' }}",
+    );
+    expect(notify).not.toContain('AI_MODEL is required');
+    expect(notify).not.toContain('AI_BASE_URL is required');
+  });
+
   it('S3 publication uses the dedicated viceme-sdk bucket prefix publicly', () => {
     const text = workflow('release.yml');
     expect(text).toContain('https://s3.viceme.cn/viceme-sdk/${VERSION}/');
