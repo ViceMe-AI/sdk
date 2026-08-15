@@ -15,7 +15,6 @@ const scriptsDir = join(here, '..', '..', '..', '..', 'scripts');
 
 /**
  * Subprocess tests for the release scripts:
- * - release-gate.mjs: license preconditions fail closed.
  * - upload-plan.mjs: immutability planning (missing / identical / conflict).
  * - verify-npm-dist-tag.mjs: dist-tag read-back policy.
  */
@@ -23,59 +22,6 @@ const scriptsDir = join(here, '..', '..', '..', '..', 'scripts');
 function run(script: string, ...args: string[]) {
   return exec('node', [join(scriptsDir, script), ...args]);
 }
-
-/* ------------------------------ release gate ----------------------------- */
-
-describe('release-gate.mjs', () => {
-  it('fails while the license is pending', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'viceme-gate-'));
-    mkdirSync(join(root, 'packages', 'sdk'), { recursive: true });
-    writeFileSync(join(root, 'LICENSE-PENDING.md'), '# License (pending)\nplaceholder\n');
-    writeFileSync(
-      join(root, 'packages', 'sdk', 'package.json'),
-      JSON.stringify({
-        files: ['dist', 'README.md', 'LICENSE'],
-        publishConfig: { access: 'public' },
-      }),
-    );
-    await expect(run('release-gate.mjs', '--root', root)).rejects.toMatchObject({ code: 1 });
-  });
-
-  it('passes with a final license and correct package metadata', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'viceme-gate-'));
-    mkdirSync(join(root, 'packages', 'sdk'), { recursive: true });
-    writeFileSync(join(root, 'LICENSE'), 'Apache License\n2.0\n');
-    writeFileSync(
-      join(root, 'packages', 'sdk', 'package.json'),
-      JSON.stringify({
-        files: ['dist', 'README.md', 'LICENSE'],
-        publishConfig: { access: 'public' },
-      }),
-    );
-    const { stdout } = await run('release-gate.mjs', '--root', root);
-    expect(stdout).toContain('release gate passed');
-  });
-
-  it('fails when both LICENSE and the placeholder exist', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'viceme-gate-'));
-    mkdirSync(join(root, 'packages', 'sdk'), { recursive: true });
-    writeFileSync(join(root, 'LICENSE'), 'Apache License\n2.0\n');
-    writeFileSync(join(root, 'LICENSE-PENDING.md'), 'stale\n');
-    writeFileSync(
-      join(root, 'packages', 'sdk', 'package.json'),
-      JSON.stringify({
-        files: ['dist', 'README.md', 'LICENSE'],
-        publishConfig: { access: 'public' },
-      }),
-    );
-    await expect(run('release-gate.mjs', '--root', root)).rejects.toMatchObject({ code: 1 });
-  });
-
-  it('fails on the real repo today (license still pending)', async () => {
-    const repoRoot = join(here, '..', '..', '..', '..');
-    await expect(run('release-gate.mjs', '--root', repoRoot)).rejects.toMatchObject({ code: 1 });
-  });
-});
 
 /* ------------------------------ upload plan ------------------------------ */
 

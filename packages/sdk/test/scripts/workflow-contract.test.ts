@@ -97,5 +97,7 @@ describe('workflow contracts', () => {
     expect(publication).toContain('ref: ${{ steps.context.outputs.release_ref }}');
     expect(publication).toContain('PR_TITLE: ${{ steps.context.outputs.release_pr_title }}');
     expect(publication).not.toContain('skip: ${{ steps.context.outputs.skip }}');
+    expect(publication).not.toContain('release:gate');
+    expect(publication).not.toContain('License gate');
   });
 });

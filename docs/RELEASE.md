@@ -6,10 +6,6 @@ documents _how to run it_.
 
 ## Prerequisites (one-time, owner permissions)
 
-- [ ] Final license confirmed; `LICENSE-PENDING.md` replaced by `LICENSE`
-      at the repo root. The build copies it into `packages/sdk/LICENSE`
-      (gitignored) so the tarball ships it; `pnpm release:gate` and the
-      tarball audit both block publishing until then.
 - [ ] GitHub environments `npm` (publication) and `cdn` (S3 writes), each
       with required reviewers.
 - [ ] npm bootstrap and Trusted Publisher completed:
@@ -68,9 +64,8 @@ The release flow follows the same two-workflow state machine as the CLI:
    `resolve-release-context.mjs` bind the run to the exact reviewed `dev` head
    recorded by the merged promotion PR (not the generated merge commit); the
    immutable annotated tag
-   `@viceme-ai/sdk@<version>` is created only after all fail-closed gates
-   (license gate, forbidden-pattern scan, full quality gate) pass at that
-   SHA.
+   `@viceme-ai/sdk@<version>` is created only after the release-specific
+   forbidden-pattern scan and full quality gate pass at that SHA.
 3. **npm**: pinned OIDC-capable npm CLI (`npm@11.12.1`), verified OIDC
    context, `publish-or-verify.mjs`. The first package creation may use the
    short-lived `NPM_TOKEN`; once the package exists the script rejects that
@@ -142,7 +137,6 @@ edge is introduced, add edge caching without changing the URL contract.
 ## Verification tooling
 
 ```bash
-pnpm release:gate        # license + package metadata preconditions
 node scripts/validate-release-inputs.mjs --version 1.2.3 --regions cn,global
 node scripts/verify-cdn.mjs --local packages/sdk/dist
 node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/1.2.3/

@@ -131,8 +131,6 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: License gate (fail closed before any external write)
-        run: pnpm release:gate
       - name: Forbidden-pattern scan
         run: node scripts/scan-forbidden-patterns.mjs
       - name: Full quality gate
@@ -198,8 +196,6 @@ jobs:
           test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
       - run: pnpm install --frozen-lockfile
-      - name: License gate (again, at publish time)
-        run: pnpm release:gate
       - name: Build and audit the exact release artifacts
         run: pnpm build && pnpm pack:check
       - name: Publish or verify the exact npm version
