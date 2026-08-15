@@ -33,23 +33,23 @@ function jobBlock(text: string, job: string): string {
 }
 
 describe('workflow contracts', () => {
-  it('release assets job receives the recovery state (needs includes context)', () => {
-    const assets = jobBlock(workflow('release-package.yml'), 'assets');
+  it('release assets job receives the recovery state from metadata', () => {
+    const assets = jobBlock(workflow('release.yml'), 'assets');
     expect(assets).toContain('needs:');
-    expect(assets).toContain('- context');
     expect(assets).toContain('- metadata');
     expect(assets).toContain('- npm-publish');
+    expect(assets).toContain('RECOVERY: ${{ needs.metadata.outputs.recovery }}');
   });
 
   it('release notification depends on npm, assets, and both S3 regions', () => {
-    const notify = jobBlock(workflow('release-package.yml'), 'notify');
+    const notify = jobBlock(workflow('release.yml'), 'notify');
     for (const job of ['npm-publish', 'assets', 's3-publication']) {
       expect(notify).toContain(`- ${job}`);
     }
   });
 
   it('S3 publication uses the dedicated viceme-sdk bucket prefix publicly', () => {
-    const text = workflow('release-package.yml');
+    const text = workflow('release.yml');
     expect(text).toContain('https://s3.viceme.cn/viceme-sdk/${VERSION}/');
     expect(text).toContain('https://s3.viceme.ai/viceme-sdk/${VERSION}/');
     expect(text).not.toContain('/sdk/${VERSION}');
@@ -58,7 +58,8 @@ describe('workflow contracts', () => {
 
   it('no floating action version tags anywhere', () => {
     for (const name of [
-      'release-package.yml',
+      'release-pr.yml',
+      'release.yml',
       'promote-cdn.yml',
       'release-assets.yml',
       'quality-gate.yml',
@@ -72,15 +73,29 @@ describe('workflow contracts', () => {
     }
   });
 
-  it('release entry is the dev-to-main promotion, not direct main Version PRs', () => {
-    const text = workflow('release-package.yml');
-    // Version PRs are a dev-branch concern.
-    expect(text).toContain(
-      "name: Version Packages PR (Changesets via Release App, no publishing)\n    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'",
+  it('release preparation matches the CLI authority split', () => {
+    const preparation = workflow('release-pr.yml');
+    expect(preparation).toContain('name: SDK release preparation');
+    expect(preparation).toContain('permission-contents: write');
+    expect(preparation).not.toContain('permission-pull-requests');
+    expect(preparation).toContain('run: pnpm release:prepare');
+    expect(preparation).toContain(
+      'run: pnpm exec prettier --write packages/sdk/package.json packages/sdk/CHANGELOG.md packages/sdk/src/version.ts',
     );
-    // The release chain on main only resolves promotion merges / recovery.
-    expect(text).toContain(
-      "if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.tag != ''",
-    );
+    expect(preparation).toContain('release preparation must produce a stable semantic version');
+    expect(preparation).not.toContain('.changeset');
+    expect(preparation).toContain('GH_TOKEN: ${{ github.token }}');
+    expect(preparation).not.toContain('changesets/action@');
+  });
+
+  it('release publication runs only for main promotion merges or recovery', () => {
+    const publication = workflow('release.yml');
+    expect(publication).toContain('branches: [main]');
+    expect(publication).toContain('DIST_TAG: latest');
+    expect(publication).not.toContain('DIST_TAG: next');
+    expect(publication).not.toContain('branches: [main, dev]');
+    expect(publication).toContain('ref: ${{ steps.context.outputs.release_ref }}');
+    expect(publication).toContain('PR_TITLE: ${{ steps.context.outputs.release_pr_title }}');
+    expect(publication).not.toContain('skip: ${{ steps.context.outputs.skip }}');
   });
 });

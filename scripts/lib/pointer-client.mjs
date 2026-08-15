@@ -2,7 +2,7 @@
  * Shared pointer read/poll helpers for the stable-alias writers.
  */
 
-const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const STABLE_SEMVER = /^\d+\.\d+\.\d+$/;
 
 /** fetch with a per-request timeout of at most `budgetMs`. */
 function fetchBudgeted(url, budgetMs) {
@@ -62,7 +62,7 @@ export async function readPointerState(url) {
     return { kind: 'error', detail: `HTTP ${response.status}` };
   }
   const text = (await response.text()).trim();
-  if (!SEMVER.test(text)) {
+  if (!STABLE_SEMVER.test(text)) {
     return { kind: 'error', detail: `unparseable pointer body '${text.slice(0, 40)}'` };
   }
   return { kind: 'value', value: text };

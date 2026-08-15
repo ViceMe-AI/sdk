@@ -4,11 +4,8 @@
  */
 
 /**
- * Compare two semver strings (core + optional prerelease).
+ * Compare two stable semver strings.
  * Returns >0 when a > b, 0 when equal, <0 when a < b.
- * Prerelease ordering follows the semver spec subset we publish
- * (numeric identifiers compare numerically, others lexically; a release
- * without a prerelease is greater than the same core with one).
  */
 export function compareSemver(a, b) {
   const pa = parse(a);
@@ -17,40 +14,15 @@ export function compareSemver(a, b) {
     throw new Error(`compareSemver: invalid input ${a} vs ${b}`);
   }
   for (let i = 0; i < 3; i += 1) {
-    if (pa.core[i] !== pb.core[i]) return pa.core[i] - pb.core[i];
-  }
-  if (pa.pre === null && pb.pre === null) return 0;
-  if (pa.pre === null) return 1;
-  if (pb.pre === null) return -1;
-  const len = Math.max(pa.pre.length, pb.pre.length);
-  for (let i = 0; i < len; i += 1) {
-    const x = pa.pre[i];
-    const y = pb.pre[i];
-    if (x === undefined) return -1;
-    if (y === undefined) return 1;
-    const xn = /^\d+$/.test(x);
-    const yn = /^\d+$/.test(y);
-    if (xn && yn) {
-      const diff = Number(x) - Number(y);
-      if (diff !== 0) return diff;
-    } else if (xn) {
-      return -1;
-    } else if (yn) {
-      return 1;
-    } else if (x !== y) {
-      return x < y ? -1 : 1;
-    }
+    if (pa[i] !== pb[i]) return pa[i] - pb[i];
   }
   return 0;
 }
 
 function parse(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(version ?? '');
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version ?? '');
   if (!match) return null;
-  return {
-    core: [Number(match[1]), Number(match[2]), Number(match[3])],
-    pre: match[4] === undefined ? null : match[4].split('.'),
-  };
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
 /**
@@ -113,5 +85,44 @@ export function decideMutableTagMove({ mode, current, target, expectedCurrent })
     allowed: false,
     converged: false,
     reason: `refusing to move pointer backward ${current} -> ${target}; use explicit rollback mode`,
+  };
+}
+
+/**
+ * Enforce the one-time npm package bootstrap boundary.
+ *
+ * npm cannot configure a Trusted Publisher before the package exists. The
+ * first publication may therefore use a short-lived granular token, but that
+ * credential must be removed immediately afterwards. Once the package exists,
+ * OIDC is the only accepted publication identity.
+ */
+export function decideNpmPublicationAuth({ packageExists, bootstrapTokenPresent }) {
+  if (!packageExists) {
+    if (!bootstrapTokenPresent) {
+      return {
+        allowed: false,
+        reason:
+          '@viceme-ai/sdk does not exist yet; add the one-time NPM_TOKEN to the npm environment',
+      };
+    }
+    return {
+      allowed: true,
+      mode: 'bootstrap-token',
+      reason: 'authorizing the first package publication with the one-time bootstrap token',
+    };
+  }
+
+  if (bootstrapTokenPresent) {
+    return {
+      allowed: false,
+      reason:
+        '@viceme-ai/sdk already exists; delete NPM_TOKEN and configure Trusted Publisher OIDC',
+    };
+  }
+
+  return {
+    allowed: true,
+    mode: 'oidc',
+    reason: 'authorizing publication with Trusted Publisher OIDC',
   };
 }

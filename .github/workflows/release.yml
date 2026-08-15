@@ -1,14 +1,14 @@
-name: Release Package
+name: SDK release publication
 
 # Authoritative release state machine for @viceme-ai/sdk, following the
-# reviewed ViceMe-AI/cli baseline (Release App, OIDC npm publication, dual
-# region S3, Feishu notification) with the SDK's own artifact steps:
+# reviewed ViceMe-AI/cli baseline (immutable tag, OIDC npm publication,
+# dual-region S3, Feishu notification) with the SDK's own artifact steps:
 #
-#   dev flow: Changesets Version Packages PRs target dev (Release App
-#     token); a reviewed dev -> main promotion PR is the ONLY release entry
-#     -> immutable tag at the exact promotion merge SHA
+#   reviewed dev -> main promotion PR is the ONLY release entry
+#     -> immutable tag at the exact reviewed dev head
 #     -> fail-closed gates (license, forbidden patterns, full quality)
-#     -> npm publish-or-verify (OIDC, no tokens)
+#     -> npm publish-or-verify (OIDC; one-time token only while the package
+#        does not yet exist)
 #     -> GitHub release assets from the published npm tarball
 #     -> CN + GLOBAL exact-version S3 publication (environment: cdn)
 #     -> public read-back per region
@@ -21,16 +21,20 @@ name: Release Package
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag to recover, e.g. @viceme-ai/sdk@0.1.1-next.0'
-        required: false
+        description: 'Existing stable release tag to recover, e.g. @viceme-ai/sdk@0.2.0'
+        required: true
         type: string
 
+permissions:
+  contents: read
+  pull-requests: read
+
 env:
-  DIST_TAG: next
+  DIST_TAG: latest
 
 concurrency:
   # Serialize releases: npm dist-tags and the alias pointer have no CAS.
@@ -38,147 +42,75 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  version-pr:
-    name: Version Packages PR (Changesets via Release App, no publishing)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      # The Release App token authors the version commits and the Version
-      # Packages PR: branches pushed by GITHUB_TOKEN would not reliably
-      # trigger the required pull_request Quality Gate.
-      - id: release-app-token
-        name: Create repository-scoped Release App token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          token: ${{ steps.release-app-token.outputs.token }}
-      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
-        with: { version: 11 }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: changesets/action@8eb63fb4cfc7f9643537c7d39d0b68c835012a19 # v1.5.3
-        with:
-          version: pnpm release:version
-        env:
-          GITHUB_TOKEN: ${{ steps.release-app-token.outputs.token }}
-
-  promotion-pr:
-    name: dev -> main release promotion PR (Release App)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - id: release-app-token
-        name: Create repository-scoped Release App token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          token: ${{ steps.release-app-token.outputs.token }}
-          fetch-depth: 0
-      - name: Open or update the promotion PR when dev carries a new version
-        env:
-          GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          DEV_VERSION="$(node -p "require('./packages/sdk/package.json').version")"
-          MAIN_VERSION="$(git show origin/main:packages/sdk/package.json | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")"
-          if [ "$DEV_VERSION" = "$MAIN_VERSION" ]; then
-            echo "dev has no unreleased version (${DEV_VERSION}); no promotion PR"
-            exit 0
-          fi
-          TAG="@viceme-ai/sdk@${DEV_VERSION}"
-          BODY_FILE="${RUNNER_TEMP}/promotion.md"
-          {
-            echo "## Release promotion ${TAG}"
-            echo
-            echo "Merging this reviewed PR promotes dev to main and releases **${TAG}**:"
-            echo "immutable tag, OIDC npm publication, GitHub release assets, and the"
-            echo "CN + GLOBAL viceme-sdk S3 publication run automatically on merge."
-          } > "${BODY_FILE}"
-          PR_URL="$(gh pr list --state open --base main --head dev --json url --jq '.[0].url // empty')"
-          if [ -z "${PR_URL}" ]; then
-            gh pr create --base main --head dev --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
-          else
-            gh pr edit "${PR_URL}" --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
-          fi
-
-  context:
-    name: Resolve merged dev-to-main promotion PR or recovery tag
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.tag != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      skip: ${{ steps.context.outputs.skip }}
-      recovery: ${{ steps.context.outputs.recovery }}
-      release_ref: ${{ steps.context.outputs.release_ref }}
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          ref: ${{ github.sha }}
-      - name: Resolve release context
-        id: context
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          RECOVERY_TAG: ${{ inputs.tag || '' }}
-        run: node scripts/resolve-release-context.mjs
-
   metadata:
-    name: Resolve and validate immutable release identity
-    needs: context
-    if: needs.context.outputs.skip != 'true'
+    name: Release metadata
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
       sha: ${{ steps.release.outputs.sha }}
+      recovery: ${{ steps.release.outputs.recovery }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ needs.context.outputs.release_ref }}
+          # Load the resolver from the trusted workflow revision on main.
+          ref: ${{ github.sha }}
+      - id: context
+        name: Resolve merged Release PR or explicit recovery tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_TAG: ${{ inputs.tag || '' }}
+        run: node scripts/resolve-release-context.mjs
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Normal releases publish the exact reviewed dev head. Recovery
+          # checks out an already-existing immutable release tag.
+          ref: ${{ steps.context.outputs.release_ref }}
           fetch-depth: 0
       - name: Resolve version and immutable tag binding
         id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_TITLE: ${{ steps.context.outputs.release_pr_title }}
+          RECOVERY: ${{ steps.context.outputs.recovery }}
+          REQUESTED_TAG: ${{ steps.context.outputs.requested_tag }}
         run: |
           set -euo pipefail
           VERSION="$(node -p "require('./packages/sdk/package.json').version")"
           TAG="@viceme-ai/sdk@${VERSION}"
           SHA="$(git rev-parse HEAD)"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::package.json must contain a stable semantic version, got ${VERSION}"
+            exit 1
+          fi
+          if [[ "${RECOVERY}" == "true" ]]; then
+            if [[ "${REQUESTED_TAG}" != "${TAG}" ]]; then
+              echo "::error::recovery tag ${REQUESTED_TAG} does not match package version ${TAG}"
+              exit 1
+            fi
+          elif [[ "${PR_TITLE}" != "chore(release): ${TAG}" ]]; then
+            echo "::error::Release PR title must be exactly chore(release): ${TAG}"
+            exit 1
+          fi
           git fetch origin --tags
 
           EXISTING_SHA="$(git rev-list -n 1 "${TAG}" 2>/dev/null || true)"
+          if [[ "${RECOVERY}" == "true" && -z "${EXISTING_SHA}" ]]; then
+            echo "::error::recovery requires an existing immutable tag ${TAG}"
+            exit 1
+          fi
           if [ -n "$EXISTING_SHA" ] && [ "$EXISTING_SHA" != "$SHA" ]; then
             echo "::error::immutable tag ${TAG} already points to ${EXISTING_SHA}, not ${SHA}"
             exit 1
+          fi
+          if [[ "${RECOVERY}" == "true" ]]; then
+            test "$(gh release view "${TAG}" --json isDraft --jq .isDraft)" = "false"
           fi
           {
             echo "version=${VERSION}"
             echo "tag=${TAG}"
             echo "sha=${SHA}"
+            echo "recovery=${RECOVERY}"
           } >> "$GITHUB_OUTPUT"
 
   quality:
@@ -239,7 +171,7 @@ jobs:
           git push origin "refs/tags/${TAG}"
 
   npm-publish:
-    name: npm publication (OIDC, no publish token)
+    name: npm publication (OIDC + one-time bootstrap)
     needs:
       - metadata
       - tag
@@ -258,6 +190,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+          registry-url: https://registry.npmjs.org
       - name: Install pinned OIDC-capable npm CLI
         run: npm install --global npm@11.12.1
       - name: Verify trusted publisher OIDC context
@@ -270,12 +203,16 @@ jobs:
       - name: Build and audit the exact release artifacts
         run: pnpm build && pnpm pack:check
       - name: Publish or verify the exact npm version
+        env:
+          # One-time bootstrap only. publish-or-verify refuses this credential
+          # as soon as @viceme-ai/sdk exists, forcing every later release back
+          # onto Trusted Publisher OIDC.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node scripts/publish-or-verify.mjs
 
   assets:
     name: Attach CDN assets + dist-tag read-back
     needs:
-      - context
       - metadata
       - npm-publish
     runs-on: ubuntu-latest
@@ -291,7 +228,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.metadata.outputs.version }}
-          RECOVERY: ${{ needs.context.outputs.recovery }}
+          RECOVERY: ${{ needs.metadata.outputs.recovery }}
         run: |
           # The dist-tag read-back is the immediate post-publish gate only;
           # recovery runs go straight to convergent asset attachment.

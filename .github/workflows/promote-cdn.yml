@@ -1,7 +1,7 @@
 name: Promote CDN
 
 # Stable-alias management only. Exact-version artifacts are published to
-# both regions automatically by the Release Package workflow (npm ->
+# both regions automatically by the SDK release publication workflow (npm ->
 # CN/Global S3 -> public read-back); this workflow moves the single
 # `/sdk/v1` alias pointer:
 #

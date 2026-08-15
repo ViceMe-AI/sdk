@@ -12,11 +12,19 @@ documents _how to run it_.
       tarball audit both block publishing until then.
 - [ ] GitHub environments `npm` (publication) and `cdn` (S3 writes), each
       with required reviewers.
-- [ ] `@viceme-ai` npm scope configured for OIDC trusted publishing
-      (repository `ViceMe-AI/sdk`, workflow `release-package.yml`,
-      environment `npm`). No long-lived npm tokens.
+- [ ] npm bootstrap and Trusted Publisher completed:
+  - before `@viceme-ai/sdk` exists, add a short-lived granular `NPM_TOKEN` to
+    the GitHub `npm` environment for the first publication;
+  - immediately after that publication, configure Trusted Publisher for
+    repository `ViceMe-AI/sdk`, workflow `release.yml`, environment
+    `npm`, then delete the GitHub secret and revoke the npm token;
+  - every later publication is OIDC-only, and the release script fails closed
+    if the bootstrap token is still present.
 - [ ] Release App (`RELEASE_APP_ID` var + `RELEASE_APP_PRIVATE_KEY` secret)
-      so the Version Packages PR chain triggers required checks.
+      installed with repository Contents write access. It commits generated
+      version and changelog files to protected `dev`; PR updates use the
+      workflow `GITHUB_TOKEN` and do not require Pull requests permission on
+      the App.
 - [ ] Dual-region S3 secrets (names are fixed): `VICEME_RELEASE_S3_
 {ENDPOINT,BUCKET,ACCESS_KEY_ID,SECRET_ACCESS_KEY}_{CN,GLOBAL}` plus
       `CN_S3_HTTPS_PROXY`. Each region's bucket is the dedicated
@@ -43,26 +51,34 @@ moving the alias is one atomic pointer write per region. If a CDN edge
 (`cdn.viceme.cn` / `cdn.viceme.ai`) is introduced later, keep these exact
 paths and add edge caching in front — the URL contract must not change.
 
-## Releasing an npm version (0.x -> `next` dist-tag)
+## Releasing a stable npm version
 
-The Release Package workflow is the single authoritative state machine
-(all steps bind to the reviewed Version Packages PR merge SHA):
+The release flow follows the same two-workflow state machine as the CLI:
 
-1. **Version PR**: Changesets opens/updates the **Version Packages** PR via
-   the Release App token (branches pushed by `GITHUB_TOKEN` would not
-   trigger the required pull_request checks).
-2. **Identity**: on merge, `resolve-release-context.mjs` binds the run to
-   that exact merge commit; the immutable annotated tag
+1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
+   `release-pr.yml` workflow uses the same stable-version algorithm as the CLI:
+   Conventional Commits since the latest reachable release tag select major,
+   minor, or patch; the workflow then generates the package version, runtime
+   version, and changelog. It runs the full SDK quality gate and uses the
+   Release App (Contents write only) to commit those generated files back to
+   protected `dev`. It then
+   uses `GITHUB_TOKEN` to update the same PR title and body. No additional
+   Version Packages PR is created.
+2. **Identity**: after that PR is merged, `release.yml` and
+   `resolve-release-context.mjs` bind the run to the exact reviewed `dev` head
+   recorded by the merged promotion PR (not the generated merge commit); the
+   immutable annotated tag
    `@viceme-ai/sdk@<version>` is created only after all fail-closed gates
    (license gate, forbidden-pattern scan, full quality gate) pass at that
    SHA.
 3. **npm**: pinned OIDC-capable npm CLI (`npm@11.12.1`), verified OIDC
-   context, `publish-or-verify.mjs` — no tokens anywhere. Convergent:
+   context, `publish-or-verify.mjs`. The first package creation may use the
+   short-lived `NPM_TOKEN`; once the package exists the script rejects that
+   token and requires Trusted Publisher OIDC. Convergent:
    already published with matching integrity = success; different
    integrity = fail; not published = `npm publish --provenance`. The
-   `next` dist-tag moves forward only; `latest` must never point at a
-   `next` release (flip the workflow-level `DIST_TAG` to `latest` at
-   1.0.0, same PR that exits `.changeset/pre.json` pre mode).
+   stable `latest` dist-tag moves forward only. SDK releases never generate
+   prerelease package versions such as `-next.N`.
 4. **GitHub assets**: release assets are attached from the published npm
    tarball (`fetch-npm-dist.mjs` + `attach-release-assets.mjs`),
    idempotent and immutable.
@@ -80,8 +96,8 @@ never left as a manual follow-up.
 
 ## Recovery
 
-Re-run the Release Package workflow with the `tag` input
-(`@viceme-ai/sdk@<version>`): recovery reuses the immutable tag/SHA and
+Re-run the **SDK release publication** workflow (`release.yml`) with the
+`tag` input (`@viceme-ai/sdk@<version>`): recovery reuses the immutable tag/SHA and
 re-runs every step convergently — npm (integrity match), GitHub assets
 (idempotent), and both S3 regions (immutable-put semantics). For
 asset-only repair on ANY historical version, the **Release Assets
@@ -133,7 +149,7 @@ node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/1.2.3/
 node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/v1/ --expect-version 1.2.3
 node scripts/fetch-npm-dist.mjs --version 1.2.3 --out verified-dist
 node scripts/attach-release-assets.mjs --version 1.2.3 --dry-run
-node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag next
+node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag latest
 ```
 
 Manifest digests come from `scripts/build-manifest.mjs` during the release
