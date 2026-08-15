@@ -108,7 +108,9 @@ beforeAll(async () => {
       res.writeHead(200, {
         'content-type': path === '-/aliases/v1' ? 'text/plain; charset=utf-8' : type,
         'cache-control': 'public,max-age=31536000,immutable',
-        'access-control-allow-origin': '*',
+        ...(req.headers.origin === 'https://example.com'
+          ? { 'access-control-allow-origin': '*' }
+          : {}),
       });
       res.end(body);
     } catch {
