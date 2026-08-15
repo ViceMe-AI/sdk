@@ -341,7 +341,7 @@ jobs:
           ai_model: ${{ secrets.AI_MODEL || 'deepseek-chat' }}
           ai_base_url: ${{ secrets.AI_BASE_URL || 'https://api.deepseek.com/v1' }}
           service_name: viceme-sdk
-          tag_name: ${{ needs.metadata.outputs.tag }}
+          tag_name: v${{ needs.metadata.outputs.version }}
           commits: ${{ steps.range.outputs.commits }}
           commit_count: ${{ steps.range.outputs.commit_count }}
           compare_url: ${{ steps.range.outputs.compare_url }}
