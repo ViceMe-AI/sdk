@@ -1,0 +1,52 @@
+{
+  "name": "@viceme-ai/sdk",
+  "version": "0.1.0",
+  "description": "ViceMe browser SDK: headless core, public session, and capability subpaths for static HTML, ESM, React, and Agent-generated sites.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node ../../scripts/rmrf.mjs dist test-fixtures-dist",
+    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:types && pnpm build:fixture && pnpm build:manifest",
+    "build:esm": "vite build --config vite.config.esm.ts",
+    "build:loader": "vite build --config vite.config.loader.ts",
+    "build:types": "tsc -p tsconfig.build.json",
+    "build:fixture": "vite build --config vite.config.fixture.ts",
+    "build:manifest": "node ../../scripts/build-manifest.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "pack:check": "node ../../scripts/inspect-tarball.mjs && node ../../scripts/verify-public-surface.mjs && node ../../scripts/check-size-budget.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.3.0",
+    "happy-dom": "^18.0.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.2",
+    "vitest": "^3.2.4"
+  }
+}

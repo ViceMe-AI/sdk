@@ -1,0 +1,96 @@
+/**
+ * `data-viceme-*` attribute parsing for the CDN auto-loader.
+ *
+ * The attribute set is fixed; unknown `data-viceme-*` attributes are rejected
+ * so pages can never smuggle endpoints, tokens, secrets, prices, or payment
+ * state through the loader. Parse failures never guess defaults for work,
+ * region, or target.
+ */
+
+import { configInvalid } from '../core/errors.ts';
+import type { ViceMeRegion } from '../core/config.ts';
+import { isValidRegion, isValidWorkKey } from '../core/config.ts';
+
+export type ViceMeTheme = 'light' | 'dark' | 'auto';
+
+export interface LoaderAttributes {
+  workKey: string;
+  region: ViceMeRegion;
+  /** Deduplicated feature names in declared order. */
+  features: string[];
+  /** CSS selector; required whenever features are declared. */
+  target?: string;
+  theme: ViceMeTheme;
+}
+
+const KNOWN_ATTRIBUTES: ReadonlySet<string> = new Set([
+  'data-viceme-work',
+  'data-viceme-region',
+  'data-viceme-features',
+  'data-viceme-target',
+  'data-viceme-theme',
+  // Marker for explicit opt-in when document.currentScript is unavailable.
+  'data-viceme-loader',
+]);
+
+const FEATURE_NAME_PATTERN = /^[a-z][a-z0-9-]{1,31}$/;
+const THEMES: ReadonlySet<string> = new Set(['light', 'dark', 'auto']);
+
+export function parseLoaderAttributes(element: Element): LoaderAttributes {
+  for (const name of element.getAttributeNames()) {
+    if (name.startsWith('data-viceme-') && !KNOWN_ATTRIBUTES.has(name)) {
+      throw configInvalid(`Unknown loader attribute "${name}".`);
+    }
+  }
+
+  const workKey = element.getAttribute('data-viceme-work');
+  if (!isValidWorkKey(workKey)) {
+    throw configInvalid('Loader attribute "data-viceme-work" must be a public work key ("wrk_…").');
+  }
+
+  const region = element.getAttribute('data-viceme-region');
+  if (!isValidRegion(region)) {
+    throw configInvalid('Loader attribute "data-viceme-region" must be "cn" or "global".');
+  }
+
+  const rawFeatures = element.getAttribute('data-viceme-features');
+  if (rawFeatures === null || rawFeatures.trim() === '') {
+    throw configInvalid('Loader attribute "data-viceme-features" is required.');
+  }
+  const features: string[] = [];
+  for (const part of rawFeatures.split(',')) {
+    const feature = part.trim();
+    if (feature === '') continue;
+    if (!FEATURE_NAME_PATTERN.test(feature)) {
+      throw configInvalid(`Loader feature name "${feature}" is not a valid capability name.`);
+    }
+    if (!features.includes(feature)) features.push(feature);
+  }
+  if (features.length === 0) {
+    throw configInvalid('Loader attribute "data-viceme-features" must list at least one feature.');
+  }
+
+  const target = element.getAttribute('data-viceme-target');
+  if (target === '') {
+    throw configInvalid('Loader attribute "data-viceme-target" must be a CSS selector.');
+  }
+  // Loader-mounted features are visual capabilities, so a target is required.
+  if (target === null) {
+    throw configInvalid(
+      'Loader attribute "data-viceme-target" is required when features are declared.',
+    );
+  }
+
+  const rawTheme = element.getAttribute('data-viceme-theme');
+  if (rawTheme !== null && !THEMES.has(rawTheme)) {
+    throw configInvalid('Loader attribute "data-viceme-theme" must be "light", "dark", or "auto".');
+  }
+
+  return {
+    workKey,
+    region,
+    features,
+    target,
+    theme: (rawTheme ?? 'auto') as ViceMeTheme,
+  };
+}

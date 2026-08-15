@@ -1,0 +1,167 @@
+name: Quality Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format, lint, types, unit tests, build, tarball audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build (clean -> esm -> loader -> types -> manifest)
+        run: pnpm build
+
+      - name: Tarball audit, public surface, size budget
+        run: pnpm pack:check
+
+      - name: Secret and internal-endpoint scan
+        run: node scripts/scan-forbidden-patterns.mjs
+
+      - name: Whitespace / conflict marker check
+        run: git diff --check
+
+  browser:
+    name: Browser matrix (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build artifacts under test
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter '@viceme-ai/sdk' exec playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run loader fixture tests
+        run: pnpm --filter '@viceme-ai/sdk' exec playwright test --project=${{ matrix.browser }}
+
+  fixtures:
+    name: Framework fixtures build from workspace
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK package
+        run: pnpm build
+
+      - name: Build React + Vite fixture
+        run: pnpm --filter '@viceme-ai/example-react-vite' build
+
+      - name: Build Next.js fixture
+        run: pnpm --filter '@viceme-ai/example-nextjs' build
+
+  tarball-fixtures:
+    name: Install fixtures from the real npm tarball
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack @viceme-ai/sdk
+        run: pnpm --filter '@viceme-ai/sdk' pack --pack-destination "${{ github.workspace }}"
+
+      # Build the React fixture in a standalone workspace (outside the repo)
+      # whose dependency is the real tarball — proving what an npm consumer
+      # installs, not workspace sources.
+      - name: Build the React fixture from the real tarball (standalone)
+        run: |
+          version="$(node -p "require('./packages/sdk/package.json').version")"
+          tarball="$(pwd)/viceme-ai-sdk-${version}.tgz"
+          root="$(mktemp -d)/viceme-tarball-check"
+          mkdir -p "$root"
+          cp -r examples/react-vite "$root/app"
+          # The example tsconfig extends ../../tsconfig.base.json (two levels up
+          # from the app directory = the parent of $root).
+          cp tsconfig.base.json "$(dirname "$root")/"
+          rm -rf "$root/app/node_modules"
+          cat > "$root/pnpm-workspace.yaml" <<'YAML'
+          packages:
+            - app
+          allowBuilds:
+            esbuild: true
+          YAML
+          node -e "
+            const fs = require('node:fs');
+            const path = process.argv[1] + '/app/package.json';
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            pkg.dependencies['@viceme-ai/sdk'] = 'file:' + process.argv[2];
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2));
+          " "$root" "$tarball"
+          cd "$root" && pnpm install --no-frozen-lockfile && pnpm --filter app build
