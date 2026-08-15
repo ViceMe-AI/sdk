@@ -22,9 +22,10 @@ documents _how to run it_.
       `CN_S3_HTTPS_PROXY`. Each region's bucket is the dedicated
       `viceme-sdk` bucket (never shared with Shop skill ZIPs, media, or
       installer assets); credentials must be scoped to that bucket.
-- [ ] Feishu/AI secrets: `FEISHU_BOT_WEBHOOK`, `FEISHU_RELEASE_WEBHOOK`,
-      `AI_API_KEY`, `AI_MODEL`, `AI_BASE_URL` (no defaults — the release
-      notification fails closed when any is missing).
+- [ ] Feishu/AI secrets: `FEISHU_BOT_WEBHOOK`, `FEISHU_RELEASE_WEBHOOK`, and
+      `AI_API_KEY`. `AI_MODEL` and `AI_BASE_URL` are optional overrides; like
+      the CLI release, they default to `deepseek-chat` and
+      `https://api.deepseek.com/v1`.
 
 ## Public delivery topology
 
@@ -78,8 +79,8 @@ The release flow follows the same two-workflow state machine as the CLI:
    -> fail closed; `head-bucket` first; CN calls egress through
    `CN_S3_HTTPS_PROXY`), then verified from the public S3 entries.
 6. **Notification**: the Feishu release summary fires only after npm AND
-   both S3 regions succeeded; AI changelog settings must be fully
-   configured or the job fails closed.
+   both S3 regions succeeded. The webhook and AI API key are required; model
+   and base URL use the same defaults as the CLI unless explicitly overridden.
 
 A release is DONE only when step 6 has run. Exact-version artifacts are
 never left as a manual follow-up.
