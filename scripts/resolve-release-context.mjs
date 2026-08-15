@@ -3,12 +3,11 @@
  * Resolve whether a main push is a RELEASE commit (a merged, reviewed
  * dev -> main promotion PR titled "chore(release): @viceme-ai/sdk@<v>")
  * or an ordinary commit, and bind the release to that exact merge SHA —
- * ported from the ViceMe-AI/cli baseline, adapted to the SDK's
- * Changesets-on-dev flow. Recovery runs check out an already-existing
- * immutable tag instead.
+ * ported from the ViceMe-AI/cli baseline. Recovery runs check out an
+ * already-existing immutable tag instead.
  *
  * Why: ordinary feature/doc pushes must never create immutable release tags
- * or publish; only the reviewed Version Packages PR may. Recovery runs
+ * or publish; only the reviewed dev -> main release PR may. Recovery runs
  * check out an already-existing immutable tag instead.
  *
  * Outputs (GitHub Actions `>> $GITHUB_OUTPUT`):

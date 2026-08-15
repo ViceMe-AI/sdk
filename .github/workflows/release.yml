@@ -1,11 +1,10 @@
-name: Release Package
+name: SDK release publication
 
 # Authoritative release state machine for @viceme-ai/sdk, following the
-# reviewed ViceMe-AI/cli baseline (Release App, OIDC npm publication, dual
-# region S3, Feishu notification) with the SDK's own artifact steps:
+# reviewed ViceMe-AI/cli baseline (immutable tag, OIDC npm publication,
+# dual-region S3, Feishu notification) with the SDK's own artifact steps:
 #
-#   dev flow: Changesets Version Packages PRs target dev (Release App
-#     token); a reviewed dev -> main promotion PR is the ONLY release entry
+#   reviewed dev -> main promotion PR is the ONLY release entry
 #     -> immutable tag at the exact promotion merge SHA
 #     -> fail-closed gates (license, forbidden patterns, full quality)
 #     -> npm publish-or-verify (OIDC; one-time token only while the package
@@ -22,12 +21,12 @@ name: Release Package
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
         description: 'Existing release tag to recover, e.g. @viceme-ai/sdk@0.1.1-next.0'
-        required: false
+        required: true
         type: string
 
 env:
@@ -39,89 +38,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  version-pr:
-    name: Version Packages PR (Changesets via Release App, no publishing)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      # The Release App token authors the version commits and the Version
-      # Packages PR: branches pushed by GITHUB_TOKEN would not reliably
-      # trigger the required pull_request Quality Gate.
-      - id: release-app-token
-        name: Create repository-scoped Release App token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          token: ${{ steps.release-app-token.outputs.token }}
-      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
-        with: { version: 11 }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: changesets/action@8eb63fb4cfc7f9643537c7d39d0b68c835012a19 # v1.5.3
-        with:
-          version: pnpm release:version
-        env:
-          GITHUB_TOKEN: ${{ steps.release-app-token.outputs.token }}
-
-  promotion-pr:
-    name: dev -> main release promotion PR (Release App)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - id: release-app-token
-        name: Create repository-scoped Release App token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          token: ${{ steps.release-app-token.outputs.token }}
-          fetch-depth: 0
-      - name: Open or update the promotion PR when dev carries a new version
-        env:
-          GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          DEV_VERSION="$(node -p "require('./packages/sdk/package.json').version")"
-          MAIN_VERSION="$(git show origin/main:packages/sdk/package.json | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")"
-          if [ "$DEV_VERSION" = "$MAIN_VERSION" ]; then
-            echo "dev has no unreleased version (${DEV_VERSION}); no promotion PR"
-            exit 0
-          fi
-          TAG="@viceme-ai/sdk@${DEV_VERSION}"
-          BODY_FILE="${RUNNER_TEMP}/promotion.md"
-          {
-            echo "## Release promotion ${TAG}"
-            echo
-            echo "Merging this reviewed PR promotes dev to main and releases **${TAG}**:"
-            echo "immutable tag, OIDC npm publication, GitHub release assets, and the"
-            echo "CN + GLOBAL viceme-sdk S3 publication run automatically on merge."
-          } > "${BODY_FILE}"
-          PR_URL="$(gh pr list --state open --base main --head dev --json url --jq '.[0].url // empty')"
-          if [ -z "${PR_URL}" ]; then
-            gh pr create --base main --head dev --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
-          else
-            gh pr edit "${PR_URL}" --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
-          fi
-
   context:
     name: Resolve merged dev-to-main promotion PR or recovery tag
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.tag != ''

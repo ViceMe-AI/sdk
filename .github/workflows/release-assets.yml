@@ -8,7 +8,7 @@ name: Release Assets (recovery)
 #      into the script text);
 #   2. prove the exact @viceme-ai/sdk@<version> exists on npm and its
 #      tarball resolves (dist-tag checks belong to the immediate
-#      post-publish gate in release-package.yml, not to historical
+#      post-publish gate in release.yml, not to historical
 #      recovery);
 #   3. attach assets from the published npm tarball, idempotently
 #      (create-if-absent / identical-skip / differ-fail).
