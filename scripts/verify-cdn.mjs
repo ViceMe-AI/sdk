@@ -88,8 +88,16 @@ async function verifyLocal(distDir) {
   return manifest;
 }
 
+const CORS_PROBE_ORIGIN = 'https://example.com';
+
 async function fetchOrThrow(url) {
-  const response = await fetch(url, { credentials: 'omit' });
+  // S3-compatible origins only emit Access-Control-Allow-Origin when the
+  // request itself contains Origin. Probe the same contract a browser module
+  // consumer uses instead of treating an origin-less server response as CORS.
+  const response = await fetch(url, {
+    credentials: 'omit',
+    headers: { Origin: CORS_PROBE_ORIGIN },
+  });
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   const buffer = Buffer.from(await response.arrayBuffer());
   return { response, buffer };
@@ -186,7 +194,7 @@ async function verifyExactVersion(base, { expectVersion, allowMutableCache }) {
       );
     }
     const cors = response.headers.get('access-control-allow-origin');
-    check(cors !== null, `${file}: missing access-control-allow-origin`);
+    check(cors === '*', `${file}: access-control-allow-origin is "${cors ?? ''}", expected "*"`);
   }
   return manifest;
 }
