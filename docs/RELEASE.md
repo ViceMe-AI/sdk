@@ -16,12 +16,15 @@ documents _how to run it_.
   - before `@viceme-ai/sdk` exists, add a short-lived granular `NPM_TOKEN` to
     the GitHub `npm` environment for the first publication;
   - immediately after that publication, configure Trusted Publisher for
-    repository `ViceMe-AI/sdk`, workflow `release-package.yml`, environment
+    repository `ViceMe-AI/sdk`, workflow `release.yml`, environment
     `npm`, then delete the GitHub secret and revoke the npm token;
   - every later publication is OIDC-only, and the release script fails closed
     if the bootstrap token is still present.
 - [ ] Release App (`RELEASE_APP_ID` var + `RELEASE_APP_PRIVATE_KEY` secret)
-      so the Version Packages PR chain triggers required checks.
+      installed with repository Contents write access. It commits generated
+      version and changelog files to protected `dev`; PR updates use the
+      workflow `GITHUB_TOKEN` and do not require Pull requests permission on
+      the App.
 - [ ] Dual-region S3 secrets (names are fixed): `VICEME_RELEASE_S3_
 {ENDPOINT,BUCKET,ACCESS_KEY_ID,SECRET_ACCESS_KEY}_{CN,GLOBAL}` plus
       `CN_S3_HTTPS_PROXY`. Each region's bucket is the dedicated
@@ -50,13 +53,16 @@ paths and add edge caching in front — the URL contract must not change.
 
 ## Releasing an npm version (0.x -> `next` dist-tag)
 
-The Release Package workflow is the single authoritative state machine
-(all steps bind to the reviewed Version Packages PR merge SHA):
+The release flow follows the same two-workflow state machine as the CLI:
 
-1. **Version PR**: Changesets opens/updates the **Version Packages** PR via
-   the Release App token (branches pushed by `GITHUB_TOKEN` would not
-   trigger the required pull_request checks).
-2. **Identity**: on merge, `resolve-release-context.mjs` binds the run to
+1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
+   `release-pr.yml` workflow applies the committed Changesets, runs the full
+   SDK quality gate, and uses the Release App (Contents write only) to commit
+   the generated version and changelog files back to protected `dev`. It then
+   uses `GITHUB_TOKEN` to update the same PR title and body. No additional
+   Version Packages PR is created.
+2. **Identity**: after that PR is merged, `release.yml` and
+   `resolve-release-context.mjs` bind the run to
    that exact merge commit; the immutable annotated tag
    `@viceme-ai/sdk@<version>` is created only after all fail-closed gates
    (license gate, forbidden-pattern scan, full quality gate) pass at that
@@ -87,8 +93,8 @@ never left as a manual follow-up.
 
 ## Recovery
 
-Re-run the Release Package workflow with the `tag` input
-(`@viceme-ai/sdk@<version>`): recovery reuses the immutable tag/SHA and
+Re-run the **SDK release publication** workflow (`release.yml`) with the
+`tag` input (`@viceme-ai/sdk@<version>`): recovery reuses the immutable tag/SHA and
 re-runs every step convergently — npm (integrity match), GitHub assets
 (idempotent), and both S3 regions (immutable-put semantics). For
 asset-only repair on ANY historical version, the **Release Assets

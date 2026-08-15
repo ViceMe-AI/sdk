@@ -14,7 +14,7 @@
  *   - asset present, different  -> HARD FAIL (release assets are immutable)
  *
  * This is the recovery path for "npm publish succeeded but the release/assets
- * step failed": re-running the Release Package workflow will not re-publish
+ * step failed": re-running the SDK release publication workflow will not re-publish
  * (Changesets sees the version as released), so this script — via the
  * release-assets.yml workflow — is the convergent, re-runnable authority.
  *

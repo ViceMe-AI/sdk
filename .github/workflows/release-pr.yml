@@ -1,0 +1,136 @@
+name: SDK release preparation
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: viceme-sdk-release-pr
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Release candidate preparation
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.base_ref == 'main' &&
+       github.head_ref == 'dev' &&
+       github.event.pull_request.draft == false &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.head.ref == 'dev')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - id: release-app-token
+        name: Create repository-scoped Release App token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - id: release-app-user
+        name: Resolve Release App bot identity
+        env:
+          APP_SLUG: ${{ steps.release-app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.release-app-token.outputs.token }}
+        run: echo "user-id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)" >>"${GITHUB_OUTPUT}"
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          token: ${{ steps.release-app-token.outputs.token }}
+          ref: dev
+          fetch-depth: 0
+      - name: Fetch stable branch and release tags
+        run: git fetch origin main --tags
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with: { version: 11 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Compute package version and changelog from Changesets
+        run: pnpm release:version
+      - name: Verify prepared release
+        run: |
+          pnpm --filter '@viceme-ai/sdk' exec playwright install --with-deps chromium firefox webkit
+          pnpm check
+          git diff --check
+      - id: release
+        name: Commit prepared release to protected dev
+        env:
+          APP_SLUG: ${{ steps.release-app-token.outputs.app-slug }}
+          APP_USER_ID: ${{ steps.release-app-user.outputs.user-id }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./packages/sdk/package.json').version")"
+          MAIN_VERSION="$(git show origin/main:packages/sdk/package.json | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")"
+          TAG="@viceme-ai/sdk@${VERSION}"
+          PUSHED=false
+          if [[ "${VERSION}" == "${MAIN_VERSION}" ]]; then
+            echo "Release preparation did not advance the SDK version from ${MAIN_VERSION}; add a Changeset before promotion." >&2
+            exit 1
+          fi
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git add --all .changeset packages/sdk/package.json
+          if [[ -e packages/sdk/CHANGELOG.md ]]; then
+            git add packages/sdk/CHANGELOG.md
+          fi
+          if ! git diff --quiet; then
+            echo "Release preparation left generated files unstaged:" >&2
+            git diff --name-only >&2
+            exit 1
+          fi
+          if ! git diff --cached --quiet; then
+            git commit --message "chore(release): ${TAG}"
+            git push origin HEAD:dev
+            PUSHED=true
+          fi
+          {
+            echo "version=${VERSION}"
+            echo "tag=${TAG}"
+            echo "sha=$(git rev-parse HEAD)"
+            echo "pushed=${PUSHED}"
+          } >>"${GITHUB_OUTPUT}"
+      - name: Create or update dev to main Release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          BODY_FILE="${RUNNER_TEMP}/release-pr.md"
+          {
+            echo "## Automated release"
+            echo
+            echo "This PR promotes the reviewed SDK changes from \`dev\` to \`main\` and releases **${TAG}** when merged."
+            echo
+            echo "The release preparation workflow automatically:"
+            echo
+            echo "- applied the reviewed Changesets to the package version and changelog;"
+            echo "- passed the complete SDK quality and tarball gates;"
+            echo "- committed the generated release files to protected \`dev\` as the dedicated ViceMe Release App."
+            echo
+            echo "Prepared head: \`${RELEASE_SHA}\`  "
+            echo "Evidence: ${RUN_URL}"
+            echo
+            echo "> Merging is the release approval: GitHub Actions creates the immutable tag, publishes npm, attaches GitHub assets, publishes both S3 regions, and sends the Feishu summary automatically."
+          } >"${BODY_FILE}"
+
+          PR_URL="$(gh pr list --state open --base main --head dev --json url --jq '.[0].url // empty')"
+          if [[ -z "${PR_URL}" ]]; then
+            gh pr create --base main --head dev --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
+          else
+            gh pr edit "${PR_URL}" --title "chore(release): ${TAG}" --body-file "${BODY_FILE}"
+          fi
