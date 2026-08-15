@@ -115,3 +115,42 @@ export function decideMutableTagMove({ mode, current, target, expectedCurrent })
     reason: `refusing to move pointer backward ${current} -> ${target}; use explicit rollback mode`,
   };
 }
+
+/**
+ * Enforce the one-time npm package bootstrap boundary.
+ *
+ * npm cannot configure a Trusted Publisher before the package exists. The
+ * first publication may therefore use a short-lived granular token, but that
+ * credential must be removed immediately afterwards. Once the package exists,
+ * OIDC is the only accepted publication identity.
+ */
+export function decideNpmPublicationAuth({ packageExists, bootstrapTokenPresent }) {
+  if (!packageExists) {
+    if (!bootstrapTokenPresent) {
+      return {
+        allowed: false,
+        reason:
+          '@viceme-ai/sdk does not exist yet; add the one-time NPM_TOKEN to the npm environment',
+      };
+    }
+    return {
+      allowed: true,
+      mode: 'bootstrap-token',
+      reason: 'authorizing the first package publication with the one-time bootstrap token',
+    };
+  }
+
+  if (bootstrapTokenPresent) {
+    return {
+      allowed: false,
+      reason:
+        '@viceme-ai/sdk already exists; delete NPM_TOKEN and configure Trusted Publisher OIDC',
+    };
+  }
+
+  return {
+    allowed: true,
+    mode: 'oidc',
+    reason: 'authorizing publication with Trusted Publisher OIDC',
+  };
+}

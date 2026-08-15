@@ -12,9 +12,14 @@ documents _how to run it_.
       tarball audit both block publishing until then.
 - [ ] GitHub environments `npm` (publication) and `cdn` (S3 writes), each
       with required reviewers.
-- [ ] `@viceme-ai` npm scope configured for OIDC trusted publishing
-      (repository `ViceMe-AI/sdk`, workflow `release-package.yml`,
-      environment `npm`). No long-lived npm tokens.
+- [ ] npm bootstrap and Trusted Publisher completed:
+  - before `@viceme-ai/sdk` exists, add a short-lived granular `NPM_TOKEN` to
+    the GitHub `npm` environment for the first publication;
+  - immediately after that publication, configure Trusted Publisher for
+    repository `ViceMe-AI/sdk`, workflow `release-package.yml`, environment
+    `npm`, then delete the GitHub secret and revoke the npm token;
+  - every later publication is OIDC-only, and the release script fails closed
+    if the bootstrap token is still present.
 - [ ] Release App (`RELEASE_APP_ID` var + `RELEASE_APP_PRIVATE_KEY` secret)
       so the Version Packages PR chain triggers required checks.
 - [ ] Dual-region S3 secrets (names are fixed): `VICEME_RELEASE_S3_
@@ -57,7 +62,9 @@ The Release Package workflow is the single authoritative state machine
    (license gate, forbidden-pattern scan, full quality gate) pass at that
    SHA.
 3. **npm**: pinned OIDC-capable npm CLI (`npm@11.12.1`), verified OIDC
-   context, `publish-or-verify.mjs` — no tokens anywhere. Convergent:
+   context, `publish-or-verify.mjs`. The first package creation may use the
+   short-lived `NPM_TOKEN`; once the package exists the script rejects that
+   token and requires Trusted Publisher OIDC. Convergent:
    already published with matching integrity = success; different
    integrity = fail; not published = `npm publish --provenance`. The
    `next` dist-tag moves forward only; `latest` must never point at a

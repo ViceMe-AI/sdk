@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { compareSemver, decideMutableTagMove } from '../../../../scripts/lib/release-policy.mjs';
+import {
+  compareSemver,
+  decideMutableTagMove,
+  decideNpmPublicationAuth,
+} from '../../../../scripts/lib/release-policy.mjs';
 
 /**
  * Release policy primitives: semver ordering and the monotonic-forward /
@@ -88,5 +92,25 @@ describe('decideMutableTagMove', () => {
         expectedCurrent: '1.2.2',
       }).allowed,
     ).toBe(false);
+  });
+});
+
+describe('decideNpmPublicationAuth', () => {
+  it('allows a bootstrap token only before the package exists', () => {
+    expect(
+      decideNpmPublicationAuth({ packageExists: false, bootstrapTokenPresent: true }),
+    ).toMatchObject({ allowed: true, mode: 'bootstrap-token' });
+    expect(
+      decideNpmPublicationAuth({ packageExists: false, bootstrapTokenPresent: false }),
+    ).toMatchObject({ allowed: false });
+  });
+
+  it('requires OIDC and rejects a leftover token after bootstrap', () => {
+    expect(
+      decideNpmPublicationAuth({ packageExists: true, bootstrapTokenPresent: false }),
+    ).toMatchObject({ allowed: true, mode: 'oidc' });
+    expect(
+      decideNpmPublicationAuth({ packageExists: true, bootstrapTokenPresent: true }),
+    ).toMatchObject({ allowed: false });
   });
 });
