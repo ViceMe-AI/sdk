@@ -59,10 +59,17 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Compute package version and changelog from Changesets
-        run: pnpm release:version
+      - name: Compute version and changelog from Conventional Commits
+        run: pnpm release:prepare
+      - name: Require a stable release version
+        run: |
+          VERSION="$(node -p "require('./packages/sdk/package.json').version")"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::release preparation must produce a stable semantic version, got ${VERSION}"
+            exit 1
+          fi
       - name: Format generated release files
-        run: pnpm exec prettier --write .changeset/pre.json packages/sdk/package.json packages/sdk/CHANGELOG.md packages/sdk/src/version.ts
+        run: pnpm exec prettier --write packages/sdk/package.json packages/sdk/CHANGELOG.md packages/sdk/src/version.ts
       - name: Verify prepared release
         run: |
           pnpm --filter '@viceme-ai/sdk' exec playwright install --with-deps chromium firefox webkit
@@ -80,15 +87,12 @@ jobs:
           TAG="@viceme-ai/sdk@${VERSION}"
           PUSHED=false
           if [[ "${VERSION}" == "${MAIN_VERSION}" ]]; then
-            echo "Release preparation did not advance the SDK version from ${MAIN_VERSION}; add a Changeset before promotion." >&2
+            echo "Release preparation did not advance the SDK version from ${MAIN_VERSION}; add a releasable Conventional Commit before promotion." >&2
             exit 1
           fi
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${APP_USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
-          git add --all .changeset packages/sdk/package.json packages/sdk/src/version.ts
-          if [[ -e packages/sdk/CHANGELOG.md ]]; then
-            git add packages/sdk/CHANGELOG.md
-          fi
+          git add packages/sdk/package.json packages/sdk/src/version.ts packages/sdk/CHANGELOG.md
           if ! git diff --quiet; then
             echo "Release preparation left generated files unstaged:" >&2
             git diff --name-only >&2
@@ -120,7 +124,8 @@ jobs:
             echo
             echo "The release preparation workflow automatically:"
             echo
-            echo "- applied the reviewed Changesets to the package version and changelog;"
+            echo "- selected the stable semantic version from Conventional Commits;"
+            echo '- updated the package/runtime version and generated `CHANGELOG.md`;'
             echo "- passed the complete SDK quality and tarball gates;"
             echo "- committed the generated release files to protected \`dev\` as the dedicated ViceMe Release App."
             echo

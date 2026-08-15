@@ -33,12 +33,12 @@ function jobBlock(text: string, job: string): string {
 }
 
 describe('workflow contracts', () => {
-  it('release assets job receives the recovery state (needs includes context)', () => {
+  it('release assets job receives the recovery state from metadata', () => {
     const assets = jobBlock(workflow('release.yml'), 'assets');
     expect(assets).toContain('needs:');
-    expect(assets).toContain('- context');
     expect(assets).toContain('- metadata');
     expect(assets).toContain('- npm-publish');
+    expect(assets).toContain('RECOVERY: ${{ needs.metadata.outputs.recovery }}');
   });
 
   it('release notification depends on npm, assets, and both S3 regions', () => {
@@ -78,10 +78,12 @@ describe('workflow contracts', () => {
     expect(preparation).toContain('name: SDK release preparation');
     expect(preparation).toContain('permission-contents: write');
     expect(preparation).not.toContain('permission-pull-requests');
-    expect(preparation).toContain('run: pnpm release:version');
+    expect(preparation).toContain('run: pnpm release:prepare');
     expect(preparation).toContain(
-      'run: pnpm exec prettier --write .changeset/pre.json packages/sdk/package.json packages/sdk/CHANGELOG.md packages/sdk/src/version.ts',
+      'run: pnpm exec prettier --write packages/sdk/package.json packages/sdk/CHANGELOG.md packages/sdk/src/version.ts',
     );
+    expect(preparation).toContain('release preparation must produce a stable semantic version');
+    expect(preparation).not.toContain('.changeset');
     expect(preparation).toContain('GH_TOKEN: ${{ github.token }}');
     expect(preparation).not.toContain('changesets/action@');
   });
@@ -89,9 +91,11 @@ describe('workflow contracts', () => {
   it('release publication runs only for main promotion merges or recovery', () => {
     const publication = workflow('release.yml');
     expect(publication).toContain('branches: [main]');
+    expect(publication).toContain('DIST_TAG: latest');
+    expect(publication).not.toContain('DIST_TAG: next');
     expect(publication).not.toContain('branches: [main, dev]');
-    expect(publication).toContain(
-      "if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.tag != ''",
-    );
+    expect(publication).toContain('ref: ${{ steps.context.outputs.release_ref }}');
+    expect(publication).toContain('PR_TITLE: ${{ steps.context.outputs.release_pr_title }}');
+    expect(publication).not.toContain('skip: ${{ steps.context.outputs.skip }}');
   });
 });

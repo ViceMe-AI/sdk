@@ -85,7 +85,7 @@ packages/sdk/src/<capability>/
 ## PR checklist
 
 - [ ] User scenario and explicit non-goals
-- [ ] Public API / subpath and Changeset
+- [ ] Public API / subpath and release impact
 - [ ] Shop API contract version referenced
 - [ ] Identity, Origin, token, secret, and idempotency boundaries stated
 - [ ] Browser lifecycle and resource cleanup tested
@@ -99,7 +99,8 @@ packages/sdk/src/<capability>/
 
 ## Releases
 
-Releases use [Changesets](https://github.com/changesets/changesets) and npm
-trusted publishing (OIDC). CDN artifacts always come from the same release
-build as the npm tarball; exact versions are immutable and `v1` aliases move
-only through the release workflow. See `.github/workflows/`.
+Releases use the same Conventional Commit version policy and protected
+`dev -> main` promotion flow as the ViceMe CLI, followed by npm trusted
+publishing (OIDC). CDN artifacts always come from the same release build as
+the npm tarball; exact versions are immutable and `v1` aliases move only
+through the release workflow. See `.github/workflows/`.

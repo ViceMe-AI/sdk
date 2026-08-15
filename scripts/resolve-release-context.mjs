@@ -1,103 +1,133 @@
 #!/usr/bin/env node
-/**
- * Resolve whether a main push is a RELEASE commit (a merged, reviewed
- * dev -> main promotion PR titled "chore(release): @viceme-ai/sdk@<v>")
- * or an ordinary commit, and bind the release to that exact merge SHA —
- * ported from the ViceMe-AI/cli baseline. Recovery runs check out an
- * already-existing immutable tag instead.
- *
- * Why: ordinary feature/doc pushes must never create immutable release tags
- * or publish; only the reviewed dev -> main release PR may. Recovery runs
- * check out an already-existing immutable tag instead.
- *
- * Outputs (GitHub Actions `>> $GITHUB_OUTPUT`):
- *   skip=true                        -> ordinary push, nothing to release
- *   skip=false release_ref=<ref>     -> release: the exact merge SHA
- *   recovery=true release_ref=<tag>  -> recovery at an existing tag
- *
- * Env:
- *   GH_TOKEN          github token (repo read access)
- *   GITHUB_REPOSITORY owner/name
- *   GITHUB_SHA        pushed commit (normal mode)
- *   GITHUB_EVENT_NAME push | workflow_dispatch
- *   RECOVERY_TAG      workflow_dispatch input tag (optional)
- */
-import { appendFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 
-const repository = process.env.GITHUB_REPOSITORY;
-const event = process.env.GITHUB_EVENT_NAME;
-const recoveryTag = process.env.RECOVERY_TAG ?? '';
-const sha = process.env.GITHUB_SHA ?? '';
+// Ported from ViceMe-AI/cli npm/scripts/resolve-release-context.mjs. A normal
+// release publishes the exact reviewed dev head, not the main merge commit;
+// manual recovery accepts only an existing stable SDK tag from main.
+import { appendFile, readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 
-function gh(...args) {
-  return execFileSync('gh', ['api', ...args], { encoding: 'utf8', env: process.env });
-}
+const stableTagPattern = /^@viceme-ai\/sdk@\d+\.\d+\.\d+$/;
+const commitPattern = /^[a-f0-9]{40}$/;
+const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
-function output(map) {
-  const lines = Object.entries(map)
-    .map(([key, value]) => `${key}=${value}\n`)
-    .join('');
-  if (process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT, lines);
+export async function resolveReleaseContext({
+  eventName,
+  event,
+  recoveryTag,
+  repository,
+  workflowRef,
+  fetchPullRequests,
+}) {
+  if (!repositoryPattern.test(repository)) {
+    throw new Error('GITHUB_REPOSITORY must identify one GitHub owner/repository');
   }
-  process.stdout.write(lines);
-}
 
-if (event === 'workflow_dispatch') {
-  if (!recoveryTag) {
-    console.error('workflow_dispatch without a recovery tag: nothing to do');
-    output({ skip: 'true' });
-    process.exit(0);
+  if (eventName === 'workflow_dispatch') {
+    if (workflowRef !== 'refs/heads/main') {
+      throw new Error('manual recovery must run from the protected main branch');
+    }
+    if (!stableTagPattern.test(recoveryTag)) {
+      throw new Error('manual recovery requires an exact stable tag such as @viceme-ai/sdk@1.2.3');
+    }
+    return {
+      release_ref: recoveryTag,
+      release_pr_title: '',
+      requested_tag: recoveryTag,
+      recovery: 'true',
+      release_pr_number: '',
+    };
   }
-  // The tag must already exist (immutable) — recovery never creates one.
-  try {
-    gh(`repos/${repository}/git/ref/tags/${encodeURIComponent(recoveryTag)}`);
-  } catch {
-    console.error(`recovery tag ${recoveryTag} does not exist`);
-    process.exit(1);
+
+  if (eventName !== 'push') throw new Error(`unsupported release event ${eventName}`);
+  if (event.ref !== 'refs/heads/main') {
+    throw new Error('normal release publication must be triggered by a push to main');
   }
-  output({ skip: 'false', recovery: 'true', release_ref: recoveryTag });
-  process.exit(0);
-}
+  if (!commitPattern.test(event.after ?? '')) {
+    throw new Error('push event does not contain a valid main commit');
+  }
 
-// Normal push to main: the commit must be the merge commit of the reviewed
-// dev -> main release promotion PR (title bound to the exact package
-// version). Anything else — including direct pushes — is not a release.
-let pulls;
-try {
-  pulls = JSON.parse(gh(`repos/${repository}/commits/${sha}/pulls`));
-} catch (error) {
-  console.error(`could not resolve PRs for ${sha}: ${String(error)}`);
-  process.exit(1);
-}
-
-const { readFile } = await import('node:fs/promises');
-const version = JSON.parse(
-  await readFile(new URL('../packages/sdk/package.json', import.meta.url), 'utf8'),
-).version;
-const expectedTitle = `chore(release): @viceme-ai/sdk@${version}`;
-
-const releasePr = pulls.find(
-  (pr) =>
-    pr.state === 'closed' &&
-    pr.merged_at !== null &&
-    pr.base?.ref === 'main' &&
-    pr.head?.ref === 'dev' &&
-    pr.head?.repo?.full_name === repository &&
-    pr.title === expectedTitle &&
-    pr.merge_commit_sha === sha,
-);
-
-if (!releasePr) {
-  console.log(
-    `no merged dev->main promotion PR '${expectedTitle}' for ${sha}; ordinary push — no release`,
+  const pullRequests = await fetchPullRequests(event.after);
+  const releasePullRequests = pullRequests.filter(
+    (pullRequest) =>
+      pullRequest.merged_at &&
+      pullRequest.merge_commit_sha === event.after &&
+      pullRequest.base?.ref === 'main' &&
+      pullRequest.base?.repo?.full_name === repository &&
+      pullRequest.head?.ref === 'dev' &&
+      pullRequest.head?.repo?.full_name === repository,
   );
-  output({ skip: 'true' });
-  process.exit(0);
+  if (releasePullRequests.length !== 1) {
+    throw new Error(
+      `main commit must resolve to exactly one merged repository-owned dev to main PR; found ${releasePullRequests.length}`,
+    );
+  }
+
+  const pullRequest = releasePullRequests[0];
+  if (!commitPattern.test(pullRequest.head.sha ?? '')) {
+    throw new Error('release PR does not contain a valid reviewed dev head');
+  }
+  if (typeof pullRequest.title !== 'string' || pullRequest.title === '') {
+    throw new Error('release PR title is missing');
+  }
+
+  return {
+    release_ref: pullRequest.head.sha,
+    release_pr_title: pullRequest.title,
+    requested_tag: '',
+    recovery: 'false',
+    release_pr_number: String(pullRequest.number),
+  };
 }
 
-console.log(
-  `release commit: ${releasePr.number} "${releasePr.title}" merged at ${releasePr.merge_commit_sha.slice(0, 7)}`,
-);
-output({ skip: 'false', recovery: 'false', release_ref: releasePr.merge_commit_sha });
+async function fetchAssociatedPullRequests(commit) {
+  const repository = requiredEnvironment('GITHUB_REPOSITORY');
+  const apiURL = requiredEnvironment('GITHUB_API_URL');
+  const token = requiredEnvironment('GH_TOKEN');
+  const response = await fetch(
+    `${apiURL}/repos/${repository}/commits/${commit}/pulls?per_page=100`,
+    {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  );
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 500);
+    throw new Error(
+      `could not resolve the merged Release PR for ${commit}: ${response.status} ${detail}`,
+    );
+  }
+  const pullRequests = await response.json();
+  if (!Array.isArray(pullRequests)) {
+    throw new Error('GitHub returned an invalid associated PR response');
+  }
+  return pullRequests;
+}
+
+function requiredEnvironment(name) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+async function main() {
+  const event = JSON.parse(await readFile(requiredEnvironment('GITHUB_EVENT_PATH'), 'utf8'));
+  const context = await resolveReleaseContext({
+    eventName: requiredEnvironment('GITHUB_EVENT_NAME'),
+    event,
+    recoveryTag: process.env.RECOVERY_TAG ?? '',
+    repository: requiredEnvironment('GITHUB_REPOSITORY'),
+    workflowRef: requiredEnvironment('GITHUB_REF'),
+    fetchPullRequests: fetchAssociatedPullRequests,
+  });
+  const output = Object.entries(context)
+    .map(([name, value]) => `${name}=${value}`)
+    .join('\n');
+  await appendFile(requiredEnvironment('GITHUB_OUTPUT'), `${output}\n`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact published version (e.g. 1.2.3 or 0.1.1-next.0)'
+        description: 'Exact published stable version (e.g. 0.2.0)'
         required: true
         type: string
 

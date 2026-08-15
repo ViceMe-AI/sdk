@@ -51,20 +51,23 @@ moving the alias is one atomic pointer write per region. If a CDN edge
 (`cdn.viceme.cn` / `cdn.viceme.ai`) is introduced later, keep these exact
 paths and add edge caching in front — the URL contract must not change.
 
-## Releasing an npm version (0.x -> `next` dist-tag)
+## Releasing a stable npm version
 
 The release flow follows the same two-workflow state machine as the CLI:
 
 1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
-   `release-pr.yml` workflow applies the committed Changesets, runs the full
-   SDK quality gate, and uses the Release App (Contents write only) to commit
-   the generated package version, runtime version, and changelog files back to
+   `release-pr.yml` workflow uses the same stable-version algorithm as the CLI:
+   Conventional Commits since the latest reachable release tag select major,
+   minor, or patch; the workflow then generates the package version, runtime
+   version, and changelog. It runs the full SDK quality gate and uses the
+   Release App (Contents write only) to commit those generated files back to
    protected `dev`. It then
    uses `GITHUB_TOKEN` to update the same PR title and body. No additional
    Version Packages PR is created.
 2. **Identity**: after that PR is merged, `release.yml` and
-   `resolve-release-context.mjs` bind the run to
-   that exact merge commit; the immutable annotated tag
+   `resolve-release-context.mjs` bind the run to the exact reviewed `dev` head
+   recorded by the merged promotion PR (not the generated merge commit); the
+   immutable annotated tag
    `@viceme-ai/sdk@<version>` is created only after all fail-closed gates
    (license gate, forbidden-pattern scan, full quality gate) pass at that
    SHA.
@@ -74,9 +77,8 @@ The release flow follows the same two-workflow state machine as the CLI:
    token and requires Trusted Publisher OIDC. Convergent:
    already published with matching integrity = success; different
    integrity = fail; not published = `npm publish --provenance`. The
-   `next` dist-tag moves forward only; `latest` must never point at a
-   `next` release (flip the workflow-level `DIST_TAG` to `latest` at
-   1.0.0, same PR that exits `.changeset/pre.json` pre mode).
+   stable `latest` dist-tag moves forward only. SDK releases never generate
+   prerelease package versions such as `-next.N`.
 4. **GitHub assets**: release assets are attached from the published npm
    tarball (`fetch-npm-dist.mjs` + `attach-release-assets.mjs`),
    idempotent and immutable.
@@ -147,7 +149,7 @@ node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/1.2.3/
 node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/v1/ --expect-version 1.2.3
 node scripts/fetch-npm-dist.mjs --version 1.2.3 --out verified-dist
 node scripts/attach-release-assets.mjs --version 1.2.3 --dry-run
-node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag next
+node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag latest
 ```
 
 Manifest digests come from `scripts/build-manifest.mjs` during the release

@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 
+import { SDK_VERSION } from '../../src/version.ts';
+
 /**
  * B0.1 loader browser matrix (§21.1): attribute validation, dedup, namespace
  * coexistence, capability failure isolation, destroy, storage/global hygiene,
@@ -180,7 +182,10 @@ test.describe('successful auto-mount', () => {
 
     const events = await waitForEvent(page, 'viceme:ready');
     const ready = events.find((e) => e.type === 'viceme:ready')!;
-    expect(ready.detail.version).toBe('0.1.0');
+    // Release preparation updates the package/runtime version before running
+    // this suite. Assert against that generated source of truth instead of a
+    // version literal from the previous release.
+    expect(ready.detail.version).toBe(SDK_VERSION);
     expect(await page.evaluate(() => !!document.querySelector('#host-a')!.shadowRoot)).toBe(true);
   });
 });
