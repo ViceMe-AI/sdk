@@ -81,6 +81,8 @@ The release flow follows the same two-workflow state machine as the CLI:
 6. **Notification**: the Feishu release summary fires only after npm AND
    both S3 regions succeeded. The webhook and AI API key are required; model
    and base URL use the same defaults as the CLI unless explicitly overridden.
+   The card presents `viceme-sdk v<version>` like the CLI; the scoped npm tag
+   remains an internal release and recovery identity rather than display text.
 
 A release is DONE only when step 6 has run. Exact-version artifacts are
 never left as a manual follow-up.

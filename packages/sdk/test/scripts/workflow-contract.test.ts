@@ -60,6 +60,13 @@ describe('workflow contracts', () => {
     expect(notify).not.toContain('AI_BASE_URL is required');
   });
 
+  it('release notification presents the same service and version shape as the CLI', () => {
+    const notify = jobBlock(workflow('release.yml'), 'notify');
+    expect(notify).toContain('service_name: viceme-sdk');
+    expect(notify).toContain('tag_name: v${{ needs.metadata.outputs.version }}');
+    expect(notify).not.toContain('tag_name: ${{ needs.metadata.outputs.tag }}');
+  });
+
   it('S3 publication uses the dedicated viceme-sdk bucket prefix publicly', () => {
     const text = workflow('release.yml');
     expect(text).toContain('https://s3.viceme.cn/viceme-sdk/${VERSION}/');
