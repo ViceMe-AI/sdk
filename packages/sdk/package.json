@@ -1,6 +1,6 @@
 {
   "name": "@viceme-ai/sdk",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "ViceMe browser SDK: headless core, public session, and capability subpaths for static HTML, ESM, React, and Agent-generated sites.",
   "type": "module",
   "repository": {
