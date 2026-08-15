@@ -79,6 +79,9 @@ describe('workflow contracts', () => {
     expect(preparation).toContain('permission-contents: write');
     expect(preparation).not.toContain('permission-pull-requests');
     expect(preparation).toContain('run: pnpm release:version');
+    expect(preparation).toContain(
+      'run: pnpm exec prettier --write .changeset/pre.json packages/sdk/package.json packages/sdk/CHANGELOG.md packages/sdk/src/version.ts',
+    );
     expect(preparation).toContain('GH_TOKEN: ${{ github.token }}');
     expect(preparation).not.toContain('changesets/action@');
   });

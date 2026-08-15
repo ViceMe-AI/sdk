@@ -61,6 +61,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Compute package version and changelog from Changesets
         run: pnpm release:version
+      - name: Format generated release files
+        run: pnpm exec prettier --write .changeset/pre.json packages/sdk/package.json packages/sdk/CHANGELOG.md packages/sdk/src/version.ts
       - name: Verify prepared release
         run: |
           pnpm --filter '@viceme-ai/sdk' exec playwright install --with-deps chromium firefox webkit
@@ -83,7 +85,7 @@ jobs:
           fi
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${APP_USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
-          git add --all .changeset packages/sdk/package.json
+          git add --all .changeset packages/sdk/package.json packages/sdk/src/version.ts
           if [[ -e packages/sdk/CHANGELOG.md ]]; then
             git add packages/sdk/CHANGELOG.md
           fi

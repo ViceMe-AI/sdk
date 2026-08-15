@@ -58,7 +58,8 @@ The release flow follows the same two-workflow state machine as the CLI:
 1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
    `release-pr.yml` workflow applies the committed Changesets, runs the full
    SDK quality gate, and uses the Release App (Contents write only) to commit
-   the generated version and changelog files back to protected `dev`. It then
+   the generated package version, runtime version, and changelog files back to
+   protected `dev`. It then
    uses `GITHUB_TOKEN` to update the same PR title and body. No additional
    Version Packages PR is created.
 2. **Identity**: after that PR is merged, `release.yml` and
