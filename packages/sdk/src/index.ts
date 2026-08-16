@@ -21,10 +21,14 @@ import type {
   CheckoutCapability,
   CheckoutOptions,
   CheckoutResult,
-  FollowCapability,
-  FollowState,
 } from './core/capabilities.ts';
 import type { WorkUser } from './session/session.ts';
+import type {
+  AccessInteraction,
+  AccessInteractionAction,
+  AccessPresentationResult,
+  AccessPresenter,
+} from './core/presentation.ts';
 import { SDK_VERSION, API_MAJOR } from './version.ts';
 
 export { ViceMeError, isViceMeError, SDK_VERSION, API_MAJOR, resolveApiBaseUrl };
@@ -43,8 +47,10 @@ export type {
   CheckoutCapability,
   CheckoutOptions,
   CheckoutResult,
-  FollowCapability,
-  FollowState,
+  AccessInteraction,
+  AccessInteractionAction,
+  AccessPresentationResult,
+  AccessPresenter,
   WorkUser,
 };
 

@@ -19,7 +19,6 @@ import {
   type AccessCapability,
   type AuthCapability,
   type CheckoutCapability,
-  type FollowCapability,
 } from './capabilities.ts';
 
 export interface ViceMeClient {
@@ -28,7 +27,6 @@ export interface ViceMeClient {
   readonly region: ViceMeRegion;
   readonly state: ViceMeClientState;
   readonly auth: AuthCapability;
-  readonly follow: FollowCapability;
   readonly access: AccessCapability;
   readonly checkout: CheckoutCapability;
   ready(): Promise<void>;
@@ -62,9 +60,9 @@ export class ViceMeClientImpl implements ViceMeClient {
   readonly #session: SessionManager;
   readonly #config: ViceMeConfig;
   readonly #internalSignal = new AbortController();
+  readonly #resumeRedirects: () => Promise<void>;
   #readyPromise: Promise<void> | undefined;
   readonly auth: AuthCapability;
-  readonly follow: FollowCapability;
   readonly access: AccessCapability;
   readonly checkout: CheckoutCapability;
 
@@ -78,11 +76,12 @@ export class ViceMeClientImpl implements ViceMeClient {
     });
     const capabilities = createCapabilities({
       session: this.#session,
-      apiBaseUrl: deps.apiBaseUrl,
+      workKey: deps.config.workKey,
+      presenter: deps.config.presenter,
       ready: () => this.ready(),
     });
+    this.#resumeRedirects = capabilities.resumeRedirects;
     this.auth = capabilities.auth;
-    this.follow = capabilities.follow;
     this.access = capabilities.access;
     this.checkout = capabilities.checkout;
     const callerSignal = deps.config.signal;
@@ -135,6 +134,7 @@ export class ViceMeClientImpl implements ViceMeClient {
     this.#lifecycle.transition('INITIALIZING');
     try {
       await this.#session.establish();
+      await this.#resumeRedirects();
       if (this.#lifecycle.destroyed) throw clientDestroyed();
       this.#lifecycle.transition('READY');
     } catch (error) {

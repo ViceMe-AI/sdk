@@ -60,6 +60,11 @@ await client.ready();
 
 const decisions = await client.access.checkMany(['dingdong', 'emperor']);
 
+// From a gated user gesture. A denied decision opens the site's presenter or
+// the default in-page Web Component; follow/login/checkout require a second,
+// explicit action inside that interface.
+await client.access.require('emperor');
+
 client.destroy();
 ```
 
@@ -94,7 +99,6 @@ interface ViceMeClient {
 
   ready(): Promise<void>;
   readonly auth: AuthCapability;
-  readonly follow: FollowCapability;
   readonly access: AccessCapability;
   readonly checkout: CheckoutCapability;
   hasCapability(name: string): boolean;

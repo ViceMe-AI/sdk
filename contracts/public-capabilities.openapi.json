@@ -108,6 +108,50 @@
         }
       }
     },
+    "/public/v1/auth/resume-codes": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "createAuthResumeCode",
+        "security": [{ "workSession": [] }],
+        "responses": {
+          "200": {
+            "description": "One-time code used to restore the authenticated work session after same-tab checkout.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthResumeCodeResponse" }
+              }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
+        }
+      }
+    },
+    "/public/v1/auth/resume": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "resumeAuthenticatedSession",
+        "security": [{ "workSession": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AuthResumeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Restored authenticated work session.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthExchangeResponse" }
+              }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
+        }
+      }
+    },
     "/public/v1/follow": {
       "get": {
         "tags": ["follow"],
@@ -277,10 +321,11 @@
       },
       "AuthAuthorizeRequest": {
         "type": "object",
-        "required": ["codeChallenge"],
+        "required": ["codeChallenge", "returnUrl"],
         "additionalProperties": false,
         "properties": {
-          "codeChallenge": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+          "codeChallenge": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+          "returnUrl": { "type": "string", "format": "uri" }
         }
       },
       "AuthAuthorizeResponse": {
@@ -306,6 +351,23 @@
           "token": { "type": "string" },
           "expiresAt": { "type": "integer" },
           "user": { "$ref": "#/components/schemas/WorkUser" }
+        }
+      },
+      "AuthResumeCodeResponse": {
+        "type": "object",
+        "required": ["code", "expiresAt"],
+        "additionalProperties": false,
+        "properties": {
+          "code": { "type": "string", "minLength": 32, "maxLength": 256 },
+          "expiresAt": { "type": "integer" }
+        }
+      },
+      "AuthResumeRequest": {
+        "type": "object",
+        "required": ["code"],
+        "additionalProperties": false,
+        "properties": {
+          "code": { "type": "string", "minLength": 32, "maxLength": 256 }
         }
       },
       "FollowState": {

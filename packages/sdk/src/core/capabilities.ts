@@ -1,4 +1,9 @@
 import { ViceMeError } from './errors.ts';
+import {
+  defaultAccessPresenter,
+  type AccessInteractionAction,
+  type AccessPresenter,
+} from './presentation.ts';
 import type { SessionManager, WorkUser } from '../session/session.ts';
 
 export interface AuthState {
@@ -63,7 +68,8 @@ export interface CheckoutCapability {
 
 interface CapabilityDeps {
   session: SessionManager;
-  apiBaseUrl: string;
+  workKey: string;
+  presenter?: AccessPresenter;
   ready: () => Promise<void>;
 }
 
@@ -152,48 +158,12 @@ async function codeChallenge(verifier: string): Promise<string> {
   return base64Url(new Uint8Array(digest));
 }
 
-async function waitForAuthCode(popup: Window, apiOrigin: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => finish(undefined), 10 * 60 * 1_000);
-    const closed = window.setInterval(() => {
-      if (popup.closed) finish(undefined);
-    }, 300);
-    const onMessage = (event: MessageEvent) => {
-      const data = event.data as { type?: unknown; code?: unknown } | null;
-      if (
-        event.origin === apiOrigin &&
-        data?.type === 'viceme:auth-code' &&
-        typeof data.code === 'string'
-      ) {
-        finish(data.code);
-      }
-    };
-    const finish = (code: string | undefined) => {
-      window.clearTimeout(timeout);
-      window.clearInterval(closed);
-      window.removeEventListener('message', onMessage);
-      if (code) resolve(code);
-      else
-        reject(
-          new ViceMeError({
-            code: 'AUTH_CANCELLED',
-            message: 'WeChat authorization was cancelled or expired.',
-            retryable: false,
-          }),
-        );
-    };
-    window.addEventListener('message', onMessage);
-  });
+function authStorageKey(workKey: string): string {
+  return `viceme:auth:${workKey}`;
 }
 
-async function waitForPopupClose(popup: Window): Promise<void> {
-  await new Promise<void>((resolve) => {
-    const closed = window.setInterval(() => {
-      if (!popup.closed) return;
-      window.clearInterval(closed);
-      resolve();
-    }, 300);
-  });
+function checkoutResumeStorageKey(workKey: string): string {
+  return `viceme:checkout-resume:${workKey}`;
 }
 
 export function createCapabilities(deps: CapabilityDeps): {
@@ -201,7 +171,66 @@ export function createCapabilities(deps: CapabilityDeps): {
   follow: FollowCapability;
   access: AccessCapability;
   checkout: CheckoutCapability;
+  resumeRedirects(): Promise<void>;
 } {
+  const authenticate = async (code: string, codeVerifier: string): Promise<AuthState> => {
+    const exchange = objectBody(
+      (
+        await deps.session.request({
+          method: 'POST',
+          path: '/public/v1/auth/exchange',
+          body: { code, codeVerifier },
+        })
+      ).body,
+    );
+    if (typeof exchange.token !== 'string' || typeof exchange.expiresAt !== 'number') {
+      throw malformedResponse();
+    }
+    const user = parseUser(exchange.user);
+    deps.session.authenticate({ token: exchange.token, expiresAt: exchange.expiresAt, user });
+    return { authenticated: true, user };
+  };
+
+  const resumeRedirects = async (): Promise<void> => {
+    if (typeof window === 'undefined') return;
+    const checkoutCode = window.sessionStorage.getItem(checkoutResumeStorageKey(deps.workKey));
+    if (checkoutCode) {
+      window.sessionStorage.removeItem(checkoutResumeStorageKey(deps.workKey));
+      const response = objectBody(
+        (
+          await deps.session.request({
+            method: 'POST',
+            path: '/public/v1/auth/resume',
+            body: { code: checkoutCode },
+          })
+        ).body,
+      );
+      if (typeof response.token !== 'string' || typeof response.expiresAt !== 'number') {
+        throw malformedResponse();
+      }
+      const user = parseUser(response.user);
+      deps.session.authenticate({ token: response.token, expiresAt: response.expiresAt, user });
+    }
+
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('vicemeAuthCode');
+    if (!code) return;
+    const raw = window.sessionStorage.getItem(authStorageKey(deps.workKey));
+    window.sessionStorage.removeItem(authStorageKey(deps.workKey));
+    url.searchParams.delete('vicemeAuthCode');
+    window.history.replaceState(window.history.state, '', url);
+    if (!raw) {
+      throw new ViceMeError({
+        code: 'AUTH_CANCELLED',
+        message: 'The sign-in continuation is missing or expired.',
+        retryable: false,
+      });
+    }
+    const state = JSON.parse(raw) as { verifier?: unknown };
+    if (typeof state.verifier !== 'string') throw malformedResponse();
+    await authenticate(code, state.verifier);
+  };
+
   const auth: AuthCapability = {
     async getState() {
       await deps.ready();
@@ -221,38 +250,19 @@ export function createCapabilities(deps: CapabilityDeps): {
       const response = await deps.session.request({
         method: 'POST',
         path: '/public/v1/auth/wechat/authorize',
-        body: { codeChallenge: await codeChallenge(verifier) },
+        body: {
+          codeChallenge: await codeChallenge(verifier),
+          returnUrl: window.location.href,
+        },
       });
       const authorize = objectBody(response.body);
       if (typeof authorize.authorizationUrl !== 'string') throw malformedResponse();
-      const popup = window.open(
-        authorize.authorizationUrl,
-        'viceme-wechat-auth',
-        'popup,width=480,height=720',
+      window.sessionStorage.setItem(
+        authStorageKey(deps.workKey),
+        JSON.stringify({ verifier, startedAt: Date.now() }),
       );
-      if (!popup) {
-        throw new ViceMeError({
-          code: 'AUTH_POPUP_BLOCKED',
-          message: 'The browser blocked the WeChat authorization window.',
-          retryable: false,
-        });
-      }
-      const code = await waitForAuthCode(popup, new URL(deps.apiBaseUrl).origin);
-      const exchange = objectBody(
-        (
-          await deps.session.request({
-            method: 'POST',
-            path: '/public/v1/auth/exchange',
-            body: { code, codeVerifier: verifier },
-          })
-        ).body,
-      );
-      if (typeof exchange.token !== 'string' || typeof exchange.expiresAt !== 'number') {
-        throw malformedResponse();
-      }
-      const user = parseUser(exchange.user);
-      deps.session.authenticate({ token: exchange.token, expiresAt: exchange.expiresAt, user });
-      return { authenticated: true, user };
+      window.location.assign(authorize.authorizationUrl);
+      return { authenticated: false, user: null };
     },
     async signOut() {
       await deps.ready();
@@ -322,19 +332,17 @@ export function createCapabilities(deps: CapabilityDeps): {
         alreadyOwned: response.alreadyOwned,
       };
       if (!result.alreadyOwned && typeof window !== 'undefined') {
-        const popup = window.open(
-          result.checkoutUrl,
-          'viceme-checkout',
-          'popup,width=520,height=760',
+        const resume = objectBody(
+          (
+            await deps.session.request({
+              method: 'POST',
+              path: '/public/v1/auth/resume-codes',
+            })
+          ).body,
         );
-        if (!popup) {
-          throw new ViceMeError({
-            code: 'CHECKOUT_UNAVAILABLE',
-            message: 'The browser blocked the checkout window.',
-            retryable: false,
-          });
-        }
-        await waitForPopupClose(popup);
+        if (typeof resume.code !== 'string') throw malformedResponse();
+        window.sessionStorage.setItem(checkoutResumeStorageKey(deps.workKey), resume.code);
+        window.location.assign(result.checkoutUrl);
       }
       return result;
     },
@@ -350,18 +358,30 @@ export function createCapabilities(deps: CapabilityDeps): {
     checkMany,
     async require(featureKey) {
       let decision = await this.check(featureKey);
-      if (decision.nextAction === 'SIGN_IN') {
-        await auth.signIn();
-        decision = await this.check(featureKey);
-      }
-      if (decision.nextAction === 'FOLLOW' && globalThis.confirm?.('关注创作者后解锁此功能？')) {
-        await follow.follow();
-        decision = await this.check(featureKey);
-      }
-      if (decision.nextAction === 'CHECKOUT' && globalThis.confirm?.('购买此作品后解锁功能？')) {
-        await checkout.open({
-          returnUrl: typeof location === 'undefined' ? undefined : location.href,
+      const presenter = deps.presenter ?? defaultAccessPresenter;
+      for (
+        let attempts = 0;
+        !decision.allowed && decision.nextAction && attempts < 3;
+        attempts += 1
+      ) {
+        const nextAction = decision.nextAction as AccessInteractionAction;
+        const result = await presenter({
+          featureKey,
+          reason: decision.reason,
+          action: nextAction,
+          perform: async () => {
+            if (nextAction === 'SIGN_IN') {
+              await auth.signIn();
+            } else if (nextAction === 'FOLLOW') {
+              await follow.follow();
+            } else {
+              await checkout.open({
+                returnUrl: typeof location === 'undefined' ? undefined : location.href,
+              });
+            }
+          },
         });
+        if (result === 'dismissed' || nextAction !== 'FOLLOW') return decision;
         decision = await this.check(featureKey);
       }
       return decision;
@@ -371,5 +391,5 @@ export function createCapabilities(deps: CapabilityDeps): {
     },
   };
 
-  return { auth, follow, access, checkout };
+  return { auth, follow, access, checkout, resumeRedirects };
 }

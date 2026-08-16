@@ -9,7 +9,12 @@ import { ViceMeError } from '../../src/core/errors.ts';
 describe('validatePublicConfig', () => {
   it('accepts the public shape', () => {
     const cfg = validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn' });
-    expect(cfg).toEqual({ workKey: 'wrk_public_xxx', region: 'cn', signal: undefined });
+    expect(cfg).toEqual({
+      workKey: 'wrk_public_xxx',
+      region: 'cn',
+      signal: undefined,
+      presenter: undefined,
+    });
   });
 
   it('rejects non-object input', () => {
@@ -37,6 +42,16 @@ describe('validatePublicConfig', () => {
   it('rejects non-AbortSignal signal', () => {
     expect(() =>
       validatePublicConfig({ workKey: 'wrk_test', region: 'cn', signal: 'x' }),
+    ).toThrow();
+  });
+
+  it('accepts a site-native presenter and rejects non-functions', () => {
+    const presenter = async () => 'dismissed' as const;
+    expect(validatePublicConfig({ workKey: 'wrk_test', region: 'cn', presenter }).presenter).toBe(
+      presenter,
+    );
+    expect(() =>
+      validatePublicConfig({ workKey: 'wrk_test', region: 'cn', presenter: {} }),
     ).toThrow();
   });
 });

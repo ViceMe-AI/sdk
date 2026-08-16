@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.2.0, sha256 065c9f9f4a6e2611…)
+ * (contractVersion 0.2.0, sha256 f193a5933d82f6a8…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -59,6 +59,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["exchangeWechatCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/v1/auth/resume-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createAuthResumeCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/v1/auth/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeAuthenticatedSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -148,6 +180,8 @@ export interface components {
         };
         AuthAuthorizeRequest: {
             codeChallenge: string;
+            /** Format: uri */
+            returnUrl: string;
         };
         AuthAuthorizeResponse: {
             /** Format: uri */
@@ -161,6 +195,13 @@ export interface components {
             token: string;
             expiresAt: number;
             user: components["schemas"]["WorkUser"];
+        };
+        AuthResumeCodeResponse: {
+            code: string;
+            expiresAt: number;
+        };
+        AuthResumeRequest: {
+            code: string;
         };
         FollowState: {
             following: boolean;
@@ -338,6 +379,52 @@ export interface operations {
             };
             "4xx": components["responses"]["PublicError"];
             "5xx": components["responses"]["InternalError"];
+        };
+    };
+    createAuthResumeCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One-time code used to restore the authenticated work session after same-tab checkout. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResumeCodeResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    resumeAuthenticatedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthResumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Restored authenticated work session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthExchangeResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
         };
     };
     getFollowState: {

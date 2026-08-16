@@ -15,6 +15,7 @@ import { isValidWorkKey, isValidRegion } from '../core/config.ts';
 import { ViceMeClientImpl } from '../core/client.ts';
 import type { ViceMeClient } from '../core/client.ts';
 import type { ViceMeRegion } from '../core/config.ts';
+import type { AccessPresenter } from '../core/presentation.ts';
 import type { Transport, TransportRequest, TransportResponse } from '../transport/transport.ts';
 
 export interface MemoryTransportWorkFixture {
@@ -101,6 +102,7 @@ export interface CreateTestViceMeOptions {
   /** Mock transport serving the fixture contract. */
   transport: Transport;
   signal?: AbortSignal;
+  presenter?: AccessPresenter;
   /** Stable virtual clock for deterministic time-based assertions. */
   now?: () => number;
 }
@@ -120,7 +122,12 @@ export function createTestViceMe(options: CreateTestViceMeOptions): ViceMeClient
     throw configInvalid('Test client requires a transport with a request() method.');
   }
   return new ViceMeClientImpl({
-    config: { workKey: options.workKey, region: options.region, signal: options.signal },
+    config: {
+      workKey: options.workKey,
+      region: options.region,
+      signal: options.signal,
+      presenter: options.presenter,
+    },
     transport: options.transport,
     apiBaseUrl: 'https://api.test/v1',
     ...(options.now !== undefined ? { now: options.now } : {}),

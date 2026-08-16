@@ -8,6 +8,7 @@ import type {
 
 function capabilityTransport(alreadyOwned = true): Transport & { requests: TransportRequest[] } {
   const requests: TransportRequest[] = [];
+  let following = false;
   return {
     requests,
     async request(request: TransportRequest): Promise<TransportResponse> {
@@ -26,6 +27,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
         };
       }
       if (request.path === '/public/v1/follow' && request.method === 'PUT') {
+        following = true;
         return {
           status: 200,
           body: { following: true, followedAt: '2026-08-15T10:00:00.000Z' },
@@ -37,9 +39,9 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           body: {
             decisions: {
               dingdong: {
-                allowed: true,
-                reason: 'FOLLOWING',
-                nextAction: null,
+                allowed: following,
+                reason: following ? 'FOLLOWING' : 'FOLLOW_REQUIRED',
+                nextAction: following ? null : 'FOLLOW',
               },
               emperor: {
                 allowed: false,
@@ -65,16 +67,12 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
 }
 
 describe('creator access capabilities', () => {
-  it('uses the in-memory work token for follow and access calls', async () => {
+  it('uses the in-memory work token for access calls', async () => {
     const transport = capabilityTransport();
     const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });
 
-    await expect(client.follow.follow()).resolves.toEqual({
-      following: true,
-      followedAt: '2026-08-15T10:00:00.000Z',
-    });
     await expect(client.access.checkMany(['dingdong', 'emperor'])).resolves.toEqual({
-      dingdong: { allowed: true, reason: 'FOLLOWING', nextAction: null },
+      dingdong: { allowed: false, reason: 'FOLLOW_REQUIRED', nextAction: 'FOLLOW' },
       emperor: {
         allowed: false,
         reason: 'PURCHASE_REQUIRED',
@@ -100,15 +98,47 @@ describe('creator access capabilities', () => {
     expect(transport.requests.at(-1)?.body).toEqual({ locale: 'zh-CN' });
   });
 
-  it('reports a blocked checkout popup', async () => {
+  it('does not perform a required action when the interaction layer is dismissed', async () => {
     const transport = capabilityTransport(false);
-    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });
-    const open = vi.spyOn(window, 'open').mockReturnValue(null);
-
-    await expect(client.checkout.open()).rejects.toMatchObject({
-      code: 'CHECKOUT_UNAVAILABLE',
-      retryable: false,
+    const presenter = vi.fn(async () => 'dismissed' as const);
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport,
+      presenter,
     });
-    open.mockRestore();
+
+    await expect(client.access.require('emperor')).resolves.toEqual({
+      allowed: false,
+      reason: 'PURCHASE_REQUIRED',
+      nextAction: 'CHECKOUT',
+    });
+    expect(presenter).toHaveBeenCalledOnce();
+    expect(
+      transport.requests.some((request) => request.path === '/public/v1/checkout/sessions'),
+    ).toBe(false);
+  });
+
+  it('follows only after the user activates the follow action in the presenter', async () => {
+    const transport = capabilityTransport();
+    const presenter = vi.fn(async (interaction: { perform(): Promise<void> }) => {
+      expect(transport.requests.some((request) => request.method === 'PUT')).toBe(false);
+      await interaction.perform();
+      return 'acted' as const;
+    });
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport,
+      presenter,
+    });
+
+    await expect(client.access.require('dingdong')).resolves.toEqual({
+      allowed: true,
+      reason: 'FOLLOWING',
+      nextAction: null,
+    });
+    expect(presenter).toHaveBeenCalledOnce();
+    expect(transport.requests.filter((request) => request.method === 'PUT')).toHaveLength(1);
   });
 });
