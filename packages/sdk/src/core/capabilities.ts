@@ -70,7 +70,6 @@ export interface CheckoutCapability {
 interface CapabilityDeps {
   session: SessionManager;
   workKey: string;
-  apiBaseUrl: string;
   presenter?: AccessPresenter;
   ready: () => Promise<void>;
 }
@@ -144,6 +143,18 @@ function parseDecision(value: unknown): AccessDecision {
   };
 }
 
+function parseOrigin(value: unknown): string {
+  if (typeof value !== 'string') throw malformedResponse();
+  try {
+    const origin = new URL(value).origin;
+    if (origin !== value) throw malformedResponse();
+    return origin;
+  } catch (error) {
+    if (error instanceof ViceMeError) throw error;
+    throw malformedResponse();
+  }
+}
+
 function randomVerifier(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return base64Url(bytes);
@@ -193,6 +204,7 @@ export function createCapabilities(deps: CapabilityDeps): {
 
   const embeddedFrame = (
     url: string,
+    completionOrigin: string,
     channel: string,
     type: 'auth' | 'checkout',
     complete: (data: Record<string, unknown>) => Promise<void>,
@@ -217,7 +229,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       fail = reject;
     });
     const receive = (event: MessageEvent) => {
-      if (!active || event.origin !== new URL(deps.apiBaseUrl).origin) return;
+      if (!active || event.origin !== completionOrigin) return;
       if (typeof event.data !== 'object' || event.data === null) return;
       const data = event.data as Record<string, unknown>;
       if (data.workKey !== deps.workKey || data.channel !== channel) return;
@@ -256,10 +268,16 @@ export function createCapabilities(deps: CapabilityDeps): {
     });
     const authorize = objectBody(response.body);
     if (typeof authorize.authorizationUrl !== 'string') throw malformedResponse();
-    return embeddedFrame(authorize.authorizationUrl, channel, 'auth', async (data) => {
-      if (typeof data.code !== 'string') throw malformedResponse();
-      await authenticate(data.code, verifier);
-    });
+    return embeddedFrame(
+      authorize.authorizationUrl,
+      parseOrigin(authorize.completionOrigin),
+      channel,
+      'auth',
+      async (data) => {
+        if (typeof data.code !== 'string') throw malformedResponse();
+        await authenticate(data.code, verifier);
+      },
+    );
   };
 
   const auth: AuthCapability = {
@@ -344,6 +362,7 @@ export function createCapabilities(deps: CapabilityDeps): {
     if (typeof response.checkoutUrl !== 'string' || typeof response.alreadyOwned !== 'boolean') {
       throw malformedResponse();
     }
+    const completionOrigin = parseOrigin(response.completionOrigin);
     const result = {
       checkoutUrl: response.checkoutUrl,
       alreadyOwned: response.alreadyOwned,
@@ -352,7 +371,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       result,
       action: result.alreadyOwned
         ? { type: 'completed' }
-        : embeddedFrame(result.checkoutUrl, channel, 'checkout', async () => {}),
+        : embeddedFrame(result.checkoutUrl, completionOrigin, channel, 'checkout', async () => {}),
     };
   };
 

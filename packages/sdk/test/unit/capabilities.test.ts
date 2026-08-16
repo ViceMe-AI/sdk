@@ -2,6 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { createTestViceMe } from '../../src/testing.ts';
+import type { AccessInteraction } from '../../src/core/presentation.ts';
 import type {
   Transport,
   TransportRequest,
@@ -60,13 +61,17 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           body: {
             checkoutUrl: 'https://shop.example.com/zh-CN/checkout?skill=dagou-tap',
             alreadyOwned,
+            completionOrigin: 'https://callback.test',
           },
         };
       }
       if (request.path === '/public/v1/auth/wechat/authorize') {
         return {
           status: 200,
-          body: { authorizationUrl: 'https://open.weixin.qq.com/connect/qrconnect' },
+          body: {
+            authorizationUrl: 'https://open.weixin.qq.com/connect/qrconnect',
+            completionOrigin: 'https://callback.test',
+          },
         };
       }
       if (request.path === '/public/v1/auth/exchange') {
@@ -204,7 +209,7 @@ describe('creator access capabilities', () => {
     ).toBe(false);
   });
 
-  it('completes embedded login only from the matching API message channel', async () => {
+  it('completes embedded login from the callback origin returned by the API', async () => {
     const transport = capabilityTransport();
     const presenter = vi.fn(
       async (interaction: {
@@ -220,7 +225,7 @@ describe('creator access capabilities', () => {
         const channel = (authorize?.body as { channel?: string }).channel;
         window.dispatchEvent(
           new MessageEvent('message', {
-            origin: 'https://api.test',
+            origin: 'https://callback.test',
             data: {
               type: 'viceme:auth:complete',
               workKey: 'wrk_test',
@@ -244,5 +249,42 @@ describe('creator access capabilities', () => {
       authenticated: true,
       user: { nickname: 'Visitor' },
     });
+  });
+
+  it('ignores a completion message from the SDK request origin when the callback differs', async () => {
+    const transport = capabilityTransport();
+    const presenter = vi.fn(async (interaction: AccessInteraction) => {
+      const result = await interaction.perform();
+      if (result.type !== 'frame') throw new Error('expected auth frame');
+      const authorize = transport.requests.find(
+        (request) => request.path === '/public/v1/auth/wechat/authorize',
+      );
+      const channel = (authorize?.body as { channel?: string }).channel;
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: 'https://api.test',
+          data: {
+            type: 'viceme:auth:complete',
+            workKey: 'wrk_test',
+            channel,
+            code: 'a'.repeat(32),
+          },
+        }),
+      );
+      await Promise.resolve();
+      expect(
+        transport.requests.some((request) => request.path === '/public/v1/auth/exchange'),
+      ).toBe(false);
+      result.cancel?.();
+      return 'dismissed' as const;
+    });
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport,
+      presenter,
+    });
+
+    await expect(client.auth.signIn()).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
   });
 });

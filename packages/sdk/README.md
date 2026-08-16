@@ -22,21 +22,19 @@ const access = await client.access.checkMany(['dingdong', 'emperor']);
 if (access.dingdong.allowed) enableDingdong();
 if (access.emperor.allowed) enableEmperor();
 
-// Call from a user gesture. A denied decision opens the site presenter or the
-// default bottom-sheet/in-page Web Component. It never silently follows.
+// Call from a user gesture. A denied decision opens the ViceMe
+// bottom-sheet/in-page Web Component. It never silently follows.
 const decision = await client.access.require('emperor');
 if (decision.allowed) enableEmperor();
 
 client.destroy();
 ```
 
-Pass `presenter` to `createViceMe()` when the site already has React/HTML
-Sheet, Drawer, Dialog, and Button components. Without one, the SDK registers
-and mounts `<viceme-access-layer>` with isolated styles, inherited typography,
-CSS variables, and `::part()` hooks. Login and checkout remain inside its
-iframe area and complete through an origin- and channel-validated message; no
-browser popup, page navigation, `confirm`, or `alert` is used. A custom
-presenter renders the returned frame action inside its own Sheet or Dialog.
+The SDK registers and mounts `<viceme-access-layer>` with isolated ViceMe-owned
+styles. Login and checkout remain inside its iframe area and complete through
+an origin- and channel-validated message; no browser popup, page navigation,
+`confirm`, or `alert` is used. Custom site presenters and style inference are
+not part of the current public contract.
 
 Static HTML sites can use the CDN auto-loader instead — see the
 [repository README](https://github.com/ViceMe-AI/sdk).

@@ -355,9 +355,12 @@
       },
       "AuthAuthorizeResponse": {
         "type": "object",
-        "required": ["authorizationUrl"],
+        "required": ["authorizationUrl", "completionOrigin"],
         "additionalProperties": false,
-        "properties": { "authorizationUrl": { "type": "string", "format": "uri" } }
+        "properties": {
+          "authorizationUrl": { "type": "string", "format": "uri" },
+          "completionOrigin": { "type": "string", "format": "uri" }
+        }
       },
       "AuthExchangeRequest": {
         "type": "object",
@@ -465,11 +468,12 @@
       },
       "CheckoutResponse": {
         "type": "object",
-        "required": ["checkoutUrl", "alreadyOwned"],
+        "required": ["checkoutUrl", "alreadyOwned", "completionOrigin"],
         "additionalProperties": false,
         "properties": {
           "checkoutUrl": { "type": "string", "format": "uri" },
-          "alreadyOwned": { "type": "boolean" }
+          "alreadyOwned": { "type": "boolean" },
+          "completionOrigin": { "type": "string", "format": "uri" }
         }
       },
       "CheckoutBootstrapRequest": {

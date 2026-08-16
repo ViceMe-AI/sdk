@@ -22,10 +22,7 @@ export type AccessActionResult = AccessCompletedAction | AccessFrameAction;
 
 export type AccessPresentationResult = 'acted' | 'dismissed';
 
-/**
- * Site-owned presenters can wrap the headless SDK with an existing React or
- * HTML Sheet/Drawer. When omitted, the SDK uses its lightweight Web Component.
- */
+/** Internal interaction seam used by the ViceMe layer and deterministic tests. */
 export type AccessPresenter = (interaction: AccessInteraction) => Promise<AccessPresentationResult>;
 
 const ELEMENT_NAME = 'viceme-access-layer';
@@ -73,102 +70,101 @@ function ensureAccessLayerElement(): void {
       shadow.innerHTML = `
         <style>
           :host {
-            --viceme-layer-backdrop: rgb(15 23 42 / 42%);
-            --viceme-layer-surface: Canvas;
-            --viceme-layer-text: CanvasText;
-            --viceme-layer-muted: color-mix(in srgb, CanvasText 62%, transparent);
-            --viceme-layer-accent: CanvasText;
             position: fixed;
             inset: 0;
             z-index: 2147483000;
             display: grid;
             align-items: end;
-            color: var(--viceme-layer-text);
-            font: inherit;
+            color: #222222;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            font-size: 16px;
+            line-height: 1.5;
           }
-          [part='backdrop'] {
+          [data-viceme='backdrop'] {
             position: absolute;
             inset: 0;
             border: 0;
-            background: var(--viceme-layer-backdrop);
+            background: rgb(15 23 42 / 48%);
           }
-          [part='panel'] {
+          [data-viceme='panel'] {
             position: relative;
             box-sizing: border-box;
             width: 100%;
             max-height: min(78vh, 36rem);
             overflow: auto;
             border-radius: 1.25rem 1.25rem 0 0;
-            background: var(--viceme-layer-surface);
-            color: var(--viceme-layer-text);
+            background: #ffffff;
+            color: #222222;
             padding: 0.75rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
             box-shadow: 0 -1rem 3rem rgb(15 23 42 / 18%);
           }
-          [part='frame-header'] { display: none; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
-          [part='frame-title'] { margin: 0; font: inherit; font-size: 1em; font-weight: 650; }
-          [part='frame-close'] { min-width: 2.75rem; padding: 0.5rem; }
-          [part='frame'] { display: none; width: 100%; height: min(72dvh, 42rem); border: 0; border-radius: 0.75rem; background: Canvas; }
-          [part='panel'][data-frame='true'] { max-height: 92dvh; }
-          [part='panel'][data-frame='true'] [part='handle'],
-          [part='panel'][data-frame='true'] > [part='title'],
-          [part='panel'][data-frame='true'] > [part='description'],
-          [part='panel'][data-frame='true'] > [part='error'],
-          [part='panel'][data-frame='true'] > [part='actions'] { display: none; }
-          [part='panel'][data-frame='true'] [part='frame-header'] { display: flex; }
-          [part='panel'][data-frame='true'] [part='frame'] { display: block; }
-          [part='handle'] {
+          [data-viceme='frame-header'] { display: none; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+          [data-viceme='frame-title'] { margin: 0; font-size: 1rem; font-weight: 650; }
+          [data-viceme='frame-close'] { min-width: 2.75rem; padding: 0.5rem; }
+          [data-viceme='frame'] { display: none; width: 100%; height: min(72dvh, 42rem); border: 0; border-radius: 0.75rem; background: #ffffff; }
+          [data-viceme='panel'][data-frame='true'] { max-height: 92dvh; }
+          [data-viceme='panel'][data-frame='true'] [data-viceme='handle'],
+          [data-viceme='panel'][data-frame='true'] > [data-viceme='title'],
+          [data-viceme='panel'][data-frame='true'] > [data-viceme='description'],
+          [data-viceme='panel'][data-frame='true'] > [data-viceme='error'],
+          [data-viceme='panel'][data-frame='true'] > [data-viceme='actions'] { display: none; }
+          [data-viceme='panel'][data-frame='true'] [data-viceme='frame-header'] { display: flex; }
+          [data-viceme='panel'][data-frame='true'] [data-viceme='frame'] { display: block; }
+          [data-viceme='handle'] {
             width: 2.5rem;
             height: 0.25rem;
             margin: 0 auto 1rem;
             border-radius: 999px;
-            background: color-mix(in srgb, CanvasText 20%, transparent);
+            background: #dedede;
           }
-          [part='title'] { margin: 0; font: inherit; font-size: 1.125em; font-weight: 650; }
-          [part='description'] { margin: 0.5rem 0 1.25rem; color: var(--viceme-layer-muted); line-height: 1.6; }
-          [part='actions'] { display: grid; gap: 0.75rem; }
-          button { min-height: 2.75rem; border-radius: 0.75rem; padding: 0.625rem 1rem; font: inherit; cursor: pointer; }
-          [part='action'] { border: 1px solid var(--viceme-layer-accent); background: var(--viceme-layer-accent); color: Canvas; font-weight: 600; }
-          [part='dismiss'] { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); background: transparent; color: inherit; }
+          [data-viceme='title'] { margin: 0; font-size: 1.125rem; font-weight: 650; }
+          [data-viceme='description'] { margin: 0.5rem 0 1.25rem; color: #6c6c6c; line-height: 1.6; }
+          [data-viceme='actions'] { display: grid; gap: 0.75rem; }
+          button { min-height: 2.75rem; border-radius: 0.75rem; padding: 0.625rem 1rem; font: 600 1rem/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; cursor: pointer; }
+          [data-viceme='action'] { border: 1px solid #ff385c; background: #ff385c; color: #ffffff; }
+          [data-viceme='action']:hover { background: #e00b41; border-color: #e00b41; }
+          [data-viceme='dismiss'] { border: 1px solid #dedede; background: #ffffff; color: #222222; }
           button:disabled { cursor: wait; opacity: 0.58; }
-          [part='error'] { min-height: 1.25rem; margin: 0 0 0.75rem; color: #b42318; font-size: 0.875em; }
+          [data-viceme='error'] { min-height: 1.25rem; margin: 0 0 0.75rem; color: #b42318; font-size: 0.875rem; }
           @media (min-width: 48rem) {
             :host { place-items: center; padding: 1.5rem; }
-            [part='panel'] { width: min(28rem, 100%); border-radius: 1.25rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgb(15 23 42 / 24%); }
-            [part='panel'][data-frame='true'] { width: min(42rem, 100%); }
-            [part='handle'] { display: none; }
+            [data-viceme='panel'] { width: min(28rem, 100%); border-radius: 1.25rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgb(15 23 42 / 24%); }
+            [data-viceme='panel'][data-frame='true'] { width: min(42rem, 100%); }
+            [data-viceme='handle'] { display: none; }
           }
           @media (prefers-reduced-motion: no-preference) {
-            [part='panel'] { animation: viceme-enter 160ms ease-out; }
+            [data-viceme='panel'] { animation: viceme-enter 160ms ease-out; }
             @keyframes viceme-enter { from { opacity: 0; transform: translateY(1rem); } }
           }
         </style>
-        <button part="backdrop" type="button" tabindex="-1" aria-label="关闭"></button>
-        <section part="panel" role="dialog" aria-modal="true" aria-labelledby="viceme-layer-title">
-          <div part="handle" aria-hidden="true"></div>
-          <h2 part="title" id="viceme-layer-title"></h2>
-          <p part="description"></p>
-          <p part="error" role="alert" aria-live="polite"></p>
-          <div part="actions">
-            <button part="action" type="button"></button>
-            <button part="dismiss" type="button">暂不操作</button>
+        <button data-viceme="backdrop" type="button" tabindex="-1" aria-label="关闭"></button>
+        <section data-viceme="panel" role="dialog" aria-modal="true" aria-labelledby="viceme-layer-title">
+          <div data-viceme="handle" aria-hidden="true"></div>
+          <h2 data-viceme="title" id="viceme-layer-title"></h2>
+          <p data-viceme="description"></p>
+          <p data-viceme="error" role="alert" aria-live="polite"></p>
+          <div data-viceme="actions">
+            <button data-viceme="action" type="button"></button>
+            <button data-viceme="dismiss" type="button">暂不操作</button>
           </div>
-          <div part="frame-header">
-            <p part="frame-title"></p>
-            <button part="frame-close" type="button" aria-label="关闭">关闭</button>
+          <div data-viceme="frame-header">
+            <p data-viceme="frame-title"></p>
+            <button data-viceme="frame-close" type="button" aria-label="关闭">关闭</button>
           </div>
-          <iframe part="frame" title="" referrerpolicy="no-referrer" allow="payment"></iframe>
+          <iframe data-viceme="frame" title="" referrerpolicy="no-referrer" allow="payment"></iframe>
         </section>
       `;
-      shadow.querySelector<HTMLElement>("[part='title']")!.textContent = copy.title;
-      shadow.querySelector<HTMLElement>("[part='description']")!.textContent = copy.description;
-      const action = shadow.querySelector<HTMLButtonElement>("[part='action']")!;
-      const dismiss = shadow.querySelector<HTMLButtonElement>("[part='dismiss']")!;
-      const backdrop = shadow.querySelector<HTMLButtonElement>("[part='backdrop']")!;
-      const error = shadow.querySelector<HTMLElement>("[part='error']")!;
-      const panel = shadow.querySelector<HTMLElement>("[part='panel']")!;
-      const frameTitle = shadow.querySelector<HTMLElement>("[part='frame-title']")!;
-      const frameClose = shadow.querySelector<HTMLButtonElement>("[part='frame-close']")!;
-      const frame = shadow.querySelector<HTMLIFrameElement>("[part='frame']")!;
+      shadow.querySelector<HTMLElement>("[data-viceme='title']")!.textContent = copy.title;
+      shadow.querySelector<HTMLElement>("[data-viceme='description']")!.textContent =
+        copy.description;
+      const action = shadow.querySelector<HTMLButtonElement>("[data-viceme='action']")!;
+      const dismiss = shadow.querySelector<HTMLButtonElement>("[data-viceme='dismiss']")!;
+      const backdrop = shadow.querySelector<HTMLButtonElement>("[data-viceme='backdrop']")!;
+      const error = shadow.querySelector<HTMLElement>("[data-viceme='error']")!;
+      const panel = shadow.querySelector<HTMLElement>("[data-viceme='panel']")!;
+      const frameTitle = shadow.querySelector<HTMLElement>("[data-viceme='frame-title']")!;
+      const frameClose = shadow.querySelector<HTMLButtonElement>("[data-viceme='frame-close']")!;
+      const frame = shadow.querySelector<HTMLIFrameElement>("[data-viceme='frame']")!;
       action.textContent = copy.label;
       frameTitle.textContent = copy.title;
       frame.title = copy.title;

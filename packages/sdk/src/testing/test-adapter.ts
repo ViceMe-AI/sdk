@@ -126,10 +126,9 @@ export function createTestViceMe(options: CreateTestViceMeOptions): ViceMeClient
       workKey: options.workKey,
       region: options.region,
       signal: options.signal,
-      presenter: options.presenter,
     },
     transport: options.transport,
-    apiBaseUrl: 'https://api.test/v1',
+    presenter: options.presenter,
     ...(options.now !== undefined ? { now: options.now } : {}),
   });
 }

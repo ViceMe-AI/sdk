@@ -20,6 +20,7 @@ import {
   type AuthCapability,
   type CheckoutCapability,
 } from './capabilities.ts';
+import type { AccessPresenter } from './presentation.ts';
 
 export interface ViceMeClient {
   readonly version: string;
@@ -50,7 +51,8 @@ class DestroySignalReason extends DOMException {
 export interface ViceMeClientDeps {
   config: ViceMeConfig;
   transport: Transport;
-  apiBaseUrl: string;
+  /** Interaction override for the testing entry only. */
+  presenter?: AccessPresenter;
   /** Injectable clock (testing only). */
   now?: () => number;
 }
@@ -76,8 +78,7 @@ export class ViceMeClientImpl implements ViceMeClient {
     const capabilities = createCapabilities({
       session: this.#session,
       workKey: deps.config.workKey,
-      apiBaseUrl: deps.apiBaseUrl,
-      presenter: deps.config.presenter,
+      presenter: deps.presenter,
       ready: () => this.ready(),
     });
     this.auth = capabilities.auth;

@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.3.1, sha256 8929e13eebb6aab6…)
+ * (contractVersion 0.3.1, sha256 eafa091f1b0e2a9c…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -201,6 +201,8 @@ export interface components {
         AuthAuthorizeResponse: {
             /** Format: uri */
             authorizationUrl: string;
+            /** Format: uri */
+            completionOrigin: string;
         };
         AuthExchangeRequest: {
             code: string;
@@ -250,6 +252,8 @@ export interface components {
             /** Format: uri */
             checkoutUrl: string;
             alreadyOwned: boolean;
+            /** Format: uri */
+            completionOrigin: string;
         };
         CheckoutBootstrapRequest: {
             code: string;

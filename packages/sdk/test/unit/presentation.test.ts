@@ -13,10 +13,15 @@ describe('default access presenter', () => {
       perform,
     });
     const layer = document.querySelector('viceme-access-layer');
-    expect(layer?.shadowRoot?.querySelector("[part='panel']")?.getAttribute('role')).toBe('dialog');
-    expect(layer?.shadowRoot?.querySelector("[part='action']")?.textContent).toBe('关注创作者');
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='panel']")?.getAttribute('role')).toBe(
+      'dialog',
+    );
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='action']")?.textContent).toBe(
+      '关注创作者',
+    );
+    expect(layer?.shadowRoot?.innerHTML).not.toMatch(/\bpart=|var\(|Canvas|inherit/);
 
-    (layer?.shadowRoot?.querySelector("[part='dismiss']") as HTMLButtonElement).click();
+    (layer?.shadowRoot?.querySelector("[data-viceme='dismiss']") as HTMLButtonElement).click();
 
     await expect(presented).resolves.toBe('dismissed');
     expect(perform).not.toHaveBeenCalled();
@@ -41,7 +46,7 @@ describe('default access presenter', () => {
     });
     const layer = document.querySelector('viceme-access-layer');
 
-    (layer?.shadowRoot?.querySelector("[part='action']") as HTMLButtonElement).click();
+    (layer?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(layer?.shadowRoot?.querySelector('iframe')?.getAttribute('src')).toBe(
         'about:blank#checkout',

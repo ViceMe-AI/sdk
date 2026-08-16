@@ -23,15 +23,6 @@ import type {
   CheckoutResult,
 } from './core/capabilities.ts';
 import type { WorkUser } from './session/session.ts';
-import type {
-  AccessInteraction,
-  AccessActionResult,
-  AccessCompletedAction,
-  AccessFrameAction,
-  AccessInteractionAction,
-  AccessPresentationResult,
-  AccessPresenter,
-} from './core/presentation.ts';
 import { SDK_VERSION, API_MAJOR } from './version.ts';
 
 export { ViceMeError, isViceMeError, SDK_VERSION, API_MAJOR, resolveApiBaseUrl };
@@ -50,13 +41,6 @@ export type {
   CheckoutCapability,
   CheckoutOptions,
   CheckoutResult,
-  AccessInteraction,
-  AccessActionResult,
-  AccessCompletedAction,
-  AccessFrameAction,
-  AccessInteractionAction,
-  AccessPresentationResult,
-  AccessPresenter,
   WorkUser,
 };
 
@@ -76,5 +60,5 @@ export function createViceMe(config: unknown): ViceMeClient {
   const transport = createFetchTransport({
     apiBaseUrl,
   });
-  return new ViceMeClientImpl({ config: validated, transport, apiBaseUrl });
+  return new ViceMeClientImpl({ config: validated, transport });
 }

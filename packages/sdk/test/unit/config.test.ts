@@ -13,7 +13,6 @@ describe('validatePublicConfig', () => {
       workKey: 'wrk_public_xxx',
       region: 'cn',
       signal: undefined,
-      presenter: undefined,
     });
   });
 
@@ -45,14 +44,14 @@ describe('validatePublicConfig', () => {
     ).toThrow();
   });
 
-  it('accepts a site-native presenter and rejects non-functions', () => {
-    const presenter = async () => 'dismissed' as const;
-    expect(validatePublicConfig({ workKey: 'wrk_test', region: 'cn', presenter }).presenter).toBe(
-      presenter,
-    );
+  it('rejects custom presenters while the interaction contract is ViceMe-owned', () => {
     expect(() =>
-      validatePublicConfig({ workKey: 'wrk_test', region: 'cn', presenter: {} }),
-    ).toThrow();
+      validatePublicConfig({
+        workKey: 'wrk_test',
+        region: 'cn',
+        presenter: async () => 'dismissed',
+      }),
+    ).toThrow(/Unknown configuration field "presenter"/);
   });
 });
 

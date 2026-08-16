@@ -8,8 +8,6 @@
  */
 
 import { configInvalid } from './errors.ts';
-import type { AccessPresenter } from './presentation.ts';
-
 export type ViceMeRegion = 'cn' | 'global';
 
 export interface ViceMeConfig {
@@ -19,8 +17,6 @@ export interface ViceMeConfig {
   region: ViceMeRegion;
   /** Optional abort signal owned by the host page. */
   signal?: AbortSignal;
-  /** Optional site-native Sheet/Drawer presenter. */
-  presenter?: AccessPresenter;
 }
 
 const REGIONS: ReadonlySet<string> = new Set(['cn', 'global']);
@@ -57,7 +53,7 @@ export function validatePublicConfig(input: unknown): ViceMeConfig {
   }
   const raw = input as Record<string, unknown>;
 
-  const known = new Set(['workKey', 'region', 'signal', 'presenter']);
+  const known = new Set(['workKey', 'region', 'signal']);
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) {
       throw configInvalid(`Unknown configuration field "${key}".`);
@@ -72,13 +68,9 @@ export function validatePublicConfig(input: unknown): ViceMeConfig {
   if (raw.signal !== undefined && !(raw.signal instanceof AbortSignal)) {
     throw configInvalid('Configuration field "signal" must be an AbortSignal.');
   }
-  if (raw.presenter !== undefined && typeof raw.presenter !== 'function') {
-    throw configInvalid('Configuration field "presenter" must be a function.');
-  }
   return {
     workKey: raw.workKey,
     region: raw.region,
     signal: raw.signal,
-    presenter: raw.presenter as AccessPresenter | undefined,
   };
 }
