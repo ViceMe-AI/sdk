@@ -4,8 +4,21 @@ export interface AccessInteraction {
   featureKey: string;
   reason: string;
   action: AccessInteractionAction;
-  perform(): Promise<void>;
+  perform(): Promise<AccessActionResult>;
 }
+
+export interface AccessCompletedAction {
+  type: 'completed';
+}
+
+export interface AccessFrameAction {
+  type: 'frame';
+  url: string;
+  completion: Promise<void>;
+  cancel(): void;
+}
+
+export type AccessActionResult = AccessCompletedAction | AccessFrameAction;
 
 export type AccessPresentationResult = 'acted' | 'dismissed';
 
@@ -42,8 +55,8 @@ function actionCopy(action: AccessInteractionAction): {
     case 'CHECKOUT':
       return {
         title: '购买后解锁',
-        description: '请先查看并确认作品信息，再前往 ViceMe 完成购买。',
-        label: '查看并购买',
+        description: '在当前页面查看作品并完成支付，成功后将自动返回。',
+        label: '打开支付',
       };
   }
 }
@@ -91,6 +104,18 @@ function ensureAccessLayerElement(): void {
             padding: 0.75rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
             box-shadow: 0 -1rem 3rem rgb(15 23 42 / 18%);
           }
+          [part='frame-header'] { display: none; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+          [part='frame-title'] { margin: 0; font: inherit; font-size: 1em; font-weight: 650; }
+          [part='frame-close'] { min-width: 2.75rem; padding: 0.5rem; }
+          [part='frame'] { display: none; width: 100%; height: min(72dvh, 42rem); border: 0; border-radius: 0.75rem; background: Canvas; }
+          [part='panel'][data-frame='true'] { max-height: 92dvh; }
+          [part='panel'][data-frame='true'] [part='handle'],
+          [part='panel'][data-frame='true'] > [part='title'],
+          [part='panel'][data-frame='true'] > [part='description'],
+          [part='panel'][data-frame='true'] > [part='error'],
+          [part='panel'][data-frame='true'] > [part='actions'] { display: none; }
+          [part='panel'][data-frame='true'] [part='frame-header'] { display: flex; }
+          [part='panel'][data-frame='true'] [part='frame'] { display: block; }
           [part='handle'] {
             width: 2.5rem;
             height: 0.25rem;
@@ -109,6 +134,7 @@ function ensureAccessLayerElement(): void {
           @media (min-width: 48rem) {
             :host { place-items: center; padding: 1.5rem; }
             [part='panel'] { width: min(28rem, 100%); border-radius: 1.25rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgb(15 23 42 / 24%); }
+            [part='panel'][data-frame='true'] { width: min(42rem, 100%); }
             [part='handle'] { display: none; }
           }
           @media (prefers-reduced-motion: no-preference) {
@@ -126,6 +152,11 @@ function ensureAccessLayerElement(): void {
             <button part="action" type="button"></button>
             <button part="dismiss" type="button">暂不操作</button>
           </div>
+          <div part="frame-header">
+            <p part="frame-title"></p>
+            <button part="frame-close" type="button" aria-label="关闭">关闭</button>
+          </div>
+          <iframe part="frame" title="" referrerpolicy="no-referrer" allow="payment"></iframe>
         </section>
       `;
       shadow.querySelector<HTMLElement>("[part='title']")!.textContent = copy.title;
@@ -134,18 +165,33 @@ function ensureAccessLayerElement(): void {
       const dismiss = shadow.querySelector<HTMLButtonElement>("[part='dismiss']")!;
       const backdrop = shadow.querySelector<HTMLButtonElement>("[part='backdrop']")!;
       const error = shadow.querySelector<HTMLElement>("[part='error']")!;
+      const panel = shadow.querySelector<HTMLElement>("[part='panel']")!;
+      const frameTitle = shadow.querySelector<HTMLElement>("[part='frame-title']")!;
+      const frameClose = shadow.querySelector<HTMLButtonElement>("[part='frame-close']")!;
+      const frame = shadow.querySelector<HTMLIFrameElement>("[part='frame']")!;
       action.textContent = copy.label;
+      frameTitle.textContent = copy.title;
+      frame.title = copy.title;
+      let activeFrame: AccessFrameAction | null = null;
 
       const close = (result: AccessPresentationResult) => {
         this.dispatchEvent(new CustomEvent('viceme:access-layer-close', { detail: result }));
       };
-      const dismissLayer = () => close('dismissed');
+      const dismissLayer = () => {
+        activeFrame?.cancel();
+        close('dismissed');
+      };
       dismiss.addEventListener('click', dismissLayer);
       backdrop.addEventListener('click', dismissLayer);
+      frameClose.addEventListener('click', dismissLayer);
       this.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') dismissLayer();
         if (event.key === 'Tab') {
           event.preventDefault();
+          if (activeFrame) {
+            frameClose.focus();
+            return;
+          }
           const next = event.shiftKey
             ? shadow.activeElement === action
               ? dismiss
@@ -161,9 +207,20 @@ function ensureAccessLayerElement(): void {
         dismiss.disabled = true;
         error.textContent = '';
         try {
-          await this.interaction.perform();
+          const result = await this.interaction.perform();
+          if (result.type === 'frame') {
+            activeFrame = result;
+            panel.dataset.frame = 'true';
+            frame.src = result.url;
+            frameClose.focus();
+            await result.completion;
+          }
           close('acted');
         } catch {
+          activeFrame?.cancel();
+          activeFrame = null;
+          panel.dataset.frame = 'false';
+          frame.removeAttribute('src');
           error.textContent = '操作未完成，请重试。';
           action.disabled = false;
           dismiss.disabled = false;

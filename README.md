@@ -62,7 +62,8 @@ const decisions = await client.access.checkMany(['dingdong', 'emperor']);
 
 // From a gated user gesture. A denied decision opens the site's presenter or
 // the default in-page Web Component; follow/login/checkout require a second,
-// explicit action inside that interface.
+// explicit action inside that interface. Login and payment remain in the
+// bottom sheet or modal instead of navigating the creator page.
 await client.access.require('emperor');
 
 client.destroy();

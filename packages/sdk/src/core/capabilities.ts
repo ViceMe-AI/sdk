@@ -1,6 +1,8 @@
 import { ViceMeError } from './errors.ts';
 import {
   defaultAccessPresenter,
+  type AccessActionResult,
+  type AccessFrameAction,
   type AccessInteractionAction,
   type AccessPresenter,
 } from './presentation.ts';
@@ -34,7 +36,6 @@ export interface AccessDecision {
 }
 
 export interface CheckoutOptions {
-  returnUrl?: string;
   locale?: 'zh-CN' | 'en-US';
 }
 
@@ -69,6 +70,7 @@ export interface CheckoutCapability {
 interface CapabilityDeps {
   session: SessionManager;
   workKey: string;
+  apiBaseUrl: string;
   presenter?: AccessPresenter;
   ready: () => Promise<void>;
 }
@@ -158,20 +160,11 @@ async function codeChallenge(verifier: string): Promise<string> {
   return base64Url(new Uint8Array(digest));
 }
 
-function authStorageKey(workKey: string): string {
-  return `viceme:auth:${workKey}`;
-}
-
-function checkoutResumeStorageKey(workKey: string): string {
-  return `viceme:checkout-resume:${workKey}`;
-}
-
 export function createCapabilities(deps: CapabilityDeps): {
   auth: AuthCapability;
   follow: FollowCapability;
   access: AccessCapability;
   checkout: CheckoutCapability;
-  resumeRedirects(): Promise<void>;
 } {
   const authenticate = async (code: string, codeVerifier: string): Promise<AuthState> => {
     const exchange = objectBody(
@@ -191,44 +184,82 @@ export function createCapabilities(deps: CapabilityDeps): {
     return { authenticated: true, user };
   };
 
-  const resumeRedirects = async (): Promise<void> => {
-    if (typeof window === 'undefined') return;
-    const checkoutCode = window.sessionStorage.getItem(checkoutResumeStorageKey(deps.workKey));
-    if (checkoutCode) {
-      window.sessionStorage.removeItem(checkoutResumeStorageKey(deps.workKey));
-      const response = objectBody(
-        (
-          await deps.session.request({
-            method: 'POST',
-            path: '/public/v1/auth/resume',
-            body: { code: checkoutCode },
-          })
-        ).body,
-      );
-      if (typeof response.token !== 'string' || typeof response.expiresAt !== 'number') {
-        throw malformedResponse();
-      }
-      const user = parseUser(response.user);
-      deps.session.authenticate({ token: response.token, expiresAt: response.expiresAt, user });
-    }
+  const cancelled = () =>
+    new ViceMeError({
+      code: 'AUTH_CANCELLED',
+      message: 'The interactive action was cancelled.',
+      retryable: false,
+    });
 
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get('vicemeAuthCode');
-    if (!code) return;
-    const raw = window.sessionStorage.getItem(authStorageKey(deps.workKey));
-    window.sessionStorage.removeItem(authStorageKey(deps.workKey));
-    url.searchParams.delete('vicemeAuthCode');
-    window.history.replaceState(window.history.state, '', url);
-    if (!raw) {
+  const embeddedFrame = (
+    url: string,
+    channel: string,
+    type: 'auth' | 'checkout',
+    complete: (data: Record<string, unknown>) => Promise<void>,
+  ): AccessFrameAction => {
+    if (typeof window === 'undefined') {
       throw new ViceMeError({
-        code: 'AUTH_CANCELLED',
-        message: 'The sign-in continuation is missing or expired.',
+        code: 'CONFIG_INVALID',
+        message: 'Interactive access requires a browser window.',
         retryable: false,
       });
     }
-    const state = JSON.parse(raw) as { verifier?: unknown };
-    if (typeof state.verifier !== 'string') throw malformedResponse();
-    await authenticate(code, state.verifier);
+    let active = true;
+    let settle!: () => void;
+    let fail!: (error: unknown) => void;
+    const cleanup = () => {
+      if (!active) return;
+      active = false;
+      window.removeEventListener('message', receive);
+    };
+    const completion = new Promise<void>((resolve, reject) => {
+      settle = resolve;
+      fail = reject;
+    });
+    const receive = (event: MessageEvent) => {
+      if (!active || event.origin !== new URL(deps.apiBaseUrl).origin) return;
+      if (typeof event.data !== 'object' || event.data === null) return;
+      const data = event.data as Record<string, unknown>;
+      if (data.workKey !== deps.workKey || data.channel !== channel) return;
+      if (data.type === `viceme:${type}:cancelled`) {
+        cleanup();
+        fail(cancelled());
+        return;
+      }
+      if (data.type !== `viceme:${type}:complete`) return;
+      cleanup();
+      void complete(data).then(settle, fail);
+    };
+    window.addEventListener('message', receive);
+    return {
+      type: 'frame',
+      url,
+      completion,
+      cancel() {
+        cleanup();
+        settle();
+      },
+    };
+  };
+
+  const startSignIn = async (): Promise<AccessActionResult> => {
+    await deps.ready();
+    const verifier = randomVerifier();
+    const channel = randomVerifier();
+    const response = await deps.session.request({
+      method: 'POST',
+      path: '/public/v1/auth/wechat/authorize',
+      body: {
+        codeChallenge: await codeChallenge(verifier),
+        channel,
+      },
+    });
+    const authorize = objectBody(response.body);
+    if (typeof authorize.authorizationUrl !== 'string') throw malformedResponse();
+    return embeddedFrame(authorize.authorizationUrl, channel, 'auth', async (data) => {
+      if (typeof data.code !== 'string') throw malformedResponse();
+      await authenticate(data.code, verifier);
+    });
   };
 
   const auth: AuthCapability = {
@@ -238,31 +269,15 @@ export function createCapabilities(deps: CapabilityDeps): {
       return { authenticated: user !== null, user };
     },
     async signIn() {
-      await deps.ready();
-      if (typeof window === 'undefined') {
-        throw new ViceMeError({
-          code: 'CONFIG_INVALID',
-          message: 'WeChat sign-in requires a browser window.',
-          retryable: false,
-        });
-      }
-      const verifier = randomVerifier();
-      const response = await deps.session.request({
-        method: 'POST',
-        path: '/public/v1/auth/wechat/authorize',
-        body: {
-          codeChallenge: await codeChallenge(verifier),
-          returnUrl: window.location.href,
-        },
+      const presenter = deps.presenter ?? defaultAccessPresenter;
+      const result = await presenter({
+        featureKey: 'auth',
+        reason: 'AUTH_REQUIRED',
+        action: 'SIGN_IN',
+        perform: startSignIn,
       });
-      const authorize = objectBody(response.body);
-      if (typeof authorize.authorizationUrl !== 'string') throw malformedResponse();
-      window.sessionStorage.setItem(
-        authStorageKey(deps.workKey),
-        JSON.stringify({ verifier, startedAt: Date.now() }),
-      );
-      window.location.assign(authorize.authorizationUrl);
-      return { authenticated: false, user: null };
+      if (result === 'dismissed') throw cancelled();
+      return this.getState();
     },
     async signOut() {
       await deps.ready();
@@ -308,43 +323,55 @@ export function createCapabilities(deps: CapabilityDeps): {
     );
   };
 
+  const startCheckout = async (
+    options: CheckoutOptions = {},
+  ): Promise<{ result: CheckoutResult; action: AccessActionResult }> => {
+    await deps.ready();
+    const channel = randomVerifier();
+    const body = {
+      locale: options.locale ?? 'zh-CN',
+      channel,
+    };
+    const response = objectBody(
+      (
+        await deps.session.request({
+          method: 'POST',
+          path: '/public/v1/checkout/sessions',
+          body,
+        })
+      ).body,
+    );
+    if (typeof response.checkoutUrl !== 'string' || typeof response.alreadyOwned !== 'boolean') {
+      throw malformedResponse();
+    }
+    const result = {
+      checkoutUrl: response.checkoutUrl,
+      alreadyOwned: response.alreadyOwned,
+    };
+    return {
+      result,
+      action: result.alreadyOwned
+        ? { type: 'completed' }
+        : embeddedFrame(result.checkoutUrl, channel, 'checkout', async () => {}),
+    };
+  };
+
   const checkout: CheckoutCapability = {
     async open(options = {}) {
-      await deps.ready();
-      const body: { locale: 'zh-CN' | 'en-US'; returnUrl?: string } = {
-        locale: options.locale ?? 'zh-CN',
-      };
-      if (options.returnUrl !== undefined) body.returnUrl = options.returnUrl;
-      const response = objectBody(
-        (
-          await deps.session.request({
-            method: 'POST',
-            path: '/public/v1/checkout/sessions',
-            body,
-          })
-        ).body,
-      );
-      if (typeof response.checkoutUrl !== 'string' || typeof response.alreadyOwned !== 'boolean') {
-        throw malformedResponse();
-      }
-      const result = {
-        checkoutUrl: response.checkoutUrl,
-        alreadyOwned: response.alreadyOwned,
-      };
-      if (!result.alreadyOwned && typeof window !== 'undefined') {
-        const resume = objectBody(
-          (
-            await deps.session.request({
-              method: 'POST',
-              path: '/public/v1/auth/resume-codes',
-            })
-          ).body,
-        );
-        if (typeof resume.code !== 'string') throw malformedResponse();
-        window.sessionStorage.setItem(checkoutResumeStorageKey(deps.workKey), resume.code);
-        window.location.assign(result.checkoutUrl);
-      }
-      return result;
+      const presenter = deps.presenter ?? defaultAccessPresenter;
+      let checkoutResult: CheckoutResult | undefined;
+      const presented = await presenter({
+        featureKey: 'checkout',
+        reason: 'PURCHASE_REQUIRED',
+        action: 'CHECKOUT',
+        perform: async () => {
+          const prepared = await startCheckout(options);
+          checkoutResult = prepared.result;
+          return prepared.action;
+        },
+      });
+      if (presented === 'dismissed' || !checkoutResult) throw cancelled();
+      return checkoutResult;
     },
   };
 
@@ -371,17 +398,16 @@ export function createCapabilities(deps: CapabilityDeps): {
           action: nextAction,
           perform: async () => {
             if (nextAction === 'SIGN_IN') {
-              await auth.signIn();
+              return startSignIn();
             } else if (nextAction === 'FOLLOW') {
               await follow.follow();
+              return { type: 'completed' };
             } else {
-              await checkout.open({
-                returnUrl: typeof location === 'undefined' ? undefined : location.href,
-              });
+              return (await startCheckout()).action;
             }
           },
         });
-        if (result === 'dismissed' || nextAction !== 'FOLLOW') return decision;
+        if (result === 'dismissed') return decision;
         decision = await this.check(featureKey);
       }
       return decision;
@@ -391,5 +417,5 @@ export function createCapabilities(deps: CapabilityDeps): {
     },
   };
 
-  return { auth, follow, access, checkout, resumeRedirects };
+  return { auth, follow, access, checkout };
 }

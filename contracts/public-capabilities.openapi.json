@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ViceMe Public Capabilities API",
-    "version": "0.2.0",
+    "version": "0.3.1",
     "summary": "Public, unauthenticated-visitor endpoints consumed by the ViceMe browser SDK.",
     "description": "Shop-owned public contract for creator work sessions, WeChat login, follows, access decisions, and hosted checkout."
   },
@@ -115,7 +115,7 @@
         "security": [{ "workSession": [] }],
         "responses": {
           "200": {
-            "description": "One-time code used to restore the authenticated work session after same-tab checkout.",
+            "description": "Compatibility endpoint for restoring an authenticated work session.",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/AuthResumeCodeResponse" }
@@ -243,7 +243,7 @@
         },
         "responses": {
           "200": {
-            "description": "First-party checkout URL resolved from the bound product.",
+            "description": "Embedded checkout URL resolved from the bound product.",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/CheckoutResponse" }
@@ -252,6 +252,31 @@
           },
           "4xx": { "$ref": "#/components/responses/PublicError" },
           "5xx": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/public/v1/checkout/bootstrap": {
+      "post": {
+        "tags": ["checkout"],
+        "operationId": "bootstrapEmbeddedCheckout",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CheckoutBootstrapRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memory-only bearer session for the embedded checkout.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CheckoutBootstrapResponse" }
+              }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       }
     }
@@ -321,11 +346,11 @@
       },
       "AuthAuthorizeRequest": {
         "type": "object",
-        "required": ["codeChallenge", "returnUrl"],
+        "required": ["codeChallenge", "channel"],
         "additionalProperties": false,
         "properties": {
           "codeChallenge": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
-          "returnUrl": { "type": "string", "format": "uri" }
+          "channel": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
         }
       },
       "AuthAuthorizeResponse": {
@@ -431,10 +456,11 @@
       },
       "CheckoutRequest": {
         "type": "object",
+        "required": ["channel"],
         "additionalProperties": false,
         "properties": {
           "locale": { "type": "string", "enum": ["zh-CN", "en-US"], "default": "zh-CN" },
-          "returnUrl": { "type": "string", "format": "uri" }
+          "channel": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
         }
       },
       "CheckoutResponse": {
@@ -444,6 +470,24 @@
         "properties": {
           "checkoutUrl": { "type": "string", "format": "uri" },
           "alreadyOwned": { "type": "boolean" }
+        }
+      },
+      "CheckoutBootstrapRequest": {
+        "type": "object",
+        "required": ["code"],
+        "additionalProperties": false,
+        "properties": {
+          "code": { "type": "string", "minLength": 32, "maxLength": 256 }
+        }
+      },
+      "CheckoutBootstrapResponse": {
+        "type": "object",
+        "required": ["token", "expiresAt", "resumeCode"],
+        "additionalProperties": false,
+        "properties": {
+          "token": { "type": "string", "minLength": 32 },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "resumeCode": { "type": "string", "minLength": 32, "maxLength": 256 }
         }
       },
       "ErrorBody": {

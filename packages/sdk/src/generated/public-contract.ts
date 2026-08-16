@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.2.0, sha256 f193a5933d82f6a8…)
+ * (contractVersion 0.3.1, sha256 8929e13eebb6aab6…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -145,6 +145,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/v1/checkout/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bootstrapEmbeddedCheckout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -180,8 +196,7 @@ export interface components {
         };
         AuthAuthorizeRequest: {
             codeChallenge: string;
-            /** Format: uri */
-            returnUrl: string;
+            channel: string;
         };
         AuthAuthorizeResponse: {
             /** Format: uri */
@@ -229,13 +244,21 @@ export interface components {
              * @enum {string}
              */
             locale: "zh-CN" | "en-US";
-            /** Format: uri */
-            returnUrl?: string;
+            channel: string;
         };
         CheckoutResponse: {
             /** Format: uri */
             checkoutUrl: string;
             alreadyOwned: boolean;
+        };
+        CheckoutBootstrapRequest: {
+            code: string;
+        };
+        CheckoutBootstrapResponse: {
+            token: string;
+            /** Format: date-time */
+            expiresAt: string;
+            resumeCode: string;
         };
         ErrorBody: {
             statusCode: number;
@@ -390,7 +413,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description One-time code used to restore the authenticated work session after same-tab checkout. */
+            /** @description Compatibility endpoint for restoring an authenticated work session. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -528,7 +551,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description First-party checkout URL resolved from the bound product. */
+            /** @description Embedded checkout URL resolved from the bound product. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -539,6 +562,31 @@ export interface operations {
             };
             "4xx": components["responses"]["PublicError"];
             "5xx": components["responses"]["InternalError"];
+        };
+    };
+    bootstrapEmbeddedCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutBootstrapRequest"];
+            };
+        };
+        responses: {
+            /** @description Memory-only bearer session for the embedded checkout. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutBootstrapResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
         };
     };
 }

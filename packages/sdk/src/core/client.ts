@@ -60,7 +60,6 @@ export class ViceMeClientImpl implements ViceMeClient {
   readonly #session: SessionManager;
   readonly #config: ViceMeConfig;
   readonly #internalSignal = new AbortController();
-  readonly #resumeRedirects: () => Promise<void>;
   #readyPromise: Promise<void> | undefined;
   readonly auth: AuthCapability;
   readonly access: AccessCapability;
@@ -77,10 +76,10 @@ export class ViceMeClientImpl implements ViceMeClient {
     const capabilities = createCapabilities({
       session: this.#session,
       workKey: deps.config.workKey,
+      apiBaseUrl: deps.apiBaseUrl,
       presenter: deps.config.presenter,
       ready: () => this.ready(),
     });
-    this.#resumeRedirects = capabilities.resumeRedirects;
     this.auth = capabilities.auth;
     this.access = capabilities.access;
     this.checkout = capabilities.checkout;
@@ -134,7 +133,6 @@ export class ViceMeClientImpl implements ViceMeClient {
     this.#lifecycle.transition('INITIALIZING');
     try {
       await this.#session.establish();
-      await this.#resumeRedirects();
       if (this.#lifecycle.destroyed) throw clientDestroyed();
       this.#lifecycle.transition('READY');
     } catch (error) {

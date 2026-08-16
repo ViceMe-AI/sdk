@@ -25,6 +25,9 @@ import type {
 import type { WorkUser } from './session/session.ts';
 import type {
   AccessInteraction,
+  AccessActionResult,
+  AccessCompletedAction,
+  AccessFrameAction,
   AccessInteractionAction,
   AccessPresentationResult,
   AccessPresenter,
@@ -48,6 +51,9 @@ export type {
   CheckoutOptions,
   CheckoutResult,
   AccessInteraction,
+  AccessActionResult,
+  AccessCompletedAction,
+  AccessFrameAction,
   AccessInteractionAction,
   AccessPresentationResult,
   AccessPresenter,

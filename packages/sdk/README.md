@@ -33,8 +33,10 @@ client.destroy();
 Pass `presenter` to `createViceMe()` when the site already has React/HTML
 Sheet, Drawer, Dialog, and Button components. Without one, the SDK registers
 and mounts `<viceme-access-layer>` with isolated styles, inherited typography,
-CSS variables, and `::part()` hooks. Login and checkout use same-tab navigation;
-no browser popup, `confirm`, or `alert` is used.
+CSS variables, and `::part()` hooks. Login and checkout remain inside its
+iframe area and complete through an origin- and channel-validated message; no
+browser popup, page navigation, `confirm`, or `alert` is used. A custom
+presenter renders the returned frame action inside its own Sheet or Dialog.
 
 Static HTML sites can use the CDN auto-loader instead — see the
 [repository README](https://github.com/ViceMe-AI/sdk).
