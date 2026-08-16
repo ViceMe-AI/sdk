@@ -23,7 +23,7 @@
         "tags": ["work-sessions"],
         "operationId": "createWorkSession",
         "summary": "Establish a public visitor session for a Work",
-        "description": "Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS: exact registered origins only, credentials disabled.",
+        "description": "Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS accepts any browser Origin with credentials disabled; no creator-managed Origin allowlist is required.",
         "requestBody": {
           "required": true,
           "content": {
@@ -48,7 +48,6 @@
             }
           },
           "400": { "$ref": "#/components/responses/ValidationError" },
-          "403": { "$ref": "#/components/responses/OriginNotAllowed" },
           "404": { "$ref": "#/components/responses/WorkNotFound" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "5xx": { "$ref": "#/components/responses/InternalError" }
@@ -396,7 +395,6 @@
             "enum": [
               "CONFIG_INVALID",
               "WORK_NOT_FOUND",
-              "ORIGIN_NOT_ALLOWED",
               "CAPABILITY_DISABLED",
               "SESSION_EXPIRED",
               "AUTH_REQUIRED",
@@ -424,14 +422,6 @@
       },
       "ValidationError": {
         "description": "Invalid configuration.",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorBody" }
-          }
-        }
-      },
-      "OriginNotAllowed": {
-        "description": "Origin not registered for this work (fail closed).",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorBody" }

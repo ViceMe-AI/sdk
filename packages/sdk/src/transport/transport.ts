@@ -47,7 +47,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const STATUS_CODE_MAP: ReadonlyMap<number, ViceMeErrorCode> = new Map([
   [400, 'CONFIG_INVALID'],
   [401, 'SESSION_EXPIRED'],
-  [403, 'ORIGIN_NOT_ALLOWED'],
+  [403, 'CAPABILITY_DISABLED'],
   [404, 'WORK_NOT_FOUND'],
   [409, 'CONFIG_INVALID'],
   [422, 'CONFIG_INVALID'],
@@ -57,7 +57,6 @@ const STATUS_CODE_MAP: ReadonlyMap<number, ViceMeErrorCode> = new Map([
 const KNOWN_CODES: ReadonlySet<string> = new Set([
   'CONFIG_INVALID',
   'WORK_NOT_FOUND',
-  'ORIGIN_NOT_ALLOWED',
   'CAPABILITY_DISABLED',
   'SESSION_EXPIRED',
   'AUTH_REQUIRED',

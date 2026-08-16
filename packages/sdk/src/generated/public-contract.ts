@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.2.0, sha256 c87a67c31e181f72…)
+ * (contractVersion 0.2.0, sha256 065c9f9f4a6e2611…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -24,7 +24,7 @@ export interface paths {
         put?: never;
         /**
          * Establish a public visitor session for a Work
-         * @description Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS: exact registered origins only, credentials disabled.
+         * @description Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS accepts any browser Origin with credentials disabled; no creator-managed Origin allowlist is required.
          */
         post: operations["createWorkSession"];
         delete?: never;
@@ -199,7 +199,7 @@ export interface components {
         ErrorBody: {
             statusCode: number;
             /** @enum {string} */
-            code: "CONFIG_INVALID" | "WORK_NOT_FOUND" | "ORIGIN_NOT_ALLOWED" | "CAPABILITY_DISABLED" | "SESSION_EXPIRED" | "AUTH_REQUIRED" | "SDK_AUTH_CODE_INVALID" | "RETURN_URL_NOT_ALLOWED" | "RATE_LIMITED" | "NETWORK_TIMEOUT" | "CHECKOUT_UNAVAILABLE" | "INTERNAL_ERROR";
+            code: "CONFIG_INVALID" | "WORK_NOT_FOUND" | "CAPABILITY_DISABLED" | "SESSION_EXPIRED" | "AUTH_REQUIRED" | "SDK_AUTH_CODE_INVALID" | "RETURN_URL_NOT_ALLOWED" | "RATE_LIMITED" | "NETWORK_TIMEOUT" | "CHECKOUT_UNAVAILABLE" | "INTERNAL_ERROR";
             message: string;
             requestId: string;
         };
@@ -216,15 +216,6 @@ export interface components {
         };
         /** @description Invalid configuration. */
         ValidationError: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorBody"];
-            };
-        };
-        /** @description Origin not registered for this work (fail closed). */
-        OriginNotAllowed: {
             headers: {
                 [name: string]: unknown;
             };
@@ -292,7 +283,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationError"];
-            403: components["responses"]["OriginNotAllowed"];
             404: components["responses"]["WorkNotFound"];
             429: components["responses"]["RateLimited"];
             "5xx": components["responses"]["InternalError"];
