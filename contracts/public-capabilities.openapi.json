@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ViceMe Public Capabilities API",
-    "version": "0.3.1",
+    "version": "0.3.2",
     "summary": "Public, unauthenticated-visitor endpoints consumed by the ViceMe browser SDK.",
     "description": "Shop-owned public contract for creator work sessions, WeChat login, follows, access decisions, and hosted checkout."
   },
@@ -350,7 +350,8 @@
         "additionalProperties": false,
         "properties": {
           "codeChallenge": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
-          "channel": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+          "channel": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+          "clientType": { "type": "string", "enum": ["h5", "pc"] }
         }
       },
       "AuthAuthorizeResponse": {

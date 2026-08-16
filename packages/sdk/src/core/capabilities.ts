@@ -171,6 +171,29 @@ async function codeChallenge(verifier: string): Promise<string> {
   return base64Url(new Uint8Array(digest));
 }
 
+function resolveWechatClientType(): 'h5' | 'pc' {
+  if (typeof navigator === 'undefined') return 'pc';
+  const userAgentData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } })
+    .userAgentData;
+  const userAgent = navigator.userAgent;
+  if (
+    userAgentData?.mobile === true ||
+    /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(userAgent) ||
+    (/Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1)
+  ) {
+    return 'h5';
+  }
+  if (
+    typeof window !== 'undefined' &&
+    navigator.maxTouchPoints > 0 &&
+    window.matchMedia('(pointer: coarse)').matches &&
+    window.matchMedia('(max-width: 48rem)').matches
+  ) {
+    return 'h5';
+  }
+  return 'pc';
+}
+
 export function createCapabilities(deps: CapabilityDeps): {
   auth: AuthCapability;
   follow: FollowCapability;
@@ -264,6 +287,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       body: {
         codeChallenge: await codeChallenge(verifier),
         channel,
+        clientType: resolveWechatClientType(),
       },
     });
     const authorize = objectBody(response.body);

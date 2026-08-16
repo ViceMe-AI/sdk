@@ -56,4 +56,31 @@ describe('default access presenter', () => {
 
     await expect(presented).resolves.toBe('acted');
   });
+
+  it('shows immediate progress after the first interactive click', async () => {
+    let finish!: () => void;
+    const perform = vi.fn(
+      () =>
+        new Promise<{ type: 'completed' }>((resolve) => {
+          finish = () => resolve({ type: 'completed' });
+        }),
+    );
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      perform,
+    });
+    const action = document
+      .querySelector('viceme-access-layer')
+      ?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement;
+
+    action.click();
+
+    expect(action.disabled).toBe(true);
+    expect(action.getAttribute('aria-busy')).toBe('true');
+    expect(action.textContent).toBe('正在打开…');
+    finish();
+    await expect(presented).resolves.toBe('acted');
+  });
 });

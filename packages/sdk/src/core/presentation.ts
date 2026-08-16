@@ -166,6 +166,7 @@ function ensureAccessLayerElement(): void {
       const frameClose = shadow.querySelector<HTMLButtonElement>("[data-viceme='frame-close']")!;
       const frame = shadow.querySelector<HTMLIFrameElement>("[data-viceme='frame']")!;
       action.textContent = copy.label;
+      const idleActionLabel = copy.label;
       frameTitle.textContent = copy.title;
       frame.title = copy.title;
       let activeFrame: AccessFrameAction | null = null;
@@ -200,6 +201,8 @@ function ensureAccessLayerElement(): void {
       });
       action.addEventListener('click', async () => {
         action.disabled = true;
+        action.setAttribute('aria-busy', 'true');
+        action.textContent = '正在打开…';
         dismiss.disabled = true;
         error.textContent = '';
         try {
@@ -219,6 +222,8 @@ function ensureAccessLayerElement(): void {
           frame.removeAttribute('src');
           error.textContent = '操作未完成，请重试。';
           action.disabled = false;
+          action.removeAttribute('aria-busy');
+          action.textContent = idleActionLabel;
           dismiss.disabled = false;
           action.focus();
         }

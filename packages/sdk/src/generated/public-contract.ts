@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.3.1, sha256 eafa091f1b0e2a9c…)
+ * (contractVersion 0.3.2, sha256 e839dad6451c3809…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -197,6 +197,8 @@ export interface components {
         AuthAuthorizeRequest: {
             codeChallenge: string;
             channel: string;
+            /** @enum {string} */
+            clientType?: "h5" | "pc";
         };
         AuthAuthorizeResponse: {
             /** Format: uri */

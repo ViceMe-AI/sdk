@@ -251,6 +251,38 @@ describe('creator access capabilities', () => {
     });
   });
 
+  it('sends an explicit H5 client type when the browser reports mobile emulation', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(navigator, 'userAgentData');
+    Object.defineProperty(navigator, 'userAgentData', {
+      configurable: true,
+      value: { mobile: true },
+    });
+    const transport = capabilityTransport();
+    const presenter = vi.fn(async (interaction: AccessInteraction) => {
+      const result = await interaction.perform();
+      if (result.type !== 'frame') throw new Error('expected auth frame');
+      result.cancel();
+      return 'dismissed' as const;
+    });
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport,
+      presenter,
+    });
+
+    try {
+      await expect(client.auth.signIn()).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
+      const authorize = transport.requests.find(
+        (request) => request.path === '/public/v1/auth/wechat/authorize',
+      );
+      expect(authorize?.body).toMatchObject({ clientType: 'h5' });
+    } finally {
+      if (descriptor) Object.defineProperty(navigator, 'userAgentData', descriptor);
+      else Reflect.deleteProperty(navigator, 'userAgentData');
+    }
+  });
+
   it('ignores a completion message from the SDK request origin when the callback differs', async () => {
     const transport = capabilityTransport();
     const presenter = vi.fn(async (interaction: AccessInteraction) => {
