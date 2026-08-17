@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defaultAccessPresenter } from '../../src/core/presentation.ts';
 
 describe('default access presenter', () => {
-  it('renders an in-page Web Component and does not act when dismissed', async () => {
+  it('renders the follow target at the top with cancel and follow actions', async () => {
     const perform = vi.fn(async () => ({ type: 'completed' as const }));
     const presented = defaultAccessPresenter({
       featureKey: 'dingdong',
@@ -27,16 +27,26 @@ describe('default access presenter', () => {
       '归藏',
     );
     expect(layer?.shadowRoot?.querySelector("[data-viceme='dismiss']")).toBeNull();
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).toBeNull();
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='title']")?.textContent).toBe('');
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='description']")?.textContent).toBe('');
+    expect(
+      layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
+    ).toBe('');
+    expect(layer?.shadowRoot?.querySelector('[data-viceme-cancel]')?.textContent).toBe('取消');
+    expect(
+      layer?.shadowRoot?.querySelector("[data-viceme='action']")?.parentElement?.dataset.single,
+    ).toBe('false');
     expect(layer?.shadowRoot?.innerHTML).not.toMatch(/\bpart=|var\(|Canvas|inherit/);
 
-    (layer?.shadowRoot?.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    (layer?.shadowRoot?.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
 
     await expect(presented).resolves.toBe('dismissed');
     expect(perform).not.toHaveBeenCalled();
     expect(document.querySelector('viceme-access-layer')).toBeNull();
   });
 
-  it('keeps login and checkout inside the access layer frame', async () => {
+  it('opens checkout directly inside the access layer frame', async () => {
     let complete!: () => void;
     const completion = new Promise<void>((resolve) => {
       complete = resolve;
@@ -54,15 +64,41 @@ describe('default access presenter', () => {
     });
     const layer = document.querySelector('viceme-access-layer');
 
-    (layer?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(layer?.shadowRoot?.querySelector('iframe')?.getAttribute('src')).toBe(
         'about:blank#checkout',
       );
     });
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).toBeNull();
     complete();
 
     await expect(presented).resolves.toBe('acted');
+  });
+
+  it('cancels an active checkout frame from the backdrop', async () => {
+    const cancel = vi.fn();
+    const presented = defaultAccessPresenter({
+      featureKey: 'emperor',
+      reason: 'PURCHASE_REQUIRED',
+      action: 'CHECKOUT',
+      perform: vi.fn(async () => ({
+        type: 'frame' as const,
+        url: 'about:blank#checkout-cancel',
+        completion: new Promise<void>(() => undefined),
+        cancel,
+      })),
+    });
+    const layer = document.querySelector('viceme-access-layer');
+
+    await vi.waitFor(() => {
+      expect(layer?.shadowRoot?.querySelector('iframe')?.getAttribute('src')).toBe(
+        'about:blank#checkout-cancel',
+      );
+    });
+    (layer?.shadowRoot?.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+
+    await expect(presented).resolves.toBe('dismissed');
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('shows immediate progress after the first interactive click', async () => {
@@ -83,6 +119,7 @@ describe('default access presenter', () => {
       .querySelector('viceme-access-layer')
       ?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement;
 
+    expect(action.parentElement?.dataset.single).toBe('true');
     action.click();
 
     expect(action.disabled).toBe(true);

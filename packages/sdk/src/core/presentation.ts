@@ -57,15 +57,15 @@ function actionCopy(action: AccessInteractionAction): {
       };
     case 'FOLLOW':
       return {
-        title: '关注后解锁',
-        description: '关注后即可继续使用此功能。',
+        title: '',
+        description: '',
         label: '关注',
       };
     case 'CHECKOUT':
       return {
         title: '购买后解锁',
         description: '完成支付后即可继续使用此功能。',
-        label: '去购买',
+        label: '重新打开',
       };
   }
 }
@@ -116,30 +116,12 @@ function ensureAccessLayerElement(): void {
           [data-viceme='header'] {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
           }
           [data-viceme='title'] {
             margin: 0;
             font-size: 1.125rem;
             font-weight: 700;
           }
-          [data-viceme='close'] {
-            display: grid;
-            width: 2.5rem;
-            min-height: 2.5rem;
-            flex: 0 0 2.5rem;
-            place-items: center;
-            border: 1px solid #d4d4d8;
-            border-radius: 999px;
-            padding: 0;
-            background: #ffffff;
-            color: #18181b;
-            font-size: 1.5rem;
-            font-weight: 400;
-            line-height: 1;
-          }
-          [data-viceme='close']:hover { border-color: #18181b; background: #f4f4f5; }
           [data-viceme='content'] { display: flex; min-height: 0; flex: 1; flex-direction: column; }
           [data-viceme='description'] { margin: 0.75rem 0 1.25rem; color: #71717a; line-height: 1.6; }
           [data-viceme='profile'] {
@@ -177,6 +159,34 @@ function ensureAccessLayerElement(): void {
           [data-viceme='avatar'][hidden], [data-viceme='avatar-fallback'][hidden] { display: none; }
           [data-viceme='profile-name'] { margin: 0; font-size: 1.375rem; font-weight: 700; }
           [data-viceme='profile-description'] { margin: 0.25rem 0 0; color: #71717a; }
+          [data-viceme='panel'][data-action='FOLLOW'] { min-height: 18rem; }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='header'],
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='description'] { display: none; }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile'][data-visible='true'] {
+            display: flex;
+            align-items: center;
+            gap: 0.875rem;
+            margin: 0;
+            border: 0;
+            padding: 0;
+            background: transparent;
+            box-shadow: none;
+            text-align: left;
+          }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='avatar'],
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='avatar-fallback'] {
+            width: 3.25rem;
+            height: 3.25rem;
+            margin: 0;
+            flex: 0 0 3.25rem;
+            font-size: 1.25rem;
+          }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-name'] {
+            font-size: 1.125rem;
+          }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-description'] {
+            display: none;
+          }
           [data-viceme='actions'] {
             display: flex;
             justify-content: flex-end;
@@ -235,6 +245,7 @@ function ensureAccessLayerElement(): void {
           }
           [data-viceme='secondary-action']:hover { background: #f4f4f5; }
           [data-viceme='action']:hover { background: #3f3f46; border-color: #3f3f46; }
+          [data-viceme='actions'][data-single='true'] [data-viceme='action'] { width: 100%; }
           button:disabled { cursor: wait; opacity: 0.5; }
           button[hidden] { display: none; }
           [data-viceme='error'] { min-height: 1.25rem; margin: 0 0 0.75rem; color: #b91c1c; font-size: 0.875rem; }
@@ -261,6 +272,7 @@ function ensureAccessLayerElement(): void {
               padding: 1.25rem;
               box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 24%);
             }
+            [data-viceme='panel'][data-action='FOLLOW'] { min-height: 16rem; }
             [data-viceme='panel'][data-frame='true'] { width: min(52rem, 100%); }
             [data-viceme='panel'][data-action='SIGN_IN'][data-frame='true'] { width: min(30rem, 100%); }
           }
@@ -273,7 +285,6 @@ function ensureAccessLayerElement(): void {
         <section data-viceme="panel" role="dialog" aria-modal="true" aria-labelledby="viceme-layer-title">
           <div data-viceme="header">
             <h2 data-viceme="title" id="viceme-layer-title"></h2>
-            <button data-viceme="close" type="button" aria-label="关闭">&times;</button>
           </div>
           <div data-viceme="content">
             <p data-viceme="description"></p>
@@ -285,6 +296,7 @@ function ensureAccessLayerElement(): void {
             </section>
             <p data-viceme="error" role="alert" aria-live="polite"></p>
             <div data-viceme="actions">
+              <button data-viceme="secondary-action" data-viceme-cancel type="button">取消</button>
               <button data-viceme="secondary-action" data-viceme-phone-action type="button">手机号登录</button>
               <button data-viceme="action" type="button"></button>
             </div>
@@ -312,13 +324,15 @@ function ensureAccessLayerElement(): void {
       `;
       const panel = shadow.querySelector<HTMLElement>("[data-viceme='panel']")!;
       panel.dataset.action = this.interaction.action;
-      shadow.querySelector<HTMLElement>("[data-viceme='title']")!.textContent = copy.title;
-      shadow.querySelector<HTMLElement>("[data-viceme='description']")!.textContent =
-        copy.description;
+      const title = shadow.querySelector<HTMLElement>("[data-viceme='title']")!;
+      const description = shadow.querySelector<HTMLElement>("[data-viceme='description']")!;
+      title.textContent = copy.title;
+      description.textContent = copy.description;
       const action = shadow.querySelector<HTMLButtonElement>("[data-viceme='action']")!;
+      const mainActions = action.parentElement!;
+      const cancelAction = shadow.querySelector<HTMLButtonElement>('[data-viceme-cancel]')!;
       const phoneAction = shadow.querySelector<HTMLButtonElement>('[data-viceme-phone-action]')!;
       const backdrop = shadow.querySelector<HTMLButtonElement>("[data-viceme='backdrop']")!;
-      const closeButton = shadow.querySelector<HTMLButtonElement>("[data-viceme='close']")!;
       const error = shadow.querySelector<HTMLElement>("[data-viceme='error']")!;
       const frame = shadow.querySelector<HTMLIFrameElement>("[data-viceme='frame']")!;
       const profile = shadow.querySelector<HTMLElement>("[data-viceme='profile']")!;
@@ -335,16 +349,20 @@ function ensureAccessLayerElement(): void {
       const phoneBack = shadow.querySelector<HTMLButtonElement>('[data-viceme-phone-back]')!;
       const phoneSubmit = shadow.querySelector<HTMLButtonElement>('[data-viceme-phone-submit]')!;
       action.textContent = copy.label;
+      action.hidden = this.interaction.action === 'CHECKOUT';
+      cancelAction.hidden = this.interaction.action !== 'FOLLOW';
       phoneAction.hidden = !this.interaction.phoneAuth;
+      mainActions.dataset.single = String(cancelAction.hidden && phoneAction.hidden);
       const idleActionLabel = copy.label;
       frame.title = copy.title;
 
       const target = this.interaction.followTarget;
       if (target) {
+        panel.removeAttribute('aria-labelledby');
+        panel.setAttribute('aria-label', `关注 ${target.displayName}`);
         profile.dataset.visible = 'true';
         profileName.textContent = target.displayName;
-        profileDescription.textContent =
-          target.description ?? (target.kind === 'CREATOR' ? '创作者' : 'ViceMe 用户');
+        profileDescription.textContent = '';
         avatarFallback.textContent = target.displayName.trim().slice(0, 1) || 'V';
         if (target.avatarUrl) {
           avatar.src = target.avatarUrl;
@@ -369,20 +387,25 @@ function ensureAccessLayerElement(): void {
         close('dismissed');
       };
       backdrop.addEventListener('click', dismissLayer);
-      closeButton.addEventListener('click', dismissLayer);
+      cancelAction.addEventListener('click', dismissLayer);
       this.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') dismissLayer();
         if (event.key === 'Tab') {
           event.preventDefault();
           if (activeFrame) {
-            closeButton.focus();
+            frame.focus();
             return;
           }
           const focusable =
             panel.dataset.phone === 'true'
-              ? [closeButton, phoneInput, codeInput, sendCode, phoneBack, phoneSubmit]
-              : [closeButton, ...(phoneAction.hidden ? [] : [phoneAction]), action];
-          const available = focusable.filter((element) => !element.disabled);
+              ? [phoneInput, codeInput, sendCode, phoneBack, phoneSubmit]
+              : [
+                  ...(cancelAction.hidden ? [] : [cancelAction]),
+                  ...(phoneAction.hidden ? [] : [phoneAction]),
+                  ...(action.hidden ? [] : [action]),
+                ];
+          const available = focusable.filter((element) => !element.disabled && !element.hidden);
+          if (available.length === 0) return;
           const currentIndex = available.indexOf(
             shadow.activeElement as HTMLButtonElement | HTMLInputElement,
           );
@@ -398,13 +421,13 @@ function ensureAccessLayerElement(): void {
       });
       phoneAction.addEventListener('click', () => {
         panel.dataset.phone = 'true';
-        shadow.querySelector<HTMLElement>("[data-viceme='title']")!.textContent = '手机号登录';
+        title.textContent = '手机号登录';
         error.textContent = '';
         phoneInput.focus();
       });
       phoneBack.addEventListener('click', () => {
         panel.dataset.phone = 'false';
-        shadow.querySelector<HTMLElement>("[data-viceme='title']")!.textContent = copy.title;
+        title.textContent = copy.title;
         error.textContent = '';
         phoneAction.focus();
       });
@@ -460,7 +483,7 @@ function ensureAccessLayerElement(): void {
           error.textContent = '手机号或验证码不正确，请重试。';
         }
       });
-      action.addEventListener('click', async () => {
+      const performAction = async () => {
         action.disabled = true;
         action.setAttribute('aria-busy', 'true');
         action.textContent = '正在打开…';
@@ -471,7 +494,7 @@ function ensureAccessLayerElement(): void {
             activeFrame = result;
             panel.dataset.frame = 'true';
             frame.src = result.url;
-            closeButton.focus();
+            frame.focus();
             await result.completion;
           }
           close('acted');
@@ -481,13 +504,19 @@ function ensureAccessLayerElement(): void {
           panel.dataset.frame = 'false';
           frame.removeAttribute('src');
           error.textContent = '操作未完成，请重试。';
+          action.hidden = false;
           action.disabled = false;
           action.removeAttribute('aria-busy');
           action.textContent = idleActionLabel;
           action.focus();
         }
-      });
-      queueMicrotask(() => action.focus());
+      };
+      action.addEventListener('click', performAction);
+      if (this.interaction.action === 'CHECKOUT') {
+        queueMicrotask(() => void performAction());
+      } else {
+        queueMicrotask(() => action.focus());
+      }
     }
   }
 
