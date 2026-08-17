@@ -7,7 +7,7 @@
     "description": "Shop-owned public contract for creator work sessions, WeChat login, follows, access decisions, and hosted checkout."
   },
   "servers": [
-    { "url": "https://wx-dev.viceme.cn/api", "description": "CN region public API" },
+    { "url": "https://api.viceme.cn", "description": "CN region public API" },
     { "url": "https://api.viceme.ai/v1", "description": "GLOBAL region public API" }
   ],
   "tags": [
