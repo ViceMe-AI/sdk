@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.3.2, sha256 b12d7bbdf2252eda…)
+ * (contractVersion 0.3.2, sha256 710fd8735d27f868…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -13,7 +13,7 @@
  */
 
 export interface paths {
-    "/v1/public/v1/work-sessions": {
+    "/public/v1/work-sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -33,7 +33,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/auth/wechat/authorize": {
+    "/public/v1/auth/wechat/authorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -49,7 +49,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/auth/exchange": {
+    "/public/v1/auth/exchange": {
         parameters: {
             query?: never;
             header?: never;
@@ -65,7 +65,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/auth/phone/verification-codes": {
+    "/public/v1/auth/phone/verification-codes": {
         parameters: {
             query?: never;
             header?: never;
@@ -81,7 +81,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/auth/phone/login": {
+    "/public/v1/auth/phone/login": {
         parameters: {
             query?: never;
             header?: never;
@@ -97,7 +97,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/auth/resume-codes": {
+    "/public/v1/auth/resume-codes": {
         parameters: {
             query?: never;
             header?: never;
@@ -113,7 +113,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/auth/resume": {
+    "/public/v1/auth/resume": {
         parameters: {
             query?: never;
             header?: never;
@@ -129,7 +129,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/follow": {
+    "/public/v1/follow": {
         parameters: {
             query?: never;
             header?: never;
@@ -145,7 +145,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/access/check": {
+    "/public/v1/access/check": {
         parameters: {
             query?: never;
             header?: never;
@@ -161,7 +161,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/checkout/sessions": {
+    "/public/v1/checkout/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -177,7 +177,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/v1/checkout/bootstrap": {
+    "/public/v1/checkout/bootstrap": {
         parameters: {
             query?: never;
             header?: never;

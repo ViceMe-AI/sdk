@@ -27,7 +27,7 @@ const REGIONS: ReadonlySet<string> = new Set(['cn', 'global']);
  * one place (never via a public `apiBaseUrl` option).
  */
 export const PUBLIC_API_BASE_URLS: Readonly<Record<ViceMeRegion, string>> = {
-  cn: 'https://wx-dev.viceme.cn/api',
+  cn: 'https://wx-dev.viceme.cn/api/v1',
   global: 'https://api.viceme.ai/v1',
 };
 

@@ -16,7 +16,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
     requests,
     async request(request: TransportRequest): Promise<TransportResponse> {
       requests.push(request);
-      if (request.path === '/v1/public/v1/work-sessions') {
+      if (request.path === '/public/v1/work-sessions') {
         return {
           status: 201,
           body: {
@@ -29,7 +29,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/v1/public/v1/follow' && request.method === 'PUT') {
+      if (request.path === '/public/v1/follow' && request.method === 'PUT') {
         following = true;
         return {
           status: 200,
@@ -45,7 +45,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/v1/public/v1/follow' && request.method === 'GET') {
+      if (request.path === '/public/v1/follow' && request.method === 'GET') {
         return {
           status: 200,
           body: {
@@ -60,7 +60,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/v1/public/v1/access/check') {
+      if (request.path === '/public/v1/access/check') {
         return {
           status: 200,
           body: {
@@ -79,7 +79,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/v1/public/v1/checkout/sessions') {
+      if (request.path === '/public/v1/checkout/sessions') {
         return {
           status: 200,
           body: {
@@ -89,7 +89,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/v1/public/v1/auth/wechat/authorize') {
+      if (request.path === '/public/v1/auth/wechat/authorize') {
         return {
           status: 200,
           body: {
@@ -98,13 +98,13 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/v1/public/v1/auth/phone/verification-codes') {
+      if (request.path === '/public/v1/auth/phone/verification-codes') {
         return {
           status: 200,
           body: { expiresInSeconds: 300, retryAfterSeconds: 60 },
         };
       }
-      if (request.path === '/v1/public/v1/auth/phone/login') {
+      if (request.path === '/public/v1/auth/phone/login') {
         return {
           status: 200,
           body: {
@@ -118,7 +118,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/v1/public/v1/auth/exchange') {
+      if (request.path === '/public/v1/auth/exchange') {
         return {
           status: 200,
           body: {
@@ -195,7 +195,7 @@ describe('creator access capabilities', () => {
     });
     expect(presenter).toHaveBeenCalledOnce();
     expect(
-      transport.requests.some((request) => request.path === '/v1/public/v1/checkout/sessions'),
+      transport.requests.some((request) => request.path === '/public/v1/checkout/sessions'),
     ).toBe(false);
   });
 
@@ -257,7 +257,7 @@ describe('creator access capabilities', () => {
 
     expect(window.location.href).toBe(before);
     expect(
-      transport.requests.some((request) => request.path === '/v1/public/v1/auth/resume-codes'),
+      transport.requests.some((request) => request.path === '/public/v1/auth/resume-codes'),
     ).toBe(false);
   });
 
@@ -272,7 +272,7 @@ describe('creator access capabilities', () => {
       }) => {
         const result = await interaction.perform();
         const authorize = transport.requests.find(
-          (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+          (request) => request.path === '/public/v1/auth/wechat/authorize',
         );
         const channel = (authorize?.body as { channel?: string }).channel;
         window.dispatchEvent(
@@ -326,11 +326,11 @@ describe('creator access capabilities', () => {
     });
     expect(
       transport.requests.find(
-        (request) => request.path === '/v1/public/v1/auth/phone/verification-codes',
+        (request) => request.path === '/public/v1/auth/phone/verification-codes',
       )?.body,
     ).toEqual({ phone: '13800138000' });
     expect(
-      transport.requests.find((request) => request.path === '/v1/public/v1/auth/phone/login')?.body,
+      transport.requests.find((request) => request.path === '/public/v1/auth/phone/login')?.body,
     ).toEqual({ phone: '13800138000', code: '123456' });
   });
 
@@ -357,7 +357,7 @@ describe('creator access capabilities', () => {
     try {
       await expect(client.auth.signIn()).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
       const authorize = transport.requests.find(
-        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+        (request) => request.path === '/public/v1/auth/wechat/authorize',
       );
       expect(authorize?.body).toMatchObject({ clientType: 'h5' });
     } finally {
@@ -372,7 +372,7 @@ describe('creator access capabilities', () => {
       const result = await interaction.perform();
       if (result.type !== 'frame') throw new Error('expected auth frame');
       const authorize = transport.requests.find(
-        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+        (request) => request.path === '/public/v1/auth/wechat/authorize',
       );
       const channel = (authorize?.body as { channel?: string }).channel;
       window.dispatchEvent(
@@ -388,7 +388,7 @@ describe('creator access capabilities', () => {
       );
       await Promise.resolve();
       expect(
-        transport.requests.some((request) => request.path === '/v1/public/v1/auth/exchange'),
+        transport.requests.some((request) => request.path === '/public/v1/auth/exchange'),
       ).toBe(false);
       result.cancel?.();
       return 'dismissed' as const;

@@ -57,8 +57,8 @@ describe('validatePublicConfig', () => {
 
 describe('resolveApiBaseUrl', () => {
   it('returns one documented host per region', () => {
-    expect(resolveApiBaseUrl('cn')).toBe('https://wx-dev.viceme.cn/api');
-    expect(PUBLIC_API_BASE_URLS.cn).toBe('https://wx-dev.viceme.cn/api');
+    expect(resolveApiBaseUrl('cn')).toBe('https://wx-dev.viceme.cn/api/v1');
+    expect(PUBLIC_API_BASE_URLS.cn).toBe('https://wx-dev.viceme.cn/api/v1');
     expect(resolveApiBaseUrl('global')).toBe(PUBLIC_API_BASE_URLS.global);
   });
 });

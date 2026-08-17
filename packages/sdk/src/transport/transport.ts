@@ -11,7 +11,7 @@ import { ViceMeError, type ViceMeErrorCode } from '../core/errors.ts';
 
 export interface TransportRequest {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  /** Absolute path under the public API base, e.g. `/v1/public/v1/work-sessions`. */
+  /** Absolute path under the public API base, e.g. `/public/v1/work-sessions`. */
   path: string;
   /** JSON-serializable request body. */
   body?: unknown;

@@ -2,7 +2,7 @@
  * Public visitor session.
  *
  * ```text
- * SDK + workKey + Origin -> POST /v1/public/v1/work-sessions
+ * SDK + workKey + Origin -> POST /public/v1/work-sessions
  *   -> short-lived capability token -> public capability calls
  * ```
  *
@@ -132,7 +132,7 @@ export class SessionManager {
     this.#pending ??= this.#options.transport
       .request({
         method: 'POST',
-        path: '/v1/public/v1/work-sessions',
+        path: '/public/v1/work-sessions',
         body: { workKey: this.#options.workKey } satisfies CreateWorkSessionRequestDto,
         signal: this.#options.signal,
         timeoutMs: this.#options.timeoutMs,
