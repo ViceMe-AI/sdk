@@ -6,7 +6,7 @@ describe('createMemoryTransport', () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
     const res = await transport.request({
       method: 'POST',
-      path: '/public/v1/work-sessions',
+      path: '/v1/public/v1/work-sessions',
       body: { workKey: 'wrk_test' },
     });
     expect(res.status).toBe(201);
@@ -19,8 +19,8 @@ describe('createMemoryTransport', () => {
 
   it('records every request for assertions', async () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
-    await transport.request({ method: 'POST', path: '/public/v1/work-sessions' });
-    await transport.request({ method: 'POST', path: '/public/v1/work-sessions' });
+    await transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' });
+    await transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' });
     expect(transport.requests).toHaveLength(2);
   });
 
@@ -29,15 +29,18 @@ describe('createMemoryTransport', () => {
       work: FIXTURE_WORK,
       sessionFailures: [{ status: 429, code: 'RATE_LIMITED', message: 'slow' }],
     });
-    const first = await transport.request({ method: 'POST', path: '/public/v1/work-sessions' });
+    const first = await transport.request({
+      method: 'POST',
+      path: '/v1/public/v1/work-sessions',
+    });
     expect(first.status).toBe(429);
-    const res = await transport.request({ method: 'POST', path: '/public/v1/work-sessions' });
+    const res = await transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' });
     expect(res.status).toBe(201);
   });
 
   it('returns 404 for unknown fixture paths', async () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
-    const res = await transport.request({ method: 'GET', path: '/public/v1/nope' });
+    const res = await transport.request({ method: 'GET', path: '/v1/public/v1/nope' });
     expect(res.status).toBe(404);
   });
 });

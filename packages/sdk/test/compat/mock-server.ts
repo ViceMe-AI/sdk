@@ -95,7 +95,7 @@ export function startMockApiServer(
 }
 
 function defaultHandler(req: IncomingMessage, body: unknown, res: MockResponder): void {
-  if (req.url === '/public/v1/work-sessions' && req.method === 'POST') {
+  if (req.url === '/v1/public/v1/work-sessions' && req.method === 'POST') {
     res.json(
       201,
       {

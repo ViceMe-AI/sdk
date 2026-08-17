@@ -10,11 +10,13 @@
 import { ViceMeError, type ViceMeErrorCode } from '../core/errors.ts';
 
 export interface TransportRequest {
-  method: 'GET' | 'POST';
-  /** Absolute path under the public API base, e.g. `/public/v1/work-sessions`. */
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  /** Absolute path under the public API base, e.g. `/v1/public/v1/work-sessions`. */
   path: string;
   /** JSON-serializable request body. */
   body?: unknown;
+  /** Work-session token. It is never persisted by the transport. */
+  authorization?: string;
   signal?: AbortSignal;
   /** Per-request timeout; defaults to the transport default. */
   timeoutMs?: number;
@@ -45,7 +47,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const STATUS_CODE_MAP: ReadonlyMap<number, ViceMeErrorCode> = new Map([
   [400, 'CONFIG_INVALID'],
   [401, 'SESSION_EXPIRED'],
-  [403, 'ORIGIN_NOT_ALLOWED'],
+  [403, 'CAPABILITY_DISABLED'],
   [404, 'WORK_NOT_FOUND'],
   [409, 'CONFIG_INVALID'],
   [422, 'CONFIG_INVALID'],
@@ -55,9 +57,11 @@ const STATUS_CODE_MAP: ReadonlyMap<number, ViceMeErrorCode> = new Map([
 const KNOWN_CODES: ReadonlySet<string> = new Set([
   'CONFIG_INVALID',
   'WORK_NOT_FOUND',
-  'ORIGIN_NOT_ALLOWED',
   'CAPABILITY_DISABLED',
   'SESSION_EXPIRED',
+  'AUTH_REQUIRED',
+  'AUTH_CANCELLED',
+  'RETURN_URL_NOT_ALLOWED',
   'RATE_LIMITED',
   'NETWORK_TIMEOUT',
   'CHECKOUT_UNAVAILABLE',
@@ -72,9 +76,11 @@ function parseErrorBody(body: unknown): {
   requestId?: string;
 } {
   if (typeof body !== 'object' || body === null) return {};
-  const error = (body as { error?: unknown }).error;
-  if (typeof error !== 'object' || error === null) return {};
-  const candidate = error as Record<string, unknown>;
+  const raw = body as Record<string, unknown>;
+  const candidate =
+    typeof raw.error === 'object' && raw.error !== null
+      ? (raw.error as Record<string, unknown>)
+      : raw;
   const result: {
     code?: ViceMeErrorCode;
     message?: string;
@@ -146,6 +152,9 @@ export class FetchTransport implements Transport {
         headers: {
           'content-type': 'application/json',
           'x-client-request-id': requestId,
+          ...(request.authorization !== undefined
+            ? { authorization: `Bearer ${request.authorization}` }
+            : {}),
         },
         body: request.body !== undefined ? JSON.stringify(request.body) : undefined,
         signal: controller.signal,

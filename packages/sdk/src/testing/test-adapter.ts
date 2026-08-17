@@ -15,6 +15,7 @@ import { isValidWorkKey, isValidRegion } from '../core/config.ts';
 import { ViceMeClientImpl } from '../core/client.ts';
 import type { ViceMeClient } from '../core/client.ts';
 import type { ViceMeRegion } from '../core/config.ts';
+import type { AccessPresenter } from '../core/presentation.ts';
 import type { Transport, TransportRequest, TransportResponse } from '../transport/transport.ts';
 
 export interface MemoryTransportWorkFixture {
@@ -25,7 +26,7 @@ export interface MemoryTransportWorkFixture {
 }
 
 export interface MemoryTransportOptions {
-  /** Work descriptor served for `POST /public/v1/work-sessions`. */
+  /** Work descriptor served for `POST /v1/public/v1/work-sessions`. */
   work: MemoryTransportWorkFixture;
   /** Artificial response latency in milliseconds (default 0). */
   latencyMs?: number;
@@ -66,7 +67,7 @@ export function createMemoryTransport(options: MemoryTransportOptions): MemoryTr
           { once: true },
         );
       });
-      if (request.path === '/public/v1/work-sessions' && request.method === 'POST') {
+      if (request.path === '/v1/public/v1/work-sessions' && request.method === 'POST') {
         const failure = failures.shift();
         if (failure) {
           if (failure instanceof Error) throw failure;
@@ -101,6 +102,7 @@ export interface CreateTestViceMeOptions {
   /** Mock transport serving the fixture contract. */
   transport: Transport;
   signal?: AbortSignal;
+  presenter?: AccessPresenter;
   /** Stable virtual clock for deterministic time-based assertions. */
   now?: () => number;
 }
@@ -120,8 +122,13 @@ export function createTestViceMe(options: CreateTestViceMeOptions): ViceMeClient
     throw configInvalid('Test client requires a transport with a request() method.');
   }
   return new ViceMeClientImpl({
-    config: { workKey: options.workKey, region: options.region, signal: options.signal },
+    config: {
+      workKey: options.workKey,
+      region: options.region,
+      signal: options.signal,
+    },
     transport: options.transport,
+    presenter: options.presenter,
     ...(options.now !== undefined ? { now: options.now } : {}),
   });
 }
