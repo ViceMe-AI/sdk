@@ -122,7 +122,7 @@ function ensureAccessLayerElement(): void {
             font-size: 1.125rem;
             font-weight: 700;
           }
-          [data-viceme='content'] { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+          [data-viceme='content'] { display: flex; min-height: 0; flex-direction: column; }
           [data-viceme='description'] { margin: 0.75rem 0 1.25rem; color: #71717a; line-height: 1.6; }
           [data-viceme='profile'] {
             display: none;
@@ -159,7 +159,7 @@ function ensureAccessLayerElement(): void {
           [data-viceme='avatar'][hidden], [data-viceme='avatar-fallback'][hidden] { display: none; }
           [data-viceme='profile-name'] { margin: 0; font-size: 1.375rem; font-weight: 700; }
           [data-viceme='profile-description'] { margin: 0.25rem 0 0; color: #71717a; }
-          [data-viceme='panel'][data-action='FOLLOW'] { min-height: 18rem; }
+          [data-viceme='profile-copy'] { min-width: 0; }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='header'],
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='description'] { display: none; }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile'][data-visible='true'] {
@@ -184,20 +184,16 @@ function ensureAccessLayerElement(): void {
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-name'] {
             font-size: 1.125rem;
           }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-description'] {
-            display: none;
-          }
           [data-viceme='actions'] {
             display: flex;
             justify-content: flex-end;
             gap: 0.75rem;
-            margin-top: auto;
+            margin-top: 1.5rem;
             padding-top: 0.5rem;
           }
           [data-viceme='phone-form'] {
             display: none;
             min-height: 0;
-            flex: 1;
             flex-direction: column;
             gap: 0.875rem;
             padding-top: 1rem;
@@ -267,12 +263,10 @@ function ensureAccessLayerElement(): void {
             :host { place-items: center; padding: 1.5rem; }
             [data-viceme='panel'] {
               width: min(28rem, 100%);
-              min-height: 22rem;
               border-radius: 1.25rem;
               padding: 1.25rem;
               box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 24%);
             }
-            [data-viceme='panel'][data-action='FOLLOW'] { min-height: 16rem; }
             [data-viceme='panel'][data-frame='true'] { width: min(52rem, 100%); }
             [data-viceme='panel'][data-action='SIGN_IN'][data-frame='true'] { width: min(30rem, 100%); }
           }
@@ -291,8 +285,10 @@ function ensureAccessLayerElement(): void {
             <section data-viceme="profile" aria-label="关注对象">
               <img data-viceme="avatar" hidden />
               <span data-viceme="avatar-fallback" aria-hidden="true"></span>
-              <p data-viceme="profile-name"></p>
-              <p data-viceme="profile-description"></p>
+              <div data-viceme="profile-copy">
+                <p data-viceme="profile-name"></p>
+                <p data-viceme="profile-description"></p>
+              </div>
             </section>
             <p data-viceme="error" role="alert" aria-live="polite"></p>
             <div data-viceme="actions">
@@ -362,7 +358,7 @@ function ensureAccessLayerElement(): void {
         panel.setAttribute('aria-label', `关注 ${target.displayName}`);
         profile.dataset.visible = 'true';
         profileName.textContent = target.displayName;
-        profileDescription.textContent = '';
+        profileDescription.textContent = target.description ?? '关注后即可继续使用此功能。';
         avatarFallback.textContent = target.displayName.trim().slice(0, 1) || 'V';
         if (target.avatarUrl) {
           avatar.src = target.avatarUrl;
@@ -373,13 +369,38 @@ function ensureAccessLayerElement(): void {
       }
 
       let activeFrame: AccessFrameAction | null = null;
+      let activeFrameOrigin: string | null = null;
       let countdownTimer: number | null = null;
+      const resizeFrame = (event: MessageEvent) => {
+        if (
+          !activeFrame ||
+          !activeFrameOrigin ||
+          event.source !== frame.contentWindow ||
+          event.origin !== activeFrameOrigin ||
+          typeof event.data !== 'object' ||
+          event.data === null
+        ) {
+          return;
+        }
+        const data = event.data as Record<string, unknown>;
+        if (
+          data.type !== 'viceme:frame:resize' ||
+          typeof data.height !== 'number' ||
+          !Number.isFinite(data.height)
+        ) {
+          return;
+        }
+        const maximum = Math.max(240, Math.floor(window.innerHeight * 0.78));
+        frame.style.height = `${Math.min(maximum, Math.max(240, Math.ceil(data.height)))}px`;
+      };
+      window.addEventListener('message', resizeFrame);
       const clearCountdown = () => {
         if (countdownTimer !== null) window.clearInterval(countdownTimer);
         countdownTimer = null;
       };
       const close = (result: AccessPresentationResult) => {
         clearCountdown();
+        window.removeEventListener('message', resizeFrame);
         this.dispatchEvent(new CustomEvent('viceme:access-layer-close', { detail: result }));
       };
       const dismissLayer = () => {
@@ -492,6 +513,7 @@ function ensureAccessLayerElement(): void {
           const result = await this.interaction.perform();
           if (result.type === 'frame') {
             activeFrame = result;
+            activeFrameOrigin = new URL(result.url, window.location.href).origin;
             panel.dataset.frame = 'true';
             frame.src = result.url;
             frame.focus();
@@ -501,7 +523,9 @@ function ensureAccessLayerElement(): void {
         } catch {
           activeFrame?.cancel();
           activeFrame = null;
+          activeFrameOrigin = null;
           panel.dataset.frame = 'false';
+          frame.style.removeProperty('height');
           frame.removeAttribute('src');
           error.textContent = '操作未完成，请重试。';
           action.hidden = false;

@@ -14,7 +14,7 @@ describe('default access presenter', () => {
         kind: 'CREATOR',
         displayName: '归藏',
         avatarUrl: 'https://cdn.example.com/creator.jpg',
-        description: 'AI 创业者',
+        description: '专注于 AI 创作工具与智能体工作流。',
       },
       perform,
     });
@@ -32,7 +32,7 @@ describe('default access presenter', () => {
     expect(layer?.shadowRoot?.querySelector("[data-viceme='description']")?.textContent).toBe('');
     expect(
       layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
-    ).toBe('');
+    ).toBe('专注于 AI 创作工具与智能体工作流。');
     expect(layer?.shadowRoot?.querySelector('[data-viceme-cancel]')?.textContent).toBe('取消');
     expect(
       layer?.shadowRoot?.querySelector("[data-viceme='action']")?.parentElement?.dataset.single,
@@ -44,6 +44,29 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('dismissed');
     expect(perform).not.toHaveBeenCalled();
     expect(document.querySelector('viceme-access-layer')).toBeNull();
+  });
+
+  it('shows the default follow copy for an ordinary user', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'dingdong',
+      reason: 'FOLLOW_REQUIRED',
+      action: 'FOLLOW',
+      followTarget: {
+        kind: 'USER',
+        displayName: '普通用户',
+        avatarUrl: null,
+        description: null,
+      },
+      perform: vi.fn(async () => ({ type: 'completed' as const })),
+    });
+    const layer = document.querySelector('viceme-access-layer');
+
+    expect(
+      layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
+    ).toBe('关注后即可继续使用此功能。');
+
+    (layer?.shadowRoot?.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
   });
 
   it('opens checkout directly inside the access layer frame', async () => {
@@ -69,6 +92,15 @@ describe('default access presenter', () => {
         'about:blank#checkout',
       );
     });
+    const frame = layer?.shadowRoot?.querySelector('iframe') as HTMLIFrameElement;
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'viceme:frame:resize', height: 360 },
+        origin: 'null',
+        source: frame.contentWindow,
+      }),
+    );
+    expect(frame.style.height).toBe('360px');
     expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).toBeNull();
     complete();
 
