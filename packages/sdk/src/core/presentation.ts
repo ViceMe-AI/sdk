@@ -1,9 +1,21 @@
+import type { FollowTarget } from './capabilities.ts';
+
 export type AccessInteractionAction = 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT';
+
+export interface PhoneAuthInteraction {
+  sendCode(phone: string): Promise<{
+    expiresInSeconds: number;
+    retryAfterSeconds: number;
+  }>;
+  signIn(phone: string, code: string): Promise<void>;
+}
 
 export interface AccessInteraction {
   featureKey: string;
   reason: string;
   action: AccessInteractionAction;
+  followTarget?: FollowTarget;
+  phoneAuth?: PhoneAuthInteraction;
   perform(): Promise<AccessActionResult>;
 }
 
@@ -45,15 +57,15 @@ function actionCopy(action: AccessInteractionAction): {
       };
     case 'FOLLOW':
       return {
-        title: '关注创作者',
-        description: '请在此界面确认关注创作者，关注成功后将重新检查权限。',
-        label: '关注创作者',
+        title: '关注后解锁',
+        description: '关注后即可继续使用此功能。',
+        label: '关注',
       };
     case 'CHECKOUT':
       return {
         title: '购买后解锁',
-        description: '在当前页面查看作品并完成支付，成功后将自动返回。',
-        label: '打开支付',
+        description: '完成支付后即可继续使用此功能。',
+        label: '去购买',
       };
   }
 }
@@ -75,7 +87,7 @@ function ensureAccessLayerElement(): void {
             z-index: 2147483000;
             display: grid;
             align-items: end;
-            color: #222222;
+            color: #18181b;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
             font-size: 16px;
             line-height: 1.5;
@@ -84,53 +96,173 @@ function ensureAccessLayerElement(): void {
             position: absolute;
             inset: 0;
             border: 0;
-            background: rgb(15 23 42 / 48%);
+            border-radius: 0;
+            background: rgb(0 0 0 / 56%);
           }
           [data-viceme='panel'] {
             position: relative;
             box-sizing: border-box;
+            display: flex;
             width: 100%;
-            max-height: min(78vh, 36rem);
+            max-height: min(78dvh, 36rem);
+            flex-direction: column;
             overflow: auto;
             border-radius: 1.25rem 1.25rem 0 0;
             background: #ffffff;
-            color: #222222;
-            padding: 0.75rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
-            box-shadow: 0 -1rem 3rem rgb(15 23 42 / 18%);
+            color: #18181b;
+            padding: 1rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+            box-shadow: 0 -1rem 3rem rgb(0 0 0 / 18%);
           }
-          [data-viceme='frame-header'] { display: none; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
-          [data-viceme='frame-title'] { margin: 0; font-size: 1rem; font-weight: 650; }
-          [data-viceme='frame-close'] { min-width: 2.75rem; padding: 0.5rem; }
-          [data-viceme='frame'] { display: none; width: 100%; height: min(72dvh, 42rem); border: 0; border-radius: 0.75rem; background: #ffffff; }
-          [data-viceme='panel'][data-frame='true'] { max-height: 92dvh; }
-          [data-viceme='panel'][data-frame='true'] [data-viceme='handle'],
-          [data-viceme='panel'][data-frame='true'] > [data-viceme='title'],
-          [data-viceme='panel'][data-frame='true'] > [data-viceme='description'],
-          [data-viceme='panel'][data-frame='true'] > [data-viceme='error'],
-          [data-viceme='panel'][data-frame='true'] > [data-viceme='actions'] { display: none; }
-          [data-viceme='panel'][data-frame='true'] [data-viceme='frame-header'] { display: flex; }
-          [data-viceme='panel'][data-frame='true'] [data-viceme='frame'] { display: block; }
-          [data-viceme='handle'] {
+          [data-viceme='header'] {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+          }
+          [data-viceme='title'] {
+            margin: 0;
+            font-size: 1.125rem;
+            font-weight: 700;
+          }
+          [data-viceme='close'] {
+            display: grid;
             width: 2.5rem;
-            height: 0.25rem;
+            min-height: 2.5rem;
+            flex: 0 0 2.5rem;
+            place-items: center;
+            border: 1px solid #d4d4d8;
+            border-radius: 999px;
+            padding: 0;
+            background: #ffffff;
+            color: #18181b;
+            font-size: 1.5rem;
+            font-weight: 400;
+            line-height: 1;
+          }
+          [data-viceme='close']:hover { border-color: #18181b; background: #f4f4f5; }
+          [data-viceme='content'] { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+          [data-viceme='description'] { margin: 0.75rem 0 1.25rem; color: #71717a; line-height: 1.6; }
+          [data-viceme='profile'] {
+            display: none;
+            margin: 0 0 1.25rem;
+            border: 1px solid #e4e4e7;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            background: #ffffff;
+            box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 6%);
+            text-align: center;
+          }
+          [data-viceme='profile'][data-visible='true'] { display: block; }
+          [data-viceme='avatar'] {
+            display: block;
+            width: 5.5rem;
+            height: 5.5rem;
             margin: 0 auto 1rem;
             border-radius: 999px;
-            background: #dedede;
+            object-fit: cover;
+            background: #f4f4f5;
           }
-          [data-viceme='title'] { margin: 0; font-size: 1.125rem; font-weight: 650; }
-          [data-viceme='description'] { margin: 0.5rem 0 1.25rem; color: #6c6c6c; line-height: 1.6; }
-          [data-viceme='actions'] { display: grid; gap: 0.75rem; }
-          button { min-height: 2.75rem; border-radius: 0.75rem; padding: 0.625rem 1rem; font: 600 1rem/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; cursor: pointer; }
-          [data-viceme='action'] { border: 1px solid #ff385c; background: #ff385c; color: #ffffff; }
-          [data-viceme='action']:hover { background: #e00b41; border-color: #e00b41; }
-          [data-viceme='dismiss'] { border: 1px solid #dedede; background: #ffffff; color: #222222; }
-          button:disabled { cursor: wait; opacity: 0.58; }
-          [data-viceme='error'] { min-height: 1.25rem; margin: 0 0 0.75rem; color: #b42318; font-size: 0.875rem; }
+          [data-viceme='avatar-fallback'] {
+            display: grid;
+            width: 5.5rem;
+            height: 5.5rem;
+            margin: 0 auto 1rem;
+            place-items: center;
+            border-radius: 999px;
+            background: #f4f4f5;
+            color: #18181b;
+            font-size: 2rem;
+            font-weight: 700;
+          }
+          [data-viceme='avatar'][hidden], [data-viceme='avatar-fallback'][hidden] { display: none; }
+          [data-viceme='profile-name'] { margin: 0; font-size: 1.375rem; font-weight: 700; }
+          [data-viceme='profile-description'] { margin: 0.25rem 0 0; color: #71717a; }
+          [data-viceme='actions'] {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-top: auto;
+            padding-top: 0.5rem;
+          }
+          [data-viceme='phone-form'] {
+            display: none;
+            min-height: 0;
+            flex: 1;
+            flex-direction: column;
+            gap: 0.875rem;
+            padding-top: 1rem;
+          }
+          [data-viceme='panel'][data-phone='true'] [data-viceme='description'],
+          [data-viceme='panel'][data-phone='true'] [data-viceme='profile'],
+          [data-viceme='panel'][data-phone='true'] > [data-viceme='content'] > [data-viceme='actions'] { display: none; }
+          [data-viceme='panel'][data-phone='true'] [data-viceme='phone-form'] { display: flex; }
+          [data-viceme='field'] { display: grid; gap: 0.375rem; }
+          [data-viceme='field-label'] { color: #3f3f46; font-size: 0.875rem; font-weight: 600; }
+          [data-viceme='input'] {
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 2.75rem;
+            border: 1px solid #d4d4d8;
+            border-radius: 0.75rem;
+            padding: 0.625rem 0.75rem;
+            background: #ffffff;
+            color: #18181b;
+            font: 400 1rem/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+          }
+          [data-viceme='input']:focus { border-color: #18181b; outline: 2px solid #18181b; outline-offset: 2px; }
+          [data-viceme='code-row'] { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.625rem; }
+          [data-viceme='send-code'] { min-width: 7.5rem; border: 1px solid #18181b; background: #ffffff; color: #18181b; }
+          [data-viceme='phone-hint'] { margin: 0; color: #71717a; font-size: 0.75rem; }
+          button {
+            min-height: 2.75rem;
+            border-radius: 0.75rem;
+            padding: 0.625rem 1rem;
+            font: 600 1rem/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            cursor: pointer;
+          }
+          button:focus-visible, iframe:focus-visible { outline: 2px solid #18181b; outline-offset: 2px; }
+          [data-viceme='action'] {
+            width: min(11rem, 48%);
+            border: 1px solid #18181b;
+            background: #18181b;
+            color: #ffffff;
+          }
+          [data-viceme='secondary-action'] {
+            width: min(11rem, 48%);
+            border: 1px solid #18181b;
+            background: #ffffff;
+            color: #18181b;
+          }
+          [data-viceme='secondary-action']:hover { background: #f4f4f5; }
+          [data-viceme='action']:hover { background: #3f3f46; border-color: #3f3f46; }
+          button:disabled { cursor: wait; opacity: 0.5; }
+          button[hidden] { display: none; }
+          [data-viceme='error'] { min-height: 1.25rem; margin: 0 0 0.75rem; color: #b91c1c; font-size: 0.875rem; }
+          [data-viceme='frame'] {
+            display: none;
+            width: 100%;
+            height: min(72dvh, 42rem);
+            border: 0;
+            border-radius: 0.75rem;
+            background: #ffffff;
+          }
+          [data-viceme='panel'][data-frame='true'] { max-height: 92dvh; }
+          [data-viceme='panel'][data-frame='true'] [data-viceme='content'] { display: none; }
+          [data-viceme='panel'][data-frame='true'] [data-viceme='frame'] { display: block; margin-top: 0.75rem; }
+          [data-viceme='panel'][data-action='SIGN_IN'][data-frame='true'] [data-viceme='frame'] {
+            height: min(62dvh, 31rem);
+          }
           @media (min-width: 48rem) {
             :host { place-items: center; padding: 1.5rem; }
-            [data-viceme='panel'] { width: min(28rem, 100%); border-radius: 1.25rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgb(15 23 42 / 24%); }
-            [data-viceme='panel'][data-frame='true'] { width: min(42rem, 100%); }
-            [data-viceme='handle'] { display: none; }
+            [data-viceme='panel'] {
+              width: min(28rem, 100%);
+              min-height: 22rem;
+              border-radius: 1.25rem;
+              padding: 1.25rem;
+              box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 24%);
+            }
+            [data-viceme='panel'][data-frame='true'] { width: min(52rem, 100%); }
+            [data-viceme='panel'][data-action='SIGN_IN'][data-frame='true'] { width: min(30rem, 100%); }
           }
           @media (prefers-reduced-motion: no-preference) {
             [data-viceme='panel'] { animation: viceme-enter 160ms ease-out; }
@@ -139,71 +271,199 @@ function ensureAccessLayerElement(): void {
         </style>
         <button data-viceme="backdrop" type="button" tabindex="-1" aria-label="关闭"></button>
         <section data-viceme="panel" role="dialog" aria-modal="true" aria-labelledby="viceme-layer-title">
-          <div data-viceme="handle" aria-hidden="true"></div>
-          <h2 data-viceme="title" id="viceme-layer-title"></h2>
-          <p data-viceme="description"></p>
-          <p data-viceme="error" role="alert" aria-live="polite"></p>
-          <div data-viceme="actions">
-            <button data-viceme="action" type="button"></button>
-            <button data-viceme="dismiss" type="button">暂不操作</button>
+          <div data-viceme="header">
+            <h2 data-viceme="title" id="viceme-layer-title"></h2>
+            <button data-viceme="close" type="button" aria-label="关闭">&times;</button>
           </div>
-          <div data-viceme="frame-header">
-            <p data-viceme="frame-title"></p>
-            <button data-viceme="frame-close" type="button" aria-label="关闭">关闭</button>
+          <div data-viceme="content">
+            <p data-viceme="description"></p>
+            <section data-viceme="profile" aria-label="关注对象">
+              <img data-viceme="avatar" hidden />
+              <span data-viceme="avatar-fallback" aria-hidden="true"></span>
+              <p data-viceme="profile-name"></p>
+              <p data-viceme="profile-description"></p>
+            </section>
+            <p data-viceme="error" role="alert" aria-live="polite"></p>
+            <div data-viceme="actions">
+              <button data-viceme="secondary-action" data-viceme-phone-action type="button">手机号登录</button>
+              <button data-viceme="action" type="button"></button>
+            </div>
+            <form data-viceme="phone-form">
+              <label data-viceme="field">
+                <span data-viceme="field-label">手机号</span>
+                <input data-viceme="input" data-viceme-phone type="tel" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="请输入中国大陆手机号" />
+              </label>
+              <label data-viceme="field">
+                <span data-viceme="field-label">验证码</span>
+                <span data-viceme="code-row">
+                  <input data-viceme="input" data-viceme-code type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码" />
+                  <button data-viceme="send-code" type="button">获取验证码</button>
+                </span>
+              </label>
+              <p data-viceme="phone-hint">未注册的手机号验证后将自动创建 ViceMe 账号。</p>
+              <div data-viceme="actions">
+                <button data-viceme="secondary-action" data-viceme-phone-back type="button">返回</button>
+                <button data-viceme="action" data-viceme-phone-submit type="submit">登录</button>
+              </div>
+            </form>
           </div>
           <iframe data-viceme="frame" title="" referrerpolicy="no-referrer" allow="payment"></iframe>
         </section>
       `;
+      const panel = shadow.querySelector<HTMLElement>("[data-viceme='panel']")!;
+      panel.dataset.action = this.interaction.action;
       shadow.querySelector<HTMLElement>("[data-viceme='title']")!.textContent = copy.title;
       shadow.querySelector<HTMLElement>("[data-viceme='description']")!.textContent =
         copy.description;
       const action = shadow.querySelector<HTMLButtonElement>("[data-viceme='action']")!;
-      const dismiss = shadow.querySelector<HTMLButtonElement>("[data-viceme='dismiss']")!;
+      const phoneAction = shadow.querySelector<HTMLButtonElement>('[data-viceme-phone-action]')!;
       const backdrop = shadow.querySelector<HTMLButtonElement>("[data-viceme='backdrop']")!;
+      const closeButton = shadow.querySelector<HTMLButtonElement>("[data-viceme='close']")!;
       const error = shadow.querySelector<HTMLElement>("[data-viceme='error']")!;
-      const panel = shadow.querySelector<HTMLElement>("[data-viceme='panel']")!;
-      const frameTitle = shadow.querySelector<HTMLElement>("[data-viceme='frame-title']")!;
-      const frameClose = shadow.querySelector<HTMLButtonElement>("[data-viceme='frame-close']")!;
       const frame = shadow.querySelector<HTMLIFrameElement>("[data-viceme='frame']")!;
+      const profile = shadow.querySelector<HTMLElement>("[data-viceme='profile']")!;
+      const avatar = shadow.querySelector<HTMLImageElement>("[data-viceme='avatar']")!;
+      const avatarFallback = shadow.querySelector<HTMLElement>("[data-viceme='avatar-fallback']")!;
+      const profileName = shadow.querySelector<HTMLElement>("[data-viceme='profile-name']")!;
+      const profileDescription = shadow.querySelector<HTMLElement>(
+        "[data-viceme='profile-description']",
+      )!;
+      const phoneForm = shadow.querySelector<HTMLFormElement>("[data-viceme='phone-form']")!;
+      const phoneInput = shadow.querySelector<HTMLInputElement>('[data-viceme-phone]')!;
+      const codeInput = shadow.querySelector<HTMLInputElement>('[data-viceme-code]')!;
+      const sendCode = shadow.querySelector<HTMLButtonElement>("[data-viceme='send-code']")!;
+      const phoneBack = shadow.querySelector<HTMLButtonElement>('[data-viceme-phone-back]')!;
+      const phoneSubmit = shadow.querySelector<HTMLButtonElement>('[data-viceme-phone-submit]')!;
       action.textContent = copy.label;
+      phoneAction.hidden = !this.interaction.phoneAuth;
       const idleActionLabel = copy.label;
-      frameTitle.textContent = copy.title;
       frame.title = copy.title;
-      let activeFrame: AccessFrameAction | null = null;
 
+      const target = this.interaction.followTarget;
+      if (target) {
+        profile.dataset.visible = 'true';
+        profileName.textContent = target.displayName;
+        profileDescription.textContent =
+          target.description ?? (target.kind === 'CREATOR' ? '创作者' : 'ViceMe 用户');
+        avatarFallback.textContent = target.displayName.trim().slice(0, 1) || 'V';
+        if (target.avatarUrl) {
+          avatar.src = target.avatarUrl;
+          avatar.alt = `${target.displayName}的头像`;
+          avatar.hidden = false;
+          avatarFallback.hidden = true;
+        }
+      }
+
+      let activeFrame: AccessFrameAction | null = null;
+      let countdownTimer: number | null = null;
+      const clearCountdown = () => {
+        if (countdownTimer !== null) window.clearInterval(countdownTimer);
+        countdownTimer = null;
+      };
       const close = (result: AccessPresentationResult) => {
+        clearCountdown();
         this.dispatchEvent(new CustomEvent('viceme:access-layer-close', { detail: result }));
       };
       const dismissLayer = () => {
         activeFrame?.cancel();
         close('dismissed');
       };
-      dismiss.addEventListener('click', dismissLayer);
       backdrop.addEventListener('click', dismissLayer);
-      frameClose.addEventListener('click', dismissLayer);
+      closeButton.addEventListener('click', dismissLayer);
       this.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') dismissLayer();
         if (event.key === 'Tab') {
           event.preventDefault();
           if (activeFrame) {
-            frameClose.focus();
+            closeButton.focus();
             return;
           }
-          const next = event.shiftKey
-            ? shadow.activeElement === action
-              ? dismiss
-              : action
-            : shadow.activeElement === dismiss
-              ? action
-              : dismiss;
-          next.focus();
+          const focusable =
+            panel.dataset.phone === 'true'
+              ? [closeButton, phoneInput, codeInput, sendCode, phoneBack, phoneSubmit]
+              : [closeButton, ...(phoneAction.hidden ? [] : [phoneAction]), action];
+          const available = focusable.filter((element) => !element.disabled);
+          const currentIndex = available.indexOf(
+            shadow.activeElement as HTMLButtonElement | HTMLInputElement,
+          );
+          const direction = event.shiftKey ? -1 : 1;
+          available[(currentIndex + direction + available.length) % available.length]?.focus();
+        }
+      });
+      phoneInput.addEventListener('input', () => {
+        phoneInput.value = phoneInput.value.replace(/\D/g, '').slice(0, 11);
+      });
+      codeInput.addEventListener('input', () => {
+        codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
+      });
+      phoneAction.addEventListener('click', () => {
+        panel.dataset.phone = 'true';
+        shadow.querySelector<HTMLElement>("[data-viceme='title']")!.textContent = '手机号登录';
+        error.textContent = '';
+        phoneInput.focus();
+      });
+      phoneBack.addEventListener('click', () => {
+        panel.dataset.phone = 'false';
+        shadow.querySelector<HTMLElement>("[data-viceme='title']")!.textContent = copy.title;
+        error.textContent = '';
+        phoneAction.focus();
+      });
+      sendCode.addEventListener('click', async () => {
+        const phone = phoneInput.value;
+        if (!/^1[3-9]\d{9}$/.test(phone)) {
+          error.textContent = '请输入正确的中国大陆手机号。';
+          phoneInput.focus();
+          return;
+        }
+        sendCode.disabled = true;
+        sendCode.textContent = '发送中…';
+        error.textContent = '';
+        try {
+          const result = await this.interaction.phoneAuth!.sendCode(phone);
+          let remaining = result.retryAfterSeconds;
+          sendCode.textContent = `${remaining} 秒后重试`;
+          clearCountdown();
+          countdownTimer = window.setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+              clearCountdown();
+              sendCode.disabled = false;
+              sendCode.textContent = '重新获取';
+              return;
+            }
+            sendCode.textContent = `${remaining} 秒后重试`;
+          }, 1_000);
+          codeInput.focus();
+        } catch {
+          sendCode.disabled = false;
+          sendCode.textContent = '获取验证码';
+          error.textContent = '验证码发送失败，请稍后重试。';
+        }
+      });
+      phoneForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const phone = phoneInput.value;
+        const code = codeInput.value;
+        if (!/^1[3-9]\d{9}$/.test(phone) || !/^\d{6}$/.test(code)) {
+          error.textContent = '请输入正确的手机号和 6 位验证码。';
+          return;
+        }
+        phoneSubmit.disabled = true;
+        phoneSubmit.textContent = '登录中…';
+        error.textContent = '';
+        try {
+          await this.interaction.phoneAuth!.signIn(phone, code);
+          close('acted');
+        } catch {
+          phoneSubmit.disabled = false;
+          phoneSubmit.textContent = '登录';
+          error.textContent = '手机号或验证码不正确，请重试。';
         }
       });
       action.addEventListener('click', async () => {
         action.disabled = true;
         action.setAttribute('aria-busy', 'true');
         action.textContent = '正在打开…';
-        dismiss.disabled = true;
         error.textContent = '';
         try {
           const result = await this.interaction.perform();
@@ -211,7 +471,7 @@ function ensureAccessLayerElement(): void {
             activeFrame = result;
             panel.dataset.frame = 'true';
             frame.src = result.url;
-            frameClose.focus();
+            closeButton.focus();
             await result.completion;
           }
           close('acted');
@@ -224,7 +484,6 @@ function ensureAccessLayerElement(): void {
           action.disabled = false;
           action.removeAttribute('aria-busy');
           action.textContent = idleActionLabel;
-          dismiss.disabled = false;
           action.focus();
         }
       });

@@ -41,7 +41,7 @@ describe('FetchTransport compatibility', () => {
     const t = transport();
     const res = await t.request({
       method: 'POST',
-      path: '/public/v1/work-sessions',
+      path: '/v1/public/v1/work-sessions',
       body: { workKey: 'wrk_test' },
     });
     expect(res.status).toBe(201);
@@ -66,7 +66,7 @@ describe('FetchTransport compatibility', () => {
     });
     try {
       const t = createFetchTransport({ apiBaseUrl: scoped.url });
-      const p = t.request({ method: 'POST', path: '/public/v1/work-sessions' });
+      const p = t.request({ method: 'POST', path: '/v1/public/v1/work-sessions' });
       await expect(p).rejects.toSatisfy(
         (e: unknown) => (e as ViceMeError).code === 'RATE_LIMITED' && (e as ViceMeError).retryable,
       );
@@ -81,7 +81,7 @@ describe('FetchTransport compatibility', () => {
     });
     try {
       const t = createFetchTransport({ apiBaseUrl: scoped.url });
-      const p = t.request({ method: 'POST', path: '/public/v1/work-sessions' });
+      const p = t.request({ method: 'POST', path: '/v1/public/v1/work-sessions' });
       await expect(p).rejects.toSatisfy((e: unknown) => expectCode(e) === 'INTERNAL_ERROR');
     } finally {
       await scoped.close();
@@ -96,7 +96,7 @@ describe('FetchTransport compatibility', () => {
     });
     try {
       const t = createFetchTransport({ apiBaseUrl: scoped.url, defaultTimeoutMs: 150 });
-      const p = t.request({ method: 'POST', path: '/public/v1/work-sessions' });
+      const p = t.request({ method: 'POST', path: '/v1/public/v1/work-sessions' });
       await expect(p).rejects.toSatisfy((e: unknown) => expectCode(e) === 'NETWORK_TIMEOUT');
     } finally {
       await scoped.close();
@@ -114,7 +114,7 @@ describe('FetchTransport compatibility', () => {
       const controller = new AbortController();
       const p = t.request({
         method: 'POST',
-        path: '/public/v1/work-sessions',
+        path: '/v1/public/v1/work-sessions',
         signal: controller.signal,
       });
       controller.abort();
@@ -157,7 +157,7 @@ describe('SessionManager against the real transport', () => {
     session.invalidate();
     await session.establish();
     const posts = server.seen.filter(
-      (s) => s.method === 'POST' && s.url === '/public/v1/work-sessions',
+      (s) => s.method === 'POST' && s.url === '/v1/public/v1/work-sessions',
     );
     expect(posts.length).toBeGreaterThanOrEqual(2);
   });

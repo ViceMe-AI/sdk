@@ -16,6 +16,14 @@ export interface AuthState {
 export interface FollowState {
   following: boolean;
   followedAt: string | null;
+  target: FollowTarget;
+}
+
+export interface FollowTarget {
+  kind: 'CREATOR' | 'USER';
+  displayName: string;
+  avatarUrl: string | null;
+  description: string | null;
 }
 
 export type AccessReason =
@@ -111,7 +119,25 @@ function parseFollowState(value: unknown): FollowState {
   ) {
     throw malformedResponse();
   }
-  return { following: body.following, followedAt: body.followedAt };
+  const target = objectBody(body.target);
+  if (
+    !(target.kind === 'CREATOR' || target.kind === 'USER') ||
+    typeof target.displayName !== 'string' ||
+    !(typeof target.avatarUrl === 'string' || target.avatarUrl === null) ||
+    !(typeof target.description === 'string' || target.description === null)
+  ) {
+    throw malformedResponse();
+  }
+  return {
+    following: body.following,
+    followedAt: body.followedAt,
+    target: {
+      kind: target.kind,
+      displayName: target.displayName,
+      avatarUrl: target.avatarUrl,
+      description: target.description,
+    },
+  };
 }
 
 function parseDecision(value: unknown): AccessDecision {
@@ -205,7 +231,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       (
         await deps.session.request({
           method: 'POST',
-          path: '/public/v1/auth/exchange',
+          path: '/v1/public/v1/auth/exchange',
           body: { code, codeVerifier },
         })
       ).body,
@@ -283,7 +309,7 @@ export function createCapabilities(deps: CapabilityDeps): {
     const channel = randomVerifier();
     const response = await deps.session.request({
       method: 'POST',
-      path: '/public/v1/auth/wechat/authorize',
+      path: '/v1/public/v1/auth/wechat/authorize',
       body: {
         codeChallenge: await codeChallenge(verifier),
         channel,
@@ -304,6 +330,45 @@ export function createCapabilities(deps: CapabilityDeps): {
     );
   };
 
+  const phoneAuth = {
+    async sendCode(phone: string) {
+      await deps.ready();
+      const response = objectBody(
+        (
+          await deps.session.request({
+            method: 'POST',
+            path: '/v1/public/v1/auth/phone/verification-codes',
+            body: { phone },
+          })
+        ).body,
+      );
+      if (
+        typeof response.expiresInSeconds !== 'number' ||
+        typeof response.retryAfterSeconds !== 'number'
+      ) {
+        throw malformedResponse();
+      }
+      return {
+        expiresInSeconds: response.expiresInSeconds,
+        retryAfterSeconds: response.retryAfterSeconds,
+      };
+    },
+    async signIn(phone: string, code: string) {
+      await deps.ready();
+      const response = await deps.session.request({
+        method: 'POST',
+        path: '/v1/public/v1/auth/phone/login',
+        body: { phone, code },
+      });
+      const exchange = objectBody(response.body);
+      if (typeof exchange.token !== 'string' || typeof exchange.expiresAt !== 'number') {
+        throw malformedResponse();
+      }
+      const user = parseUser(exchange.user);
+      deps.session.authenticate({ token: exchange.token, expiresAt: exchange.expiresAt, user });
+    },
+  };
+
   const auth: AuthCapability = {
     async getState() {
       await deps.ready();
@@ -316,6 +381,7 @@ export function createCapabilities(deps: CapabilityDeps): {
         featureKey: 'auth',
         reason: 'AUTH_REQUIRED',
         action: 'SIGN_IN',
+        phoneAuth,
         perform: startSignIn,
       });
       if (result === 'dismissed') throw cancelled();
@@ -331,19 +397,19 @@ export function createCapabilities(deps: CapabilityDeps): {
     async getState() {
       await deps.ready();
       return parseFollowState(
-        (await deps.session.request({ method: 'GET', path: '/public/v1/follow' })).body,
+        (await deps.session.request({ method: 'GET', path: '/v1/public/v1/follow' })).body,
       );
     },
     async follow() {
       await deps.ready();
       return parseFollowState(
-        (await deps.session.request({ method: 'PUT', path: '/public/v1/follow' })).body,
+        (await deps.session.request({ method: 'PUT', path: '/v1/public/v1/follow' })).body,
       );
     },
     async unfollow() {
       await deps.ready();
       return parseFollowState(
-        (await deps.session.request({ method: 'DELETE', path: '/public/v1/follow' })).body,
+        (await deps.session.request({ method: 'DELETE', path: '/v1/public/v1/follow' })).body,
       );
     },
   };
@@ -354,7 +420,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       (
         await deps.session.request({
           method: 'POST',
-          path: '/public/v1/access/check',
+          path: '/v1/public/v1/access/check',
           body: { featureKeys },
         })
       ).body,
@@ -378,7 +444,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       (
         await deps.session.request({
           method: 'POST',
-          path: '/public/v1/checkout/sessions',
+          path: '/v1/public/v1/checkout/sessions',
           body,
         })
       ).body,
@@ -435,10 +501,13 @@ export function createCapabilities(deps: CapabilityDeps): {
         attempts += 1
       ) {
         const nextAction = decision.nextAction as AccessInteractionAction;
+        const followTarget = nextAction === 'FOLLOW' ? (await follow.getState()).target : undefined;
         const result = await presenter({
           featureKey,
           reason: decision.reason,
           action: nextAction,
+          ...(followTarget ? { followTarget } : {}),
+          ...(nextAction === 'SIGN_IN' ? { phoneAuth } : {}),
           perform: async () => {
             if (nextAction === 'SIGN_IN') {
               return startSignIn();

@@ -16,7 +16,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
     requests,
     async request(request: TransportRequest): Promise<TransportResponse> {
       requests.push(request);
-      if (request.path === '/public/v1/work-sessions') {
+      if (request.path === '/v1/public/v1/work-sessions') {
         return {
           status: 201,
           body: {
@@ -29,14 +29,38 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/public/v1/follow' && request.method === 'PUT') {
+      if (request.path === '/v1/public/v1/follow' && request.method === 'PUT') {
         following = true;
         return {
           status: 200,
-          body: { following: true, followedAt: '2026-08-15T10:00:00.000Z' },
+          body: {
+            following: true,
+            followedAt: '2026-08-15T10:00:00.000Z',
+            target: {
+              kind: 'CREATOR',
+              displayName: '归藏',
+              avatarUrl: 'https://cdn.example.com/creator.jpg',
+              description: 'AI 创业者',
+            },
+          },
         };
       }
-      if (request.path === '/public/v1/access/check') {
+      if (request.path === '/v1/public/v1/follow' && request.method === 'GET') {
+        return {
+          status: 200,
+          body: {
+            following,
+            followedAt: null,
+            target: {
+              kind: 'CREATOR',
+              displayName: '归藏',
+              avatarUrl: 'https://cdn.example.com/creator.jpg',
+              description: 'AI 创业者',
+            },
+          },
+        };
+      }
+      if (request.path === '/v1/public/v1/access/check') {
         return {
           status: 200,
           body: {
@@ -55,7 +79,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/public/v1/checkout/sessions') {
+      if (request.path === '/v1/public/v1/checkout/sessions') {
         return {
           status: 200,
           body: {
@@ -65,7 +89,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/public/v1/auth/wechat/authorize') {
+      if (request.path === '/v1/public/v1/auth/wechat/authorize') {
         return {
           status: 200,
           body: {
@@ -74,7 +98,27 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/public/v1/auth/exchange') {
+      if (request.path === '/v1/public/v1/auth/phone/verification-codes') {
+        return {
+          status: 200,
+          body: { expiresInSeconds: 300, retryAfterSeconds: 60 },
+        };
+      }
+      if (request.path === '/v1/public/v1/auth/phone/login') {
+        return {
+          status: 200,
+          body: {
+            token: 'authenticated-work-token',
+            expiresAt: Date.now() + 60_000,
+            user: {
+              subject: 'authenticated-user-subject',
+              nickname: '138****8000',
+              avatarUrl: null,
+            },
+          },
+        };
+      }
+      if (request.path === '/v1/public/v1/auth/exchange') {
         return {
           status: 200,
           body: {
@@ -151,7 +195,7 @@ describe('creator access capabilities', () => {
     });
     expect(presenter).toHaveBeenCalledOnce();
     expect(
-      transport.requests.some((request) => request.path === '/public/v1/checkout/sessions'),
+      transport.requests.some((request) => request.path === '/v1/public/v1/checkout/sessions'),
     ).toBe(false);
   });
 
@@ -175,6 +219,14 @@ describe('creator access capabilities', () => {
       nextAction: null,
     });
     expect(presenter).toHaveBeenCalledOnce();
+    expect(presenter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        followTarget: expect.objectContaining({
+          kind: 'CREATOR',
+          displayName: '归藏',
+        }),
+      }),
+    );
     expect(transport.requests.filter((request) => request.method === 'PUT')).toHaveLength(1);
   });
 
@@ -205,7 +257,7 @@ describe('creator access capabilities', () => {
 
     expect(window.location.href).toBe(before);
     expect(
-      transport.requests.some((request) => request.path === '/public/v1/auth/resume-codes'),
+      transport.requests.some((request) => request.path === '/v1/public/v1/auth/resume-codes'),
     ).toBe(false);
   });
 
@@ -220,7 +272,7 @@ describe('creator access capabilities', () => {
       }) => {
         const result = await interaction.perform();
         const authorize = transport.requests.find(
-          (request) => request.path === '/public/v1/auth/wechat/authorize',
+          (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
         );
         const channel = (authorize?.body as { channel?: string }).channel;
         window.dispatchEvent(
@@ -251,6 +303,37 @@ describe('creator access capabilities', () => {
     });
   });
 
+  it('supports phone verification login inside the access layer', async () => {
+    const transport = capabilityTransport();
+    const presenter = vi.fn(async (interaction: AccessInteraction) => {
+      await expect(interaction.phoneAuth?.sendCode('13800138000')).resolves.toEqual({
+        expiresInSeconds: 300,
+        retryAfterSeconds: 60,
+      });
+      await interaction.phoneAuth?.signIn('13800138000', '123456');
+      return 'acted' as const;
+    });
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport,
+      presenter,
+    });
+
+    await expect(client.auth.signIn()).resolves.toMatchObject({
+      authenticated: true,
+      user: { nickname: '138****8000' },
+    });
+    expect(
+      transport.requests.find(
+        (request) => request.path === '/v1/public/v1/auth/phone/verification-codes',
+      )?.body,
+    ).toEqual({ phone: '13800138000' });
+    expect(
+      transport.requests.find((request) => request.path === '/v1/public/v1/auth/phone/login')?.body,
+    ).toEqual({ phone: '13800138000', code: '123456' });
+  });
+
   it('sends an explicit H5 client type when the browser reports mobile emulation', async () => {
     const descriptor = Object.getOwnPropertyDescriptor(navigator, 'userAgentData');
     Object.defineProperty(navigator, 'userAgentData', {
@@ -274,7 +357,7 @@ describe('creator access capabilities', () => {
     try {
       await expect(client.auth.signIn()).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
       const authorize = transport.requests.find(
-        (request) => request.path === '/public/v1/auth/wechat/authorize',
+        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
       );
       expect(authorize?.body).toMatchObject({ clientType: 'h5' });
     } finally {
@@ -289,7 +372,7 @@ describe('creator access capabilities', () => {
       const result = await interaction.perform();
       if (result.type !== 'frame') throw new Error('expected auth frame');
       const authorize = transport.requests.find(
-        (request) => request.path === '/public/v1/auth/wechat/authorize',
+        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
       );
       const channel = (authorize?.body as { channel?: string }).channel;
       window.dispatchEvent(
@@ -305,7 +388,7 @@ describe('creator access capabilities', () => {
       );
       await Promise.resolve();
       expect(
-        transport.requests.some((request) => request.path === '/public/v1/auth/exchange'),
+        transport.requests.some((request) => request.path === '/v1/public/v1/auth/exchange'),
       ).toBe(false);
       result.cancel?.();
       return 'dismissed' as const;

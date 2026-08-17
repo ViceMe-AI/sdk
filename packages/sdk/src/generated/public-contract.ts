@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.3.2, sha256 09de78ba3db2b572…)
+ * (contractVersion 0.3.2, sha256 b12d7bbdf2252eda…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -13,7 +13,7 @@
  */
 
 export interface paths {
-    "/public/v1/work-sessions": {
+    "/v1/public/v1/work-sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -33,7 +33,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/public/v1/auth/wechat/authorize": {
+    "/v1/public/v1/auth/wechat/authorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -49,7 +49,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/public/v1/auth/exchange": {
+    "/v1/public/v1/auth/exchange": {
         parameters: {
             query?: never;
             header?: never;
@@ -65,7 +65,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/public/v1/auth/resume-codes": {
+    "/v1/public/v1/auth/phone/verification-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["sendPhoneVerificationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/v1/auth/phone/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["loginWithPhoneVerificationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/v1/auth/resume-codes": {
         parameters: {
             query?: never;
             header?: never;
@@ -81,7 +113,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/public/v1/auth/resume": {
+    "/v1/public/v1/auth/resume": {
         parameters: {
             query?: never;
             header?: never;
@@ -97,7 +129,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/public/v1/follow": {
+    "/v1/public/v1/follow": {
         parameters: {
             query?: never;
             header?: never;
@@ -113,7 +145,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/public/v1/access/check": {
+    "/v1/public/v1/access/check": {
         parameters: {
             query?: never;
             header?: never;
@@ -129,7 +161,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/public/v1/checkout/sessions": {
+    "/v1/public/v1/checkout/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -145,7 +177,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/public/v1/checkout/bootstrap": {
+    "/v1/public/v1/checkout/bootstrap": {
         parameters: {
             query?: never;
             header?: never;
@@ -206,6 +238,17 @@ export interface components {
             /** Format: uri */
             completionOrigin: string;
         };
+        PhoneVerificationCodeRequest: {
+            phone: string;
+        };
+        PhoneLoginRequest: {
+            phone: string;
+            code: string;
+        };
+        VerificationCodeSentResponse: {
+            expiresInSeconds: number;
+            retryAfterSeconds: number;
+        };
         AuthExchangeRequest: {
             code: string;
             codeVerifier: string;
@@ -226,6 +269,15 @@ export interface components {
             following: boolean;
             /** Format: date-time */
             followedAt: string | null;
+            target: components["schemas"]["FollowTarget"];
+        };
+        FollowTarget: {
+            /** @enum {string} */
+            kind: "CREATOR" | "USER";
+            displayName: string;
+            /** Format: uri */
+            avatarUrl: string | null;
+            description: string | null;
         };
         AccessCheckRequest: {
             featureKeys: string[];
@@ -394,6 +446,58 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AuthExchangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Authenticated work session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthExchangeResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+            "5xx": components["responses"]["InternalError"];
+        };
+    };
+    sendPhoneVerificationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhoneVerificationCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Phone verification code sent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationCodeSentResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+            "5xx": components["responses"]["InternalError"];
+        };
+    };
+    loginWithPhoneVerificationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhoneLoginRequest"];
             };
         };
         responses: {

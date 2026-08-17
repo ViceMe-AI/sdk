@@ -18,7 +18,7 @@
     { "name": "checkout", "description": "Creator-product hosted checkout" }
   ],
   "paths": {
-    "/public/v1/work-sessions": {
+    "/v1/public/v1/work-sessions": {
       "post": {
         "tags": ["work-sessions"],
         "operationId": "createWorkSession",
@@ -54,7 +54,7 @@
         }
       }
     },
-    "/public/v1/auth/wechat/authorize": {
+    "/v1/public/v1/auth/wechat/authorize": {
       "post": {
         "tags": ["auth"],
         "operationId": "authorizeWechat",
@@ -81,7 +81,7 @@
         }
       }
     },
-    "/public/v1/auth/exchange": {
+    "/v1/public/v1/auth/exchange": {
       "post": {
         "tags": ["auth"],
         "operationId": "exchangeWechatCode",
@@ -108,7 +108,61 @@
         }
       }
     },
-    "/public/v1/auth/resume-codes": {
+    "/v1/public/v1/auth/phone/verification-codes": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "sendPhoneVerificationCode",
+        "security": [{ "workSession": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PhoneVerificationCodeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Phone verification code sent.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VerificationCodeSentResponse" }
+              }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" },
+          "5xx": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/v1/public/v1/auth/phone/login": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "loginWithPhoneVerificationCode",
+        "security": [{ "workSession": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PhoneLoginRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated work session.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthExchangeResponse" }
+              }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" },
+          "5xx": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/v1/public/v1/auth/resume-codes": {
       "post": {
         "tags": ["auth"],
         "operationId": "createAuthResumeCode",
@@ -126,7 +180,7 @@
         }
       }
     },
-    "/public/v1/auth/resume": {
+    "/v1/public/v1/auth/resume": {
       "post": {
         "tags": ["auth"],
         "operationId": "resumeAuthenticatedSession",
@@ -152,7 +206,7 @@
         }
       }
     },
-    "/public/v1/follow": {
+    "/v1/public/v1/follow": {
       "get": {
         "tags": ["follow"],
         "operationId": "getFollowState",
@@ -202,7 +256,7 @@
         }
       }
     },
-    "/public/v1/access/check": {
+    "/v1/public/v1/access/check": {
       "post": {
         "tags": ["access"],
         "operationId": "checkFeatureAccess",
@@ -228,7 +282,7 @@
         }
       }
     },
-    "/public/v1/checkout/sessions": {
+    "/v1/public/v1/checkout/sessions": {
       "post": {
         "tags": ["checkout"],
         "operationId": "createCheckoutSession",
@@ -255,7 +309,7 @@
         }
       }
     },
-    "/public/v1/checkout/bootstrap": {
+    "/v1/public/v1/checkout/bootstrap": {
       "post": {
         "tags": ["checkout"],
         "operationId": "bootstrapEmbeddedCheckout",
@@ -363,6 +417,32 @@
           "completionOrigin": { "type": "string", "format": "uri" }
         }
       },
+      "PhoneVerificationCodeRequest": {
+        "type": "object",
+        "required": ["phone"],
+        "additionalProperties": false,
+        "properties": {
+          "phone": { "type": "string", "pattern": "^(?:\\+?86)?1[3-9]\\d{9}$" }
+        }
+      },
+      "PhoneLoginRequest": {
+        "type": "object",
+        "required": ["phone", "code"],
+        "additionalProperties": false,
+        "properties": {
+          "phone": { "type": "string", "pattern": "^(?:\\+?86)?1[3-9]\\d{9}$" },
+          "code": { "type": "string", "pattern": "^\\d{6}$" }
+        }
+      },
+      "VerificationCodeSentResponse": {
+        "type": "object",
+        "required": ["expiresInSeconds", "retryAfterSeconds"],
+        "additionalProperties": false,
+        "properties": {
+          "expiresInSeconds": { "type": "integer", "minimum": 1 },
+          "retryAfterSeconds": { "type": "integer", "minimum": 1 }
+        }
+      },
       "AuthExchangeRequest": {
         "type": "object",
         "required": ["code", "codeVerifier"],
@@ -401,11 +481,23 @@
       },
       "FollowState": {
         "type": "object",
-        "required": ["following", "followedAt"],
+        "required": ["following", "followedAt", "target"],
         "additionalProperties": false,
         "properties": {
           "following": { "type": "boolean" },
-          "followedAt": { "type": ["string", "null"], "format": "date-time" }
+          "followedAt": { "type": ["string", "null"], "format": "date-time" },
+          "target": { "$ref": "#/components/schemas/FollowTarget" }
+        }
+      },
+      "FollowTarget": {
+        "type": "object",
+        "required": ["kind", "displayName", "avatarUrl", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "type": "string", "enum": ["CREATOR", "USER"] },
+          "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "avatarUrl": { "type": ["string", "null"], "format": "uri" },
+          "description": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 }
         }
       },
       "AccessCheckRequest": {
