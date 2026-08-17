@@ -86,5 +86,9 @@ for (const required of ['index.js', 'viceme.min.js', 'bootstrap.min.js']) {
   }
 }
 
+if (manifest.files['danmaku.js']) {
+  manifest.features.danmaku = 'danmaku.js';
+}
+
 await writeFile(join(distDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`manifest: ${Object.keys(manifest.files).length} artifacts @ ${pkg.version}`);

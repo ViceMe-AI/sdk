@@ -63,6 +63,38 @@ async function mockApi(page: Page, options: MockApiOptions = {}) {
   };
 }
 
+async function mockHostedDanmaku(page: Page) {
+  let hits = 0;
+  await page.route('https://viceme.cn/embed/danmaku**', async (route: Route) => {
+    hits += 1;
+    const url = new URL(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: `<!doctype html>
+        <html><body data-mode="${url.searchParams.get('mode') ?? ''}">
+          <script>
+            window.addEventListener('message', (event) => {
+              if (event.data?.source !== 'viceme-danmaku') return;
+              if (event.data.action === 'anchor-change') {
+                document.body.dataset.anchor = event.data.anchorKey;
+              }
+            });
+            window.parent.postMessage(
+              { source: 'viceme-danmaku', action: 'request-anchor' },
+              '*',
+            );
+          </script>
+        </body></html>`,
+    });
+  });
+  return {
+    get hits() {
+      return hits;
+    },
+  };
+}
+
 function cfgUrl(attrs: Record<string, string>, extra: Record<string, string> = {}): string {
   const params = new URLSearchParams(extra);
   params.set('cfg', encodeURIComponent(JSON.stringify({ attrs })));
@@ -170,6 +202,56 @@ test.describe('successful auto-mount', () => {
     await page.goto(cfgUrl(VALID_ATTRS));
     await waitForEvent(page, 'viceme:ready');
     expect(await page.evaluate(() => !!document.querySelector('#host-a')!.shadowRoot)).toBe(true);
+  });
+
+  test('four-line danmaku loader preserves host clicks and tracks page position', async ({
+    page,
+  }) => {
+    await mockApi(page, { capabilities: ['danmaku'] });
+    const hosted = await mockHostedDanmaku(page);
+    await page.goto('/pages/danmaku-static.html#/chapter/1');
+    const events = await waitForEvent(page, 'viceme:ready');
+    expect(events.find((event) => event.type === 'viceme:ready')?.detail.capabilities).toEqual([
+      'danmaku',
+    ]);
+
+    const mounted = await page.evaluate(() => {
+      const portal = document.querySelector<HTMLElement>('[data-viceme-danmaku="mounted"]')!;
+      const frames = Array.from(portal.shadowRoot!.querySelectorAll<HTMLIFrameElement>('iframe'));
+      return {
+        frameCount: frames.length,
+        stagePointerEvents: frames[0]?.style.pointerEvents,
+        controlsPointerEvents: frames[1]?.style.pointerEvents,
+        modalSource: frames[2]?.getAttribute('src'),
+        shadowRoot: !!portal.shadowRoot,
+      };
+    });
+    expect(mounted).toEqual({
+      frameCount: 3,
+      stagePointerEvents: 'none',
+      controlsPointerEvents: 'auto',
+      modalSource: 'about:blank',
+      shadowRoot: true,
+    });
+    expect(hosted.hits).toBe(2); // stage + controls; modal stays lazy
+
+    await page.locator('#host-action').click();
+    await expect(page.locator('#host-status')).toHaveText('clicked');
+
+    const stage = page
+      .frames()
+      .find((frame) => new URL(frame.url()).searchParams.get('mode') === 'stage');
+    expect(stage).toBeDefined();
+    await expect(stage!.locator('body')).toHaveAttribute('data-anchor', /:scroll:0-10$/);
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect(stage!.locator('body')).toHaveAttribute('data-anchor', /:scroll:90-100$/);
+
+    const beforeNavigation = await stage!.locator('body').getAttribute('data-anchor');
+    await page.evaluate(() => window.history.pushState(null, '', '/next#/chapter/2'));
+    await expect
+      .poll(() => stage!.locator('body').getAttribute('data-anchor'))
+      .not.toBe(beforeNavigation);
   });
 
   test('v1 alias without a manifest resolves through the version pointer', async ({ page }) => {

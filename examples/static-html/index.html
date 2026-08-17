@@ -22,11 +22,6 @@
         padding: 0 1rem;
         line-height: 1.5;
       }
-      #viceme-danmaku {
-        min-height: 8rem;
-        border: 1px dashed #cbd5e1;
-        border-radius: 8px;
-      }
       code {
         background: #f1f5f9;
         padding: 0.125rem 0.375rem;
@@ -42,23 +37,11 @@
       release manifest, and mounts into the target.
     </p>
 
-    <div id="viceme-danmaku"></div>
+    <!-- prettier-ignore -->
     <script
-      defer
-      src="https://cdn.viceme.cn/sdk/v1/viceme.min.js"
-      integrity="sha384-REPLACE-WITH-RELEASE-SRI"
-      crossorigin="anonymous"
-      data-viceme-work="wrk_public_example"
-      data-viceme-region="cn"
-      data-viceme-features="danmaku"
-      data-viceme-target="#viceme-danmaku"
-      data-viceme-theme="auto"
-    ></script>
-    <!--
-      The `danmaku` feature is not part of the 0.x releases yet. This page is
-      the integration template: once a capability ships, replace the SRI hash
-      from the release manifest and it works unchanged.
-    -->
+      defer src="https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js" data-viceme-work="wrk_public_example" data-viceme-region="cn"
+      data-viceme-features="danmaku" data-viceme-target="body"
+      data-viceme-theme="auto"></script>
 
     <hr />
 
@@ -66,7 +49,7 @@
       Style 2 — browser-native ESM with explicit lifecycle control (paste into a
       <code>&lt;script type="module"&gt;</code>):
     </p>
-    <pre><code>import { createViceMe } from 'https://cdn.viceme.cn/sdk/1.0.0/index.js';
+    <pre><code>import { createViceMe } from 'https://s3.viceme.cn/viceme-sdk/1.0.0/index.js';
 
 const client = createViceMe({ workKey: 'wrk_public_example', region: 'cn' });
 await client.ready();

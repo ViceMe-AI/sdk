@@ -2,8 +2,8 @@
 /**
  * Public surface verification for `@viceme-ai/sdk`.
  *
- * Locks the published surface to the intended B0 shape:
- * - exports map contains exactly `.` and `./testing`;
+ * Locks the published surface to the intended public shape:
+ * - exports map contains core, testing, and released capabilities;
  * - declared dist artifacts exist (js + d.ts);
  * - no unreleased capability subpath sneaks in;
  * - runtime version constant matches package.json;
@@ -27,8 +27,8 @@ const pkg = JSON.parse(await readFile(join(sdkDir, 'package.json'), 'utf8'));
 
 const exportKeys = Object.keys(pkg.exports ?? {}).sort();
 check(
-  JSON.stringify(exportKeys) === JSON.stringify(['.', './testing']),
-  `exports map must be exactly [".", "./testing"], got ${JSON.stringify(exportKeys)}`,
+  JSON.stringify(exportKeys) === JSON.stringify(['.', './danmaku', './testing']),
+  `exports map must be exactly [".", "./danmaku", "./testing"], got ${JSON.stringify(exportKeys)}`,
 );
 
 for (const [subpath, def] of Object.entries(pkg.exports ?? {})) {
@@ -48,7 +48,7 @@ for (const [subpath, def] of Object.entries(pkg.exports ?? {})) {
   }
 }
 
-for (const unreleased of ['danmaku', 'payment']) {
+for (const unreleased of ['payment']) {
   check(
     !exportKeys.includes(`./${unreleased}`),
     `unreleased capability subpath "./${unreleased}" must not be exported`,
@@ -72,8 +72,8 @@ const manifest = JSON.parse(await readFile(join(distDir, 'manifest.json'), 'utf8
 check(manifest.version === pkg.version, 'manifest version must match package.json');
 check(manifest.apiMajor === 1, 'manifest apiMajor must be 1');
 check(
-  Object.keys(manifest.features ?? {}).length === 0,
-  'production manifest must not declare unreleased features',
+  JSON.stringify(manifest.features ?? {}) === JSON.stringify({ danmaku: 'danmaku.js' }),
+  'production manifest must declare only the released danmaku feature',
 );
 
 if (failures.length > 0) {

@@ -9,8 +9,9 @@ hosted checkout, …) through one shared headless core.
 - **React**: `@viceme-ai/react` will be published as a thin binding on top of
   the same core once the first real hooks/components exist. It is deliberately
   **not** created empty in this repository.
-- **Status**: `0.x` infrastructure phase. No capability subpath (`danmaku`,
-  `payment`) is exported until the matching public API contract is live.
+- **Status**: `0.x` infrastructure phase. Danmaku is the first public
+  capability; other subpaths are exported only after their public contracts
+  are live.
 
 ## Install
 
@@ -22,20 +23,16 @@ pnpm add @viceme-ai/sdk
 
 ### Static HTML (CDN auto-loader)
 
-```html
-<div id="viceme-danmaku"></div>
+```text
 <script
-  defer
-  src="https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js"
-  integrity="sha384-..."
-  crossorigin="anonymous"
-  data-viceme-work="wrk_public_xxx"
-  data-viceme-region="cn"
-  data-viceme-features="danmaku"
-  data-viceme-target="#viceme-danmaku"
-  data-viceme-theme="auto"
-></script>
+  defer src="https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js" data-viceme-work="wrk_public_xxx" data-viceme-region="cn"
+  data-viceme-features="danmaku" data-viceme-target="body"
+  data-viceme-theme="auto"></script>
 ```
+
+The loader mounts an isolated hosted overlay, derives the current page and
+10%-range scroll anchor automatically, and leaves the host application in
+control of its own content and navigation.
 
 ### Browser-native ESM
 
@@ -58,8 +55,12 @@ import { createViceMe } from '@viceme-ai/sdk';
 const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
 await client.ready();
 
-if (client.hasCapability('fixture')) {
-  // capability-specific subpath, e.g. '@viceme-ai/sdk/danmaku'
+if (client.hasCapability('danmaku')) {
+  const { mountDanmaku } = await import('@viceme-ai/sdk/danmaku');
+  const danmaku = await mountDanmaku(client, {
+    target: document.body,
+    theme: 'auto',
+  });
 }
 
 client.destroy();

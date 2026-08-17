@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add the `@viceme-ai/sdk/danmaku` hosted overlay capability and publish it in
+  the CDN release manifest.
+- Derive opaque page-position anchors from canonical URL and 10% scroll
+  buckets without requiring host-page event integration.
+
 ## [0.1.6] - 2026-08-15
 
 ### Fixes

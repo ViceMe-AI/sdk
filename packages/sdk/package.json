@@ -18,6 +18,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"
+    },
+    "./danmaku": {
+      "types": "./dist/danmaku/index.d.ts",
+      "import": "./dist/danmaku.js"
     }
   },
   "files": [
