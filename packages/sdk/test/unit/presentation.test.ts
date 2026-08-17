@@ -2,6 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { defaultAccessPresenter } from '../../src/core/presentation.ts';
+import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('default access presenter', () => {
   it('renders the follow target at the top with cancel and follow actions', async () => {
@@ -159,6 +160,31 @@ describe('default access presenter', () => {
     expect(action.textContent).toBe('正在打开…');
     finish();
     await expect(presented).resolves.toBe('acted');
+  });
+
+  it('explains when the login session has expired', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      perform: vi.fn(async () => {
+        throw new ViceMeError({
+          code: 'SESSION_EXPIRED',
+          message: 'The work session has expired.',
+        });
+      }),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
+
+    (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
+        '登录会话已过期，请重试。',
+      );
+    });
+    (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
   });
 
   it('offers phone verification login without leaving the access layer', async () => {

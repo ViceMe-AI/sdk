@@ -1,4 +1,5 @@
 import type { FollowTarget } from './capabilities.ts';
+import { isViceMeError } from './errors.ts';
 
 export type AccessInteractionAction = 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT';
 
@@ -67,6 +68,22 @@ function actionCopy(action: AccessInteractionAction): {
         description: '完成支付后即可继续使用此功能。',
         label: '重新打开',
       };
+  }
+}
+
+function actionErrorCopy(error: unknown): string {
+  if (!isViceMeError(error)) return '操作未完成，请重试。';
+  switch (error.code) {
+    case 'AUTH_CANCELLED':
+      return '微信授权已取消，请重试。';
+    case 'SESSION_EXPIRED':
+      return '登录会话已过期，请重试。';
+    case 'NETWORK_TIMEOUT':
+      return '网络连接超时，请重试。';
+    default:
+      return error.requestId
+        ? `操作未完成，请重试。请求 ID：${error.requestId}`
+        : '操作未完成，请重试。';
   }
 }
 
@@ -520,14 +537,14 @@ function ensureAccessLayerElement(): void {
             await result.completion;
           }
           close('acted');
-        } catch {
+        } catch (caught) {
           activeFrame?.cancel();
           activeFrame = null;
           activeFrameOrigin = null;
           panel.dataset.frame = 'false';
           frame.style.removeProperty('height');
           frame.removeAttribute('src');
-          error.textContent = '操作未完成，请重试。';
+          error.textContent = actionErrorCopy(caught);
           action.hidden = false;
           action.disabled = false;
           action.removeAttribute('aria-busy');
