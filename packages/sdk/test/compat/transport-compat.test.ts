@@ -32,10 +32,6 @@ function transport(timeoutMs?: number) {
   });
 }
 
-function publicApiTransport() {
-  return createFetchTransport({ apiBaseUrl: `${server.url}/v1` });
-}
-
 function expectCode(error: unknown): ViceMeError['code'] | undefined {
   return error instanceof ViceMeError ? error.code : undefined;
 }
@@ -131,7 +127,7 @@ describe('FetchTransport compatibility', () => {
 
 describe('SessionManager against the real transport', () => {
   it('tolerates unknown response fields and keeps required ones', async () => {
-    const session = new SessionManager({ workKey: 'wrk_test', transport: publicApiTransport() });
+    const session = new SessionManager({ workKey: 'wrk_test', transport: transport() });
     const snapshot = await session.establish();
     expect(snapshot.work.key).toBe('wrk_test');
     expect(snapshot.token).toBe('test-token');
@@ -146,7 +142,7 @@ describe('SessionManager against the real transport', () => {
     try {
       const session = new SessionManager({
         workKey: 'wrk_test',
-        transport: createFetchTransport({ apiBaseUrl: `${scoped.url}/v1` }),
+        transport: createFetchTransport({ apiBaseUrl: scoped.url }),
       });
       const p = session.establish();
       await expect(p).rejects.toSatisfy((e: unknown) => expectCode(e) === 'INTERNAL_ERROR');
@@ -156,7 +152,7 @@ describe('SessionManager against the real transport', () => {
   });
 
   it('re-establishes after invalidate against the live server', async () => {
-    const session = new SessionManager({ workKey: 'wrk_test', transport: publicApiTransport() });
+    const session = new SessionManager({ workKey: 'wrk_test', transport: transport() });
     await session.establish();
     session.invalidate();
     await session.establish();

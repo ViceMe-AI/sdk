@@ -231,7 +231,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       (
         await deps.session.request({
           method: 'POST',
-          path: '/public/v1/auth/exchange',
+          path: '/v1/public/v1/auth/exchange',
           body: { code, codeVerifier },
         })
       ).body,
@@ -309,7 +309,7 @@ export function createCapabilities(deps: CapabilityDeps): {
     const channel = randomVerifier();
     const response = await deps.session.request({
       method: 'POST',
-      path: '/public/v1/auth/wechat/authorize',
+      path: '/v1/public/v1/auth/wechat/authorize',
       body: {
         codeChallenge: await codeChallenge(verifier),
         channel,
@@ -337,7 +337,7 @@ export function createCapabilities(deps: CapabilityDeps): {
         (
           await deps.session.request({
             method: 'POST',
-            path: '/public/v1/auth/phone/verification-codes',
+            path: '/v1/public/v1/auth/phone/verification-codes',
             body: { phone },
           })
         ).body,
@@ -357,7 +357,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       await deps.ready();
       const response = await deps.session.request({
         method: 'POST',
-        path: '/public/v1/auth/phone/login',
+        path: '/v1/public/v1/auth/phone/login',
         body: { phone, code },
       });
       const exchange = objectBody(response.body);
@@ -397,19 +397,19 @@ export function createCapabilities(deps: CapabilityDeps): {
     async getState() {
       await deps.ready();
       return parseFollowState(
-        (await deps.session.request({ method: 'GET', path: '/public/v1/follow' })).body,
+        (await deps.session.request({ method: 'GET', path: '/v1/public/v1/follow' })).body,
       );
     },
     async follow() {
       await deps.ready();
       return parseFollowState(
-        (await deps.session.request({ method: 'PUT', path: '/public/v1/follow' })).body,
+        (await deps.session.request({ method: 'PUT', path: '/v1/public/v1/follow' })).body,
       );
     },
     async unfollow() {
       await deps.ready();
       return parseFollowState(
-        (await deps.session.request({ method: 'DELETE', path: '/public/v1/follow' })).body,
+        (await deps.session.request({ method: 'DELETE', path: '/v1/public/v1/follow' })).body,
       );
     },
   };
@@ -420,7 +420,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       (
         await deps.session.request({
           method: 'POST',
-          path: '/public/v1/access/check',
+          path: '/v1/public/v1/access/check',
           body: { featureKeys },
         })
       ).body,
@@ -444,7 +444,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       (
         await deps.session.request({
           method: 'POST',
-          path: '/public/v1/checkout/sessions',
+          path: '/v1/public/v1/checkout/sessions',
           body,
         })
       ).body,

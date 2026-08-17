@@ -19,13 +19,13 @@ describe('FetchTransport', () => {
       fakeResponse({ status: 200, body: { ok: true } }),
     );
     const transport = createFetchTransport({
-      apiBaseUrl: 'https://wx-dev.viceme.cn/api/v1/',
+      apiBaseUrl: 'https://api.viceme.cn/',
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
 
     const res = await transport.request({
       method: 'POST',
-      path: '/public/v1/work-sessions',
+      path: '/v1/public/v1/work-sessions',
       body: { workKey: 'wrk_test' },
     });
 
@@ -33,7 +33,7 @@ describe('FetchTransport', () => {
     const call = fetchImpl.mock.calls[0]!;
     const url = call[0] as string;
     const init = call[1] as RequestInit;
-    expect(url).toBe('https://wx-dev.viceme.cn/api/v1/public/v1/work-sessions');
+    expect(url).toBe('https://api.viceme.cn/v1/public/v1/work-sessions');
     expect(init.credentials).toBe('omit');
     expect(init.mode).toBe('cors');
     expect((init.headers as Record<string, string>)['content-type']).toBe('application/json');
