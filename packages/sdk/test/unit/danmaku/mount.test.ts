@@ -62,6 +62,30 @@ describe('danmaku mount', () => {
     expect(document.querySelector('[data-viceme-danmaku="mounted"]')).toBeNull();
   });
 
+  it('waits for hosted frames before posting anchor updates', async () => {
+    const postMessage = vi.fn();
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
+      postMessage,
+    } as unknown as Window);
+    const handle = await mount(client(), { target: document.body, theme: 'auto' });
+    const frames = Array.from(
+      document
+        .querySelector<HTMLElement>('[data-viceme-danmaku="mounted"]')!
+        .shadowRoot!.querySelectorAll<HTMLIFrameElement>('iframe'),
+    );
+
+    frames[2]?.dispatchEvent(new Event('load'));
+    expect(postMessage).not.toHaveBeenCalled();
+
+    frames[0]?.dispatchEvent(new Event('load'));
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'anchor-change' }),
+      'https://viceme.cn',
+    );
+
+    handle.destroy();
+  });
+
   it('fails closed when the work does not enable danmaku', async () => {
     await expect(mount(client([]), { target: document.body, theme: 'auto' })).rejects.toMatchObject(
       {
