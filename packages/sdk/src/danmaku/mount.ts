@@ -51,6 +51,7 @@ export async function mount(
   let currentAnchor = readDanmakuPageAnchor(windowObject, documentObject);
   let destroyed = false;
   let anchorTimer: number | undefined;
+  const loadedFrames = new WeakSet<HTMLIFrameElement>();
 
   const portal = documentObject.createElement('div');
   portal.dataset.vicemeDanmaku = 'mounted';
@@ -141,6 +142,7 @@ export async function mount(
   options.target.appendChild(portal);
 
   const postAnchor = (frame: HTMLIFrameElement): void => {
+    if (!loadedFrames.has(frame)) return;
     frame.contentWindow?.postMessage(
       {
         source: 'viceme-danmaku',
@@ -171,7 +173,10 @@ export async function mount(
   };
 
   const frameLoaded = (event: Event): void => {
-    postAnchor(event.currentTarget as HTMLIFrameElement);
+    const frame = event.currentTarget as HTMLIFrameElement;
+    if (frame.getAttribute('src') === 'about:blank') return;
+    loadedFrames.add(frame);
+    postAnchor(frame);
   };
   stage.addEventListener('load', frameLoaded);
   controls.addEventListener('load', frameLoaded);
