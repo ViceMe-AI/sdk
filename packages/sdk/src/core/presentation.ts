@@ -175,7 +175,11 @@ function ensureAccessLayerElement(): void {
           }
           [data-viceme='avatar'][hidden], [data-viceme='avatar-fallback'][hidden] { display: none; }
           [data-viceme='profile-name'] { margin: 0; font-size: 1.375rem; font-weight: 700; }
-          [data-viceme='profile-description'] { margin: 0.25rem 0 0; color: #71717a; }
+          [data-viceme='profile-description'] {
+            margin: 0.25rem 0 0;
+            overflow-wrap: anywhere;
+            color: #71717a;
+          }
           [data-viceme='profile-copy'] { min-width: 0; }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='header'],
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='description'] { display: none; }
@@ -200,6 +204,14 @@ function ensureAccessLayerElement(): void {
           }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-name'] {
             font-size: 1.125rem;
+          }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='actions'] {
+            justify-content: stretch;
+          }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='secondary-action'],
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='action'] {
+            width: auto;
+            flex: 1 1 0;
           }
           [data-viceme='actions'] {
             display: flex;
