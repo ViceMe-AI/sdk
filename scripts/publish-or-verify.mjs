@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Publish or verify — convergent npm publication for @viceme-ai/sdk.
+ * Publish or verify — convergent npm publication for the approved SDK channel.
  *
  * Ported from ViceMe-AI/cli npm/scripts/publish-or-verify.mjs (the reviewed
  * OIDC baseline), adapted for this package:
  *   - package lives at packages/sdk;
- *   - every reviewed release is a stable semantic version published under
- *     `latest`, matching the CLI release channel;
+ *   - formal releases are @viceme-ai/sdk stable versions under `latest`;
+ *   - POC releases are @viceme-ai/sdk-poc x.y.z-poc.N under `poc`;
  *
  * Flow (Trusted Publisher OIDC only, matching ViceMe-AI/cli):
  *   1. npm pack --dry-run locally -> integrity for the exact package id;
@@ -30,15 +30,21 @@ const packageDocument = JSON.parse(
   await readFile(new URL('../packages/sdk/package.json', import.meta.url), 'utf8'),
 );
 const STABLE_SEMVER = /^\d+\.\d+\.\d+$/;
-if (!STABLE_SEMVER.test(packageDocument.version)) {
-  throw new Error('refusing to publish a non-stable semver version');
-}
+const POC_SEMVER = /^\d+\.\d+\.\d+-poc\.\d+$/;
 const packageID = `${packageDocument.name}@${packageDocument.version}`;
-// Single authoritative source: every reviewed SDK release uses the same
-// stable npm channel as the CLI.
 const distTag = process.env.DIST_TAG ?? 'latest';
-if (distTag !== 'latest') {
-  throw new Error(`refusing to publish the SDK under non-stable dist-tag '${distTag}'`);
+const isStable =
+  packageDocument.name === '@viceme-ai/sdk' &&
+  STABLE_SEMVER.test(packageDocument.version) &&
+  distTag === 'latest';
+const isPoc =
+  packageDocument.name === '@viceme-ai/sdk-poc' &&
+  POC_SEMVER.test(packageDocument.version) &&
+  distTag === 'poc';
+if (!isStable && !isPoc) {
+  throw new Error(
+    `refusing unapproved package/channel combination ${packageID} under '${distTag}'`,
+  );
 }
 
 function run(command, arguments_, inherit = true) {
@@ -84,7 +90,7 @@ async function readPublishedIntegrity() {
 }
 
 async function readDistTags() {
-  const result = viewJson(`@viceme-ai/sdk`, 'dist-tags');
+  const result = viewJson(packageDocument.name, 'dist-tags');
   if (result.status !== 0) {
     throw new Error(`could not read dist-tags: ${result.stdout}\n${result.stderr}`);
   }

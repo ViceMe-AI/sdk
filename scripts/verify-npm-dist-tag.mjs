@@ -35,8 +35,16 @@ if (!args.version || !args.tag) {
   process.exit(2);
 }
 
-if (!/^\d+\.\d+\.\d+$/.test(args.version) || args.tag !== 'latest') {
-  console.error('npm dist-tag read-back requires a stable version published under latest');
+const stable =
+  args.package === '@viceme-ai/sdk' &&
+  /^\d+\.\d+\.\d+$/.test(args.version) &&
+  args.tag === 'latest';
+const poc =
+  args.package === '@viceme-ai/sdk-poc' &&
+  /^\d+\.\d+\.\d+-poc\.\d+$/.test(args.version) &&
+  args.tag === 'poc';
+if (!stable && !poc) {
+  console.error('npm dist-tag read-back received an unapproved package/version/tag combination');
   process.exit(2);
 }
 

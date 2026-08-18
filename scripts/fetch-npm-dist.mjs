@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Fetch the EXACT published artifacts of @viceme-ai/sdk@<version> from npm.
+ * Fetch the EXACT published artifacts of an approved SDK package from npm.
  *
  * The published tarball is the authoritative byte source for every
  * downstream delivery (GitHub release assets, CDN/S3 objects): all of them
  * stay byte-identical to what npm serves (§13.3).
  *
  * Usage:
- *   node scripts/fetch-npm-dist.mjs --version 1.2.3 --out verified-dist
+ *   node scripts/fetch-npm-dist.mjs --package @viceme-ai/sdk --version 1.2.3 --out verified-dist
  *
  * Verifies the extracted dist against its own manifest before exiting.
  */
@@ -21,9 +21,10 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
-  const args = {};
+  const args = { package: '@viceme-ai/sdk' };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === '--version') args.version = argv[++i];
+    if (argv[i] === '--package') args.package = argv[++i];
+    else if (argv[i] === '--version') args.version = argv[++i];
     else if (argv[i] === '--out') args.out = argv[++i];
   }
   return args;
@@ -31,8 +32,12 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 if (!args.version || !args.out) {
-  console.error('usage: fetch-npm-dist.mjs --version <v> --out <dir>');
+  console.error('usage: fetch-npm-dist.mjs --package <pkg> --version <v> --out <dir>');
   process.exit(2);
+}
+if (!['@viceme-ai/sdk', '@viceme-ai/sdk-poc'].includes(args.package)) {
+  console.error(`fetch-npm-dist: unsupported package ${args.package}`);
+  process.exit(1);
 }
 if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(args.version)) {
   console.error(`fetch-npm-dist: invalid version ${args.version}`);
@@ -41,7 +46,7 @@ if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(args.version)) {
 
 const tmp = mkdtempSync(join(tmpdir(), 'viceme-fetch-dist-'));
 try {
-  execFileSync('npm', ['pack', `@viceme-ai/sdk@${args.version}`, '--pack-destination', tmp], {
+  execFileSync('npm', ['pack', `${args.package}@${args.version}`, '--pack-destination', tmp], {
     cwd: tmp,
     stdio: 'inherit',
   });
@@ -60,7 +65,7 @@ try {
   execFileSync(process.execPath, [join(here, 'verify-cdn.mjs'), '--local', args.out], {
     stdio: 'inherit',
   });
-  console.log(`fetched @viceme-ai/sdk@${args.version} dist into ${args.out}`);
+  console.log(`fetched ${args.package}@${args.version} dist into ${args.out}`);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

@@ -19,7 +19,8 @@
  * release-assets.yml workflow — is the convergent, re-runnable authority.
  *
  * Usage:
- *   node scripts/attach-release-assets.mjs --version 1.2.3 [--dry-run] [--repo owner/name]
+ *   node scripts/attach-release-assets.mjs --version 1.2.3 [--package @viceme-ai/sdk]
+ *     [--tag @viceme-ai/sdk@1.2.3] [--prerelease] [--dry-run] [--repo owner/name]
  *
  * --dry-run stops after npm pack + digest verification + asset staging
  * (no GitHub API calls) so the drill is rehearsal-safe.
@@ -35,9 +36,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 
 function parseArgs(argv) {
-  const args = { repo: process.env.GITHUB_REPOSITORY };
+  const args = { package: '@viceme-ai/sdk', repo: process.env.GITHUB_REPOSITORY };
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === '--version') args.version = argv[++i];
+    if (argv[i] === '--package') args.package = argv[++i];
+    else if (argv[i] === '--version') args.version = argv[++i];
+    else if (argv[i] === '--tag') args.tag = argv[++i];
+    else if (argv[i] === '--prerelease') args.prerelease = true;
     else if (argv[i] === '--dry-run') args.dryRun = true;
     else if (argv[i] === '--repo') args.repo = argv[++i];
   }
@@ -46,11 +50,17 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 if (!args.version) {
-  console.error('usage: attach-release-assets.mjs --version <v> [--dry-run] [--repo owner/name]');
+  console.error(
+    'usage: attach-release-assets.mjs --version <v> [--package <pkg>] [--tag <tag>] [--prerelease] [--dry-run] [--repo owner/name]',
+  );
+  process.exit(2);
+}
+if (!['@viceme-ai/sdk', '@viceme-ai/sdk-poc'].includes(args.package)) {
+  console.error(`release assets: unsupported package ${args.package}`);
   process.exit(2);
 }
 
-const tag = `@viceme-ai/sdk@${args.version}`;
+const tag = args.tag ?? `${args.package}@${args.version}`;
 const tmp = mkdtempSync(join(tmpdir(), 'viceme-release-assets-'));
 
 function gh(...cliArgs) {
@@ -63,7 +73,15 @@ try {
   const distDir = join(tmp, 'verified-dist');
   execFileSync(
     process.execPath,
-    [join(root, 'scripts', 'fetch-npm-dist.mjs'), '--version', args.version, '--out', distDir],
+    [
+      join(root, 'scripts', 'fetch-npm-dist.mjs'),
+      '--package',
+      args.package,
+      '--version',
+      args.version,
+      '--out',
+      distDir,
+    ],
     { stdio: 'inherit' },
   );
 
@@ -125,7 +143,7 @@ try {
       gh('release', 'upload', tag, ...repoArgs, ...toUpload.map((f) => join(assetsDir, f)));
     }
   } else {
-    gh(
+    const createArgs = [
       'release',
       'create',
       tag,
@@ -134,9 +152,10 @@ try {
       '--title',
       tag,
       '--notes',
-      `Release artifacts for ${args.version}, sourced from the published npm tarball. CDN promotion: run the Promote CDN workflow against this tag.`,
-      ...staged.map((f) => join(assetsDir, f)),
-    );
+      `Release artifacts for ${args.package}@${args.version}, sourced from the published npm tarball.`,
+    ];
+    if (args.prerelease) createArgs.push('--prerelease');
+    gh(...createArgs, ...staged.map((f) => join(assetsDir, f)));
   }
   console.log(`release assets attached for ${tag}`);
 } finally {

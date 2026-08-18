@@ -166,6 +166,30 @@ describe('verify-npm-dist-tag.mjs', () => {
     expect(stdout).toContain('latest -> 0.2.0');
   });
 
+  it('passes only for the isolated POC package and tag', async () => {
+    const { stdout } = await runJson(
+      '{"poc":"0.2.0-poc.3"}',
+      '--package',
+      '@viceme-ai/sdk-poc',
+      '--version',
+      '0.2.0-poc.3',
+      '--tag',
+      'poc',
+    );
+    expect(stdout).toContain('poc -> 0.2.0-poc.3');
+    await expect(
+      runJson(
+        '{"poc":"0.2.0-poc.3"}',
+        '--package',
+        '@viceme-ai/sdk',
+        '--version',
+        '0.2.0-poc.3',
+        '--tag',
+        'poc',
+      ),
+    ).rejects.toMatchObject({ code: 2 });
+  });
+
   it('fails when the tag is unset or points elsewhere', async () => {
     await expect(
       runJson('{"latest":"0.1.0"}', '--version', '0.2.0', '--tag', 'latest'),

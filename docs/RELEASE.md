@@ -148,3 +148,37 @@ Manifest digests come from `scripts/build-manifest.mjs` during the release
 build; the npm tarball, GitHub assets, and both S3 regions all originate
 from that one build, and every region upload includes `manifest.json`
 itself as a first-class immutable object.
+
+## POC release channel
+
+The POC branch has a separate manual workflow, **POC SDK manual release**
+(`poc-release.yml`). Dispatch it from the exact `poc` branch with an immutable
+version such as `0.2.0-poc.1`.
+
+The source tree remains `@viceme-ai/sdk`. Inside the ephemeral release runner,
+`prepare-poc-package.mjs` changes only the package being built to
+`@viceme-ai/sdk-poc@<version>`. It is published with npm Trusted Publisher OIDC
+under the `poc` dist-tag, then the exact npm bytes are attached to the POC
+GitHub prerelease and written to:
+
+```text
+https://viceme-shop-storage-poc.preview.tencent-zeabur.cn/start/poc/sdk/releases/v<version>/...
+```
+
+Both SDK regions are compiled against the POC Gateway
+`https://viceme-shop-web-poc.preview.tencent-zeabur.cn/api`; neither build can
+fall back to the formal API. The workflow never writes the formal npm package,
+`latest` tag, stable release tags, or formal CN/GLOBAL S3 buckets.
+
+One-time owner setup:
+
+- Bootstrap the public `@viceme-ai/sdk-poc` package once, then configure npm
+  Trusted Publisher for repository `ViceMe-AI/sdk` and workflow
+  `poc-release.yml` with no npm environment restriction.
+- Create GitHub environment `poc` with
+  `VICEME_POC_S3_ENDPOINT`, `VICEME_POC_S3_BUCKET` (`start`),
+  `VICEME_POC_S3_ACCESS_KEY_ID`, and `VICEME_POC_S3_SECRET_ACCESS_KEY`.
+- Grant those credentials write access only to `start/poc/sdk/releases/*`.
+
+Shop POC consumers must pin the exact prerelease version. Do not depend on the
+mutable `poc` dist-tag in a deployment lockfile.

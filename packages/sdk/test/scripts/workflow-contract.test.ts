@@ -83,6 +83,7 @@ describe('workflow contracts', () => {
       'release-assets.yml',
       'quality-gate.yml',
       'feishu.yml',
+      'poc-release.yml',
     ]) {
       const text = workflow(name);
       const floating = [...text.matchAll(/uses:\s*(\S+)@v\d+(?:\.\d+)*\s*$/gm)].map(
@@ -129,5 +130,21 @@ describe('workflow contracts', () => {
     expect(npmPublish).not.toContain('NPM_TOKEN');
     expect(npmPublish).not.toContain('NODE_AUTH_TOKEN');
     expect(npmPublish).not.toContain('registry-url:');
+  });
+
+  it('keeps the manual POC release isolated from formal npm and S3 assets', () => {
+    const publication = workflow('poc-release.yml');
+    expect(publication).toContain('workflow_dispatch:');
+    expect(publication).toContain('test "${GITHUB_REF}" = "refs/heads/poc"');
+    expect(publication).toContain("POC_PACKAGE: '@viceme-ai/sdk-poc'");
+    expect(publication).toContain('DIST_TAG: poc');
+    expect(publication).toContain('node scripts/prepare-poc-package.mjs --version "$VERSION"');
+    expect(publication).toContain('id-token: write');
+    expect(publication).not.toContain('NPM_TOKEN');
+    expect(publication).not.toContain('NODE_AUTH_TOKEN');
+    expect(publication).toContain('--prefix "poc/sdk/releases/v${VERSION}/"');
+    expect(publication).toContain('EXPECT_BUCKET: start');
+    expect(publication).not.toContain('s3.viceme.cn/viceme-sdk');
+    expect(publication).not.toContain('s3.viceme.ai/viceme-sdk');
   });
 });
