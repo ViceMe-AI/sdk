@@ -31,6 +31,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createDeterministicZip, zipContentsEqual } from './lib/release-zip.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -42,6 +43,7 @@ function parseArgs(argv) {
     else if (argv[i] === '--version') args.version = argv[++i];
     else if (argv[i] === '--tag') args.tag = argv[++i];
     else if (argv[i] === '--prerelease') args.prerelease = true;
+    else if (argv[i] === '--semantic-zip-recovery') args.semanticZipRecovery = true;
     else if (argv[i] === '--dry-run') args.dryRun = true;
     else if (argv[i] === '--repo') args.repo = argv[++i];
   }
@@ -88,9 +90,8 @@ try {
   // 3. Stage assets: dist zip + the manifest itself.
   const assetsDir = join(tmp, 'assets');
   mkdirSync(assetsDir, { recursive: true });
-  execFileSync('zip', ['-qr', join(assetsDir, `dist-${args.version}.zip`), '.'], {
-    cwd: distDir,
-  });
+  const zipName = `dist-${args.version}.zip`;
+  createDeterministicZip(distDir, join(assetsDir, zipName));
   execFileSync('cp', [join(distDir, 'manifest.json'), join(assetsDir, 'manifest.json')]);
 
   if (args.dryRun) {
@@ -136,8 +137,16 @@ try {
         toUpload.push(file);
         continue;
       }
-      execFileSync('cmp', [join(assetsDir, file), existing]);
-      console.log(`asset ${file} already attached and byte-identical`);
+      if (file === zipName && args.semanticZipRecovery) {
+        if (!zipContentsEqual(existing, distDir)) {
+          console.error(`immutable violation: existing ${file} has different release contents`);
+          process.exit(1);
+        }
+        console.log(`asset ${file} already attached with identical release contents`);
+      } else {
+        execFileSync('cmp', [join(assetsDir, file), existing]);
+        console.log(`asset ${file} already attached and byte-identical`);
+      }
     }
     if (toUpload.length > 0) {
       gh('release', 'upload', tag, ...repoArgs, ...toUpload.map((f) => join(assetsDir, f)));

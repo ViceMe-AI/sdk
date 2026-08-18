@@ -12,7 +12,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --filter './packages/*' typecheck",
-    "test": "pnpm -r --filter './packages/*' test",
+    "test": "node --test scripts/lib/*.test.mjs && pnpm -r --filter './packages/*' test",
     "test:browser": "pnpm --filter '@viceme-ai/sdk' test:browser",
     "pack:check": "pnpm --filter '@viceme-ai/sdk' pack:check",
     "contracts:generate": "node scripts/generate-contracts.mjs",
