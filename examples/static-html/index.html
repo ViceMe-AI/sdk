@@ -45,7 +45,7 @@
     <div id="viceme-danmaku"></div>
     <script
       defer
-      src="https://cdn.viceme.cn/sdk/v1/viceme.min.js"
+      src="https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js"
       integrity="sha384-REPLACE-WITH-RELEASE-SRI"
       crossorigin="anonymous"
       data-viceme-work="wrk_public_example"
@@ -66,7 +66,7 @@
       Style 2 — browser-native ESM with explicit lifecycle control (paste into a
       <code>&lt;script type="module"&gt;</code>):
     </p>
-    <pre><code>import { createViceMe } from 'https://cdn.viceme.cn/sdk/1.0.0/index.js';
+    <pre><code>import { createViceMe } from 'https://s3.viceme.cn/viceme-sdk/1.0.0/index.js';
 
 const client = createViceMe({ workKey: 'wrk_public_example', region: 'cn' });
 await client.ready();

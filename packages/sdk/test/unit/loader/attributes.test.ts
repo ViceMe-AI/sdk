@@ -60,6 +60,18 @@ describe('parseLoaderAttributes', () => {
     expect(() => parseLoaderAttributes(script(noTarget))).toThrow();
   });
 
+  it('rejects an unparseable target selector as CONFIG_INVALID', () => {
+    // `##bad` is rejected by both happy-dom and real browsers (`#host[` is
+    // only rejected by real browsers — covered by the Playwright matrix).
+    let error: unknown;
+    try {
+      parseLoaderAttributes(script({ ...VALID, 'data-viceme-target': '##bad' }));
+    } catch (cause) {
+      error = cause;
+    }
+    expect(error).toMatchObject({ code: 'CONFIG_INVALID', retryable: false });
+  });
+
   it('validates theme values', () => {
     expect(() =>
       parseLoaderAttributes(script({ ...VALID, 'data-viceme-theme': 'neon' })),

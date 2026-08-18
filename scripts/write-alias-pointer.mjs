@@ -22,7 +22,7 @@
  * Usage:
  *   node scripts/write-alias-pointer.mjs --version 1.2.3 \
  *     --regions cn,global \
- *     --hosts cn=https://cdn.viceme.cn,global=https://cdn.viceme.ai \
+ *     --hosts cn=https://s3.viceme.cn,global=https://s3.viceme.ai \
  *     --upload-command "<cmd invoked as: cmd <region> <local-file> <object-key>>" \
  *     [--mode promote|rollback] [--from-current 1.2.2] \
  *     [--purge-command "<cmd invoked as: cmd <region> <object-key>>"] \

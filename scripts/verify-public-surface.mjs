@@ -13,6 +13,7 @@ import { access, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readApiMajor } from './lib/version-source.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sdkDir = join(here, '..', 'packages', 'sdk');
@@ -70,7 +71,10 @@ check(
 
 const manifest = JSON.parse(await readFile(join(distDir, 'manifest.json'), 'utf8'));
 check(manifest.version === pkg.version, 'manifest version must match package.json');
-check(manifest.apiMajor === 1, 'manifest apiMajor must be 1');
+check(
+  manifest.apiMajor === readApiMajor(sdkDir),
+  'manifest apiMajor must match src/version.ts API_MAJOR',
+);
 check(
   Object.keys(manifest.features ?? {}).length === 0,
   'production manifest must not declare unreleased features',

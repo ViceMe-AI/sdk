@@ -3,12 +3,12 @@
  * Public CDN read-back verification (§14.2 step 8, §15.2).
  *
  * Modes:
- *   node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/1.2.3/
+ *   node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/1.2.3/
  *       Fetch the release manifest over the public network and verify every
  *       artifact: sha256, sri (sha384), bytes, content-type, and immutable
  *       cache headers for exact versions.
  *
- *   node scripts/verify-cdn.mjs --base https://cdn.viceme.cn/sdk/v1/ --expect-version 1.2.3
+ *   node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/v1/ --expect-version 1.2.3
  *       Alias mode: the stable-major manifest must resolve to the exact
  *       expected version, and alias artifacts must be byte-identical.
  *
