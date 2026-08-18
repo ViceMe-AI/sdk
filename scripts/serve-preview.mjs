@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { previewCacheControl } from './lib/preview-cache-policy.mjs';
 
 const rootDir = fileURLToPath(new URL('..', import.meta.url));
 const distDir = join(rootDir, 'packages', 'sdk', 'dist');
@@ -18,10 +19,16 @@ const contentTypes = new Map([
   ['.map', 'application/json; charset=utf-8'],
 ]);
 
-function send(response, status, body, contentType = 'text/plain; charset=utf-8') {
+function send(
+  response,
+  status,
+  body,
+  contentType = 'text/plain; charset=utf-8',
+  cacheControl = 'no-store',
+) {
   response.writeHead(status, {
     'access-control-allow-origin': '*',
-    'cache-control': 'no-store',
+    'cache-control': cacheControl,
     'content-type': contentType,
     'cross-origin-resource-policy': 'cross-origin',
   });
@@ -67,6 +74,7 @@ createServer(async (request, response) => {
       200,
       request.method === 'HEAD' ? undefined : body,
       contentTypes.get(extname(fileName)) ?? 'application/octet-stream',
+      previewCacheControl(url.pathname, version),
     );
   } catch {
     send(response, 404, 'not found');
