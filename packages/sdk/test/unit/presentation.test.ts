@@ -190,7 +190,7 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('dismissed');
   });
 
-  it('explains that WeChat login requires HTTPS when Web Crypto is unavailable', async () => {
+  it('reports invalid WeChat login configuration', async () => {
     const presented = defaultAccessPresenter({
       featureKey: 'auth',
       reason: 'AUTH_REQUIRED',
@@ -198,7 +198,7 @@ describe('default access presenter', () => {
       perform: vi.fn(async () => {
         throw new ViceMeError({
           code: 'CONFIG_INVALID',
-          message: 'WeChat sign-in requires an HTTPS page or localhost.',
+          message: 'Invalid WeChat sign-in configuration.',
         });
       }),
     });
@@ -208,37 +208,10 @@ describe('default access presenter', () => {
     (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
-        '微信登录需要通过 HTTPS 页面打开，请检查当前访问地址。',
+        '微信登录配置无效，请稍后重试。',
       );
     });
     (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
-  });
-
-  it('offers phone verification login without leaving the access layer', async () => {
-    const sendCode = vi.fn(async () => ({ expiresInSeconds: 300, retryAfterSeconds: 60 }));
-    const signIn = vi.fn(async () => undefined);
-    const presented = defaultAccessPresenter({
-      featureKey: 'auth',
-      reason: 'AUTH_REQUIRED',
-      action: 'SIGN_IN',
-      phoneAuth: { sendCode, signIn },
-      perform: vi.fn(async () => ({ type: 'completed' as const })),
-    });
-    const shadow = document.querySelector('viceme-access-layer')!.shadowRoot!;
-
-    (shadow.querySelector('[data-viceme-phone-action]') as HTMLButtonElement).click();
-    const phone = shadow.querySelector('[data-viceme-phone]') as HTMLInputElement;
-    const code = shadow.querySelector('[data-viceme-code]') as HTMLInputElement;
-    phone.value = '13800138000';
-    code.value = '123456';
-    (shadow.querySelector("[data-viceme='send-code']") as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(sendCode).toHaveBeenCalledWith('13800138000'));
-    (shadow.querySelector("[data-viceme='phone-form']") as HTMLFormElement).dispatchEvent(
-      new Event('submit', { cancelable: true }),
-    );
-
-    await expect(presented).resolves.toBe('acted');
-    expect(signIn).toHaveBeenCalledWith('13800138000', '123456');
   });
 });

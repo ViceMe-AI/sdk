@@ -98,26 +98,6 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
-      if (request.path === '/v1/public/v1/auth/phone/verification-codes') {
-        return {
-          status: 200,
-          body: { expiresInSeconds: 300, retryAfterSeconds: 60 },
-        };
-      }
-      if (request.path === '/v1/public/v1/auth/phone/login') {
-        return {
-          status: 200,
-          body: {
-            token: 'authenticated-work-token',
-            expiresAt: Date.now() + 60_000,
-            user: {
-              subject: 'authenticated-user-subject',
-              nickname: '138****8000',
-              avatarUrl: null,
-            },
-          },
-        };
-      }
       if (request.path === '/v1/public/v1/auth/exchange') {
         return {
           status: 200,
@@ -283,6 +263,7 @@ describe('creator access capabilities', () => {
               workKey: 'wrk_test',
               channel,
               code: 'a'.repeat(32),
+              codeVerifier: 'b'.repeat(43),
             },
           }),
         );
@@ -301,37 +282,6 @@ describe('creator access capabilities', () => {
       authenticated: true,
       user: { nickname: 'Visitor' },
     });
-  });
-
-  it('supports phone verification login inside the access layer', async () => {
-    const transport = capabilityTransport();
-    const presenter = vi.fn(async (interaction: AccessInteraction) => {
-      await expect(interaction.phoneAuth?.sendCode('13800138000')).resolves.toEqual({
-        expiresInSeconds: 300,
-        retryAfterSeconds: 60,
-      });
-      await interaction.phoneAuth?.signIn('13800138000', '123456');
-      return 'acted' as const;
-    });
-    const client = createTestViceMe({
-      workKey: 'wrk_test',
-      region: 'cn',
-      transport,
-      presenter,
-    });
-
-    await expect(client.auth.signIn()).resolves.toMatchObject({
-      authenticated: true,
-      user: { nickname: '138****8000' },
-    });
-    expect(
-      transport.requests.find(
-        (request) => request.path === '/v1/public/v1/auth/phone/verification-codes',
-      )?.body,
-    ).toEqual({ phone: '13800138000' });
-    expect(
-      transport.requests.find((request) => request.path === '/v1/public/v1/auth/phone/login')?.body,
-    ).toEqual({ phone: '13800138000', code: '123456' });
   });
 
   it('sends an explicit H5 client type when the browser reports mobile emulation', async () => {
@@ -366,15 +316,17 @@ describe('creator access capabilities', () => {
     }
   });
 
-  it('rejects WeChat sign-in clearly when Web Crypto is unavailable', async () => {
+  it('does not require PKCE Web Crypto from the embedding origin', async () => {
     const originalCrypto = globalThis.crypto;
     vi.stubGlobal('crypto', {
       getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto),
     });
     const transport = capabilityTransport();
     const presenter = vi.fn(async (interaction: AccessInteraction) => {
-      await interaction.perform();
-      return 'acted' as const;
+      const result = await interaction.perform();
+      if (result.type !== 'frame') throw new Error('expected auth frame');
+      result.cancel();
+      return 'dismissed' as const;
     });
     const client = createTestViceMe({
       workKey: 'wrk_test',
@@ -384,15 +336,12 @@ describe('creator access capabilities', () => {
     });
 
     try {
-      await expect(client.auth.signIn()).rejects.toMatchObject({
-        code: 'CONFIG_INVALID',
-        message: 'WeChat sign-in requires an HTTPS page or localhost.',
-      });
-      expect(
-        transport.requests.some(
-          (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
-        ),
-      ).toBe(false);
+      await expect(client.auth.signIn()).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
+      const authorize = transport.requests.find(
+        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+      );
+      expect(authorize?.body).toMatchObject({ locale: 'zh-CN' });
+      expect(authorize?.body).not.toHaveProperty('codeChallenge');
     } finally {
       vi.unstubAllGlobals();
     }

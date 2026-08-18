@@ -192,16 +192,10 @@ function base64Url(bytes: Uint8Array): string {
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
-async function codeChallenge(verifier: string): Promise<string> {
-  if (!globalThis.crypto?.subtle) {
-    throw new ViceMeError({
-      code: 'CONFIG_INVALID',
-      message: 'WeChat sign-in requires an HTTPS page or localhost.',
-      retryable: false,
-    });
-  }
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  return base64Url(new Uint8Array(digest));
+function resolveLocale(): 'zh-CN' | 'en-US' {
+  return typeof document !== 'undefined' && document.documentElement.lang.toLowerCase() === 'en-us'
+    ? 'en-US'
+    : 'zh-CN';
 }
 
 function resolveWechatClientType(): 'h5' | 'pc' {
@@ -312,15 +306,14 @@ export function createCapabilities(deps: CapabilityDeps): {
 
   const startSignIn = async (): Promise<AccessActionResult> => {
     await deps.ready();
-    const verifier = randomVerifier();
     const channel = randomVerifier();
     const response = await deps.session.request({
       method: 'POST',
       path: '/v1/public/v1/auth/wechat/authorize',
       body: {
-        codeChallenge: await codeChallenge(verifier),
         channel,
         clientType: resolveWechatClientType(),
+        locale: resolveLocale(),
       },
     });
     const authorize = objectBody(response.body);
@@ -331,49 +324,12 @@ export function createCapabilities(deps: CapabilityDeps): {
       channel,
       'auth',
       async (data) => {
-        if (typeof data.code !== 'string') throw malformedResponse();
-        await authenticate(data.code, verifier);
+        if (typeof data.code !== 'string' || typeof data.codeVerifier !== 'string') {
+          throw malformedResponse();
+        }
+        await authenticate(data.code, data.codeVerifier);
       },
     );
-  };
-
-  const phoneAuth = {
-    async sendCode(phone: string) {
-      await deps.ready();
-      const response = objectBody(
-        (
-          await deps.session.request({
-            method: 'POST',
-            path: '/v1/public/v1/auth/phone/verification-codes',
-            body: { phone },
-          })
-        ).body,
-      );
-      if (
-        typeof response.expiresInSeconds !== 'number' ||
-        typeof response.retryAfterSeconds !== 'number'
-      ) {
-        throw malformedResponse();
-      }
-      return {
-        expiresInSeconds: response.expiresInSeconds,
-        retryAfterSeconds: response.retryAfterSeconds,
-      };
-    },
-    async signIn(phone: string, code: string) {
-      await deps.ready();
-      const response = await deps.session.request({
-        method: 'POST',
-        path: '/v1/public/v1/auth/phone/login',
-        body: { phone, code },
-      });
-      const exchange = objectBody(response.body);
-      if (typeof exchange.token !== 'string' || typeof exchange.expiresAt !== 'number') {
-        throw malformedResponse();
-      }
-      const user = parseUser(exchange.user);
-      deps.session.authenticate({ token: exchange.token, expiresAt: exchange.expiresAt, user });
-    },
   };
 
   const auth: AuthCapability = {
@@ -388,7 +344,6 @@ export function createCapabilities(deps: CapabilityDeps): {
         featureKey: 'auth',
         reason: 'AUTH_REQUIRED',
         action: 'SIGN_IN',
-        phoneAuth,
         perform: startSignIn,
       });
       if (result === 'dismissed') throw cancelled();
@@ -514,7 +469,6 @@ export function createCapabilities(deps: CapabilityDeps): {
           reason: decision.reason,
           action: nextAction,
           ...(followTarget ? { followTarget } : {}),
-          ...(nextAction === 'SIGN_IN' ? { phoneAuth } : {}),
           perform: async () => {
             if (nextAction === 'SIGN_IN') {
               return startSignIn();
