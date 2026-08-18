@@ -135,6 +135,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+          registry-url: https://registry.npmjs.org
       - run: npm install --global npm@11.12.1
       - name: Verify trusted publisher OIDC context
         run: |
@@ -153,6 +154,10 @@ jobs:
           pnpm --dir packages/sdk build
           pnpm --dir packages/sdk pack:check
       - name: Publish or verify exact POC version
+        env:
+          # This repository secret exists only for the first package creation.
+          # publish-or-verify refuses it after @viceme-ai/sdk-poc exists.
+          NODE_AUTH_TOKEN: ${{ secrets.VICEME_POC_NPM_BOOTSTRAP_TOKEN }}
         run: node scripts/publish-or-verify.mjs
 
   artifacts:

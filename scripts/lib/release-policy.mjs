@@ -87,3 +87,39 @@ export function decideMutableTagMove({ mode, current, target, expectedCurrent })
     reason: `refusing to move pointer backward ${current} -> ${target}; use explicit rollback mode`,
   };
 }
+
+/**
+ * Enforce the one-time npm package bootstrap boundary.
+ *
+ * npm cannot attach a Trusted Publisher until the package exists. The first
+ * publication may therefore use a short-lived token. Once the package exists,
+ * keeping that token is an error so all later publishes must use OIDC.
+ */
+export function decideNpmPublicationAuth({ packageName, packageExists, bootstrapTokenPresent }) {
+  if (!packageExists) {
+    if (!bootstrapTokenPresent) {
+      return {
+        allowed: false,
+        reason: `${packageName} does not exist yet; add the one-time bootstrap token`,
+      };
+    }
+    return {
+      allowed: true,
+      mode: 'bootstrap-token',
+      reason: `authorizing the first ${packageName} publication with the one-time bootstrap token`,
+    };
+  }
+
+  if (bootstrapTokenPresent) {
+    return {
+      allowed: false,
+      reason: `${packageName} already exists; delete the bootstrap token and configure Trusted Publisher OIDC`,
+    };
+  }
+
+  return {
+    allowed: true,
+    mode: 'oidc',
+    reason: `authorizing ${packageName} publication with Trusted Publisher OIDC`,
+  };
+}

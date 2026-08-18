@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { compareSemver, decideMutableTagMove } from '../../../../scripts/lib/release-policy.mjs';
+import {
+  compareSemver,
+  decideMutableTagMove,
+  decideNpmPublicationAuth,
+} from '../../../../scripts/lib/release-policy.mjs';
 
 /**
  * Release policy primitives: semver ordering and the monotonic-forward /
@@ -79,5 +83,43 @@ describe('decideMutableTagMove', () => {
         expectedCurrent: '1.2.2',
       }).allowed,
     ).toBe(false);
+  });
+});
+
+describe('decideNpmPublicationAuth', () => {
+  const packageName = '@viceme-ai/sdk-poc';
+
+  it('allows the one-time token only while the package is absent', () => {
+    expect(
+      decideNpmPublicationAuth({
+        packageName,
+        packageExists: false,
+        bootstrapTokenPresent: true,
+      }),
+    ).toMatchObject({ allowed: true, mode: 'bootstrap-token' });
+    expect(
+      decideNpmPublicationAuth({
+        packageName,
+        packageExists: false,
+        bootstrapTokenPresent: false,
+      }),
+    ).toMatchObject({ allowed: false });
+  });
+
+  it('requires OIDC and rejects a lingering token after package creation', () => {
+    expect(
+      decideNpmPublicationAuth({
+        packageName,
+        packageExists: true,
+        bootstrapTokenPresent: false,
+      }),
+    ).toMatchObject({ allowed: true, mode: 'oidc' });
+    expect(
+      decideNpmPublicationAuth({
+        packageName,
+        packageExists: true,
+        bootstrapTokenPresent: true,
+      }),
+    ).toMatchObject({ allowed: false });
   });
 });

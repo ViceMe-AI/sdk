@@ -157,9 +157,11 @@ version such as `0.2.0-poc.1`.
 
 The source tree remains `@viceme-ai/sdk`. Inside the ephemeral release runner,
 `prepare-poc-package.mjs` changes only the package being built to
-`@viceme-ai/sdk-poc@<version>`. It is published with npm Trusted Publisher OIDC
-under the `poc` dist-tag, then the exact npm bytes are attached to the POC
-GitHub prerelease and written to:
+`@viceme-ai/sdk-poc@<version>`. The first package creation uses the short-lived
+repository secret `VICEME_POC_NPM_BOOTSTRAP_TOKEN`; after the package exists,
+the script rejects that token and requires npm Trusted Publisher OIDC. The
+package is published under the `poc` dist-tag, then the exact npm bytes are
+attached to the POC GitHub prerelease and written to:
 
 ```text
 https://viceme-shop-storage-poc.preview.tencent-zeabur.cn/start/poc/sdk/releases/v<version>/...
@@ -172,9 +174,11 @@ fall back to the formal API. The workflow never writes the formal npm package,
 
 One-time owner setup:
 
-- Bootstrap the public `@viceme-ai/sdk-poc` package once, then configure npm
-  Trusted Publisher for repository `ViceMe-AI/sdk` and workflow
-  `poc-release.yml` with no npm environment restriction.
+- Add the short-lived repository secret `VICEME_POC_NPM_BOOTSTRAP_TOKEN` for
+  the first public `@viceme-ai/sdk-poc` release. Immediately afterwards,
+  configure npm Trusted Publisher for repository `ViceMe-AI/sdk`, workflow
+  `poc-release.yml`, no Environment restriction, and only `npm publish`
+  allowed; then delete the GitHub secret and revoke the token.
 - Create GitHub environment `poc` with
   `VICEME_POC_S3_ENDPOINT`, `VICEME_POC_S3_BUCKET` (`start`),
   `VICEME_POC_S3_ACCESS_KEY_ID`, and `VICEME_POC_S3_SECRET_ACCESS_KEY`.

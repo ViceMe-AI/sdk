@@ -140,8 +140,9 @@ describe('workflow contracts', () => {
     expect(publication).toContain('DIST_TAG: poc');
     expect(publication).toContain('node scripts/prepare-poc-package.mjs --version "$VERSION"');
     expect(publication).toContain('id-token: write');
-    expect(publication).not.toContain('NPM_TOKEN');
-    expect(publication).not.toContain('NODE_AUTH_TOKEN');
+    expect(publication).toContain('registry-url: https://registry.npmjs.org');
+    expect(publication).toContain('NODE_AUTH_TOKEN: ${{ secrets.VICEME_POC_NPM_BOOTSTRAP_TOKEN }}');
+    expect(publication).not.toContain('secrets.NPM_TOKEN');
     expect(publication).toContain('--prefix "poc/sdk/releases/v${VERSION}/"');
     expect(publication).toContain('EXPECT_BUCKET: start');
     expect(publication).not.toContain('s3.viceme.cn/viceme-sdk');
