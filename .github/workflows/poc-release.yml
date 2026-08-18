@@ -182,7 +182,8 @@ jobs:
           node scripts/verify-npm-dist-tag.mjs \
             --package "$POC_PACKAGE" --version "$VERSION" --tag "$DIST_TAG"
           node scripts/attach-release-assets.mjs \
-            --package "$POC_PACKAGE" --version "$VERSION" --tag "$TAG" --prerelease
+            --package "$POC_PACKAGE" --version "$VERSION" --tag "$TAG" --prerelease \
+            --semantic-zip-recovery
       - name: Fetch the exact published npm bytes
         env:
           VERSION: ${{ needs.metadata.outputs.version }}
