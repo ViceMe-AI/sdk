@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
+import { buildEndpointDefinitions } from './vite.config.endpoints.ts';
 
 /**
  * ESM library build: `dist/index.js` + `dist/testing.js` (+ capability chunks
@@ -7,6 +8,7 @@ import { defineConfig } from 'vite';
  * may delete `dist`.
  */
 export default defineConfig({
+  define: buildEndpointDefinitions(),
   build: {
     outDir: 'dist',
     emptyOutDir: false,

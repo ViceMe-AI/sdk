@@ -1,4 +1,5 @@
 import type { ViceMeClient } from '../core/client.ts';
+import { BUILD_WIDGET_ORIGINS } from '../core/build-endpoints.ts';
 import { ViceMeError } from '../core/errors.ts';
 import type { CapabilityMountHandle, CapabilityMountOptions } from '../loader/mount-handle.ts';
 import { SDK_VERSION } from '../version.ts';
@@ -11,11 +12,6 @@ interface DanmakuBridgeMessage {
   action?: unknown;
   height?: unknown;
 }
-
-const WIDGET_ORIGINS = {
-  cn: 'https://viceme.cn',
-  global: 'https://viceme.ai',
-} as const;
 
 const CONTROLS_MIN_HEIGHT = 136;
 const CONTROLS_MAX_HEIGHT = 360;
@@ -47,7 +43,7 @@ export async function mount(
     });
   }
 
-  const widgetOrigin = WIDGET_ORIGINS[client.region];
+  const widgetOrigin = BUILD_WIDGET_ORIGINS[client.region];
   let currentAnchor = readDanmakuPageAnchor(windowObject, documentObject);
   let destroyed = false;
   let anchorTimer: number | undefined;

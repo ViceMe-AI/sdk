@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
+import { buildEndpointDefinitions } from './vite.config.endpoints.ts';
 
 /**
  * CDN auto-loader build: small IIFE `dist/viceme.min.js`.
@@ -7,6 +8,7 @@ import { defineConfig } from 'vite';
  * the release manifest.
  */
 export default defineConfig({
+  define: buildEndpointDefinitions(),
   build: {
     outDir: 'dist',
     emptyOutDir: false,

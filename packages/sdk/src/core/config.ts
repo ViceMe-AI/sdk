@@ -8,6 +8,7 @@
  */
 
 import { configInvalid } from './errors.ts';
+import { BUILD_API_BASE_URLS } from './build-endpoints.ts';
 export type ViceMeRegion = 'cn' | 'global';
 
 export interface ViceMeConfig {
@@ -27,8 +28,8 @@ const REGIONS: ReadonlySet<string> = new Set(['cn', 'global']);
  * one place (never via a public `apiBaseUrl` option).
  */
 export const PUBLIC_API_BASE_URLS: Readonly<Record<ViceMeRegion, string>> = {
-  cn: 'https://api.viceme.cn',
-  global: 'https://api.viceme.ai/v1',
+  cn: BUILD_API_BASE_URLS.cn,
+  global: BUILD_API_BASE_URLS.global,
 };
 
 export function resolveApiBaseUrl(region: ViceMeRegion): string {

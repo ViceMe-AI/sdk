@@ -2,6 +2,10 @@ import { expect, test, type Page, type Route } from '@playwright/test';
 
 import { SDK_VERSION } from '../../src/version.ts';
 
+const DANMAKU_WIDGET_ORIGIN = (
+  process.env.VICEME_BUILD_CN_WIDGET_ORIGIN ?? 'https://viceme.cn'
+).replace(/\/+$/, '');
+
 /**
  * B0.1 loader browser matrix (§21.1): attribute validation, dedup, namespace
  * coexistence, capability failure isolation, destroy, storage/global hygiene,
@@ -65,7 +69,7 @@ async function mockApi(page: Page, options: MockApiOptions = {}) {
 
 async function mockHostedDanmaku(page: Page) {
   let hits = 0;
-  await page.route('https://viceme.cn/embed/danmaku**', async (route: Route) => {
+  await page.route(`${DANMAKU_WIDGET_ORIGIN}/embed/danmaku**`, async (route: Route) => {
     hits += 1;
     const url = new URL(route.request().url());
     await route.fulfill({
