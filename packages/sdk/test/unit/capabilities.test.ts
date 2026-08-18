@@ -366,6 +366,38 @@ describe('creator access capabilities', () => {
     }
   });
 
+  it('rejects WeChat sign-in clearly when Web Crypto is unavailable', async () => {
+    const originalCrypto = globalThis.crypto;
+    vi.stubGlobal('crypto', {
+      getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto),
+    });
+    const transport = capabilityTransport();
+    const presenter = vi.fn(async (interaction: AccessInteraction) => {
+      await interaction.perform();
+      return 'acted' as const;
+    });
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport,
+      presenter,
+    });
+
+    try {
+      await expect(client.auth.signIn()).rejects.toMatchObject({
+        code: 'CONFIG_INVALID',
+        message: 'WeChat sign-in requires an HTTPS page or localhost.',
+      });
+      expect(
+        transport.requests.some(
+          (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+        ),
+      ).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('ignores a completion message from the SDK request origin when the callback differs', async () => {
     const transport = capabilityTransport();
     const presenter = vi.fn(async (interaction: AccessInteraction) => {

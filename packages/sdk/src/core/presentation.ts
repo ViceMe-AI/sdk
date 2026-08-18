@@ -74,6 +74,8 @@ function actionCopy(action: AccessInteractionAction): {
 function actionErrorCopy(error: unknown): string {
   if (!isViceMeError(error)) return '操作未完成，请重试。';
   switch (error.code) {
+    case 'CONFIG_INVALID':
+      return '微信登录需要通过 HTTPS 页面打开，请检查当前访问地址。';
     case 'AUTH_CANCELLED':
       return '微信授权已取消，请重试。';
     case 'SESSION_EXPIRED':

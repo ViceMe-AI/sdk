@@ -192,6 +192,31 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('dismissed');
   });
 
+  it('explains that WeChat login requires HTTPS when Web Crypto is unavailable', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      perform: vi.fn(async () => {
+        throw new ViceMeError({
+          code: 'CONFIG_INVALID',
+          message: 'WeChat sign-in requires an HTTPS page or localhost.',
+        });
+      }),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
+
+    (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
+        '微信登录需要通过 HTTPS 页面打开，请检查当前访问地址。',
+      );
+    });
+    (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+  });
+
   it('offers phone verification login without leaving the access layer', async () => {
     const sendCode = vi.fn(async () => ({ expiresInSeconds: 300, retryAfterSeconds: 60 }));
     const signIn = vi.fn(async () => undefined);
