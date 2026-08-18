@@ -39,9 +39,7 @@ describe('default access presenter', () => {
       layer?.shadowRoot?.querySelector("[data-viceme='action']")?.parentElement?.dataset.single,
     ).toBe('false');
     const styles = layer?.shadowRoot?.querySelector('style')?.textContent ?? '';
-    expect(styles).toContain(
-      "[data-viceme='panel'][data-action='FOLLOW'] [data-viceme='actions']",
-    );
+    expect(styles).toContain("[data-viceme='panel'][data-action='FOLLOW'] [data-viceme='actions']");
     expect(styles).toContain('flex: 1 1 0;');
     expect(layer?.shadowRoot?.innerHTML).not.toMatch(/\bpart=|var\(|Canvas|inherit/);
 
