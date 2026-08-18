@@ -32,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  document.documentElement.removeAttribute('lang');
   window.history.replaceState(null, '', '/');
   setIframePageLoading(false);
   vi.restoreAllMocks();
@@ -104,6 +105,17 @@ describe('danmaku mount', () => {
       .shadowRoot!.querySelector<HTMLIFrameElement>('iframe[data-mode="stage"]')!;
 
     expect(stage.src).toContain('https://viceme.ai/embed/danmaku?');
+    handle.destroy();
+  });
+
+  it('prefers the host document language over the browser language', async () => {
+    document.documentElement.lang = 'zh-CN';
+    const handle = await mount(client(), { target: document.body, theme: 'auto' });
+    const stage = document
+      .querySelector<HTMLElement>('[data-viceme-danmaku="mounted"]')!
+      .shadowRoot!.querySelector<HTMLIFrameElement>('iframe[data-mode="stage"]')!;
+
+    expect(new URL(stage.src).searchParams.get('locale')).toBe('zh-CN');
     handle.destroy();
   });
 });

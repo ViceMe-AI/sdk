@@ -49,6 +49,8 @@ export async function mount(
 
   const widgetOrigin = WIDGET_ORIGINS[client.region];
   let currentAnchor = readDanmakuPageAnchor(windowObject, documentObject);
+  const locale =
+    documentObject.documentElement.lang.trim() || windowObject.navigator.language || 'en';
   let destroyed = false;
   let anchorTimer: number | undefined;
   const loadedFrames = new WeakSet<HTMLIFrameElement>();
@@ -83,7 +85,7 @@ export async function mount(
     url.searchParams.set('mode', mode);
     url.searchParams.set('workKey', client.workKey);
     url.searchParams.set('theme', options.theme);
-    url.searchParams.set('locale', windowObject.navigator.language || 'en');
+    url.searchParams.set('locale', locale);
     url.searchParams.set('sdk', SDK_VERSION);
     url.searchParams.set('anchorKey', currentAnchor.anchorKey);
     return url;
