@@ -29,7 +29,7 @@ describe('default access presenter', () => {
     );
     expect(layer?.shadowRoot?.querySelector("[data-viceme='dismiss']")).toBeNull();
     expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).toBeNull();
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='title']")?.textContent).toBe('');
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='title']")).toBeNull();
     expect(layer?.shadowRoot?.querySelector("[data-viceme='description']")?.textContent).toBe('');
     expect(
       layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
@@ -48,6 +48,35 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('dismissed');
     expect(perform).not.toHaveBeenCalled();
     expect(document.querySelector('viceme-access-layer')).toBeNull();
+  });
+
+  it('shows creator consent with accept and reject actions and no title', async () => {
+    const perform = vi.fn(async () => ({ type: 'completed' as const }));
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      followTarget: {
+        kind: 'CREATOR',
+        displayName: '归藏',
+        avatarUrl: null,
+        description: 'AI 创业者',
+      },
+      perform,
+    });
+    const layer = document.querySelector('viceme-access-layer');
+    expect(layer).not.toBeNull();
+    const shadow = layer!.shadowRoot!;
+
+    expect(shadow.querySelector("[data-viceme='title']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile-name']")?.textContent).toBe('归藏');
+    expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('接受');
+    expect(shadow.querySelector('[data-viceme-cancel]')?.textContent).toBe('拒绝');
+    expect(shadow.textContent).not.toContain('登录');
+
+    (shadow.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+    expect(perform).not.toHaveBeenCalled();
   });
 
   it('shows the default follow copy for an ordinary user', async () => {
@@ -155,7 +184,7 @@ describe('default access presenter', () => {
       .querySelector('viceme-access-layer')
       ?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement;
 
-    expect(action.parentElement?.dataset.single).toBe('true');
+    expect(action.parentElement?.dataset.single).toBe('false');
     action.click();
 
     expect(action.disabled).toBe(true);
@@ -183,7 +212,7 @@ describe('default access presenter', () => {
     (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
-        '登录会话已过期，请重试。',
+        '授权会话已过期，请重试。',
       );
     });
     (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
@@ -208,7 +237,7 @@ describe('default access presenter', () => {
     (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
-        '微信登录配置无效，请稍后重试。',
+        '微信授权配置无效，请稍后重试。',
       );
     });
     (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();

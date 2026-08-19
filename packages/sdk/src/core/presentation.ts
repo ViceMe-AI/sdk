@@ -36,27 +36,23 @@ interface AccessLayerElement extends HTMLElement {
 }
 
 function actionCopy(action: AccessInteractionAction): {
-  title: string;
   description: string;
   label: string;
 } {
   switch (action) {
     case 'SIGN_IN':
       return {
-        title: '登录后继续',
-        description: '登录 ViceMe 后即可继续检查此功能权限。',
-        label: '微信登录',
+        description: '接受后将通过微信完成身份授权，并关注该创作者。',
+        label: '接受',
       };
     case 'FOLLOW':
       return {
-        title: '',
         description: '',
         label: '关注',
       };
     case 'CHECKOUT':
       return {
-        title: '购买后解锁',
-        description: '完成支付后即可继续使用此功能。',
+        description: '',
         label: '重新打开',
       };
   }
@@ -66,11 +62,11 @@ function actionErrorCopy(error: unknown): string {
   if (!isViceMeError(error)) return '操作未完成，请重试。';
   switch (error.code) {
     case 'CONFIG_INVALID':
-      return '微信登录配置无效，请稍后重试。';
+      return '微信授权配置无效，请稍后重试。';
     case 'AUTH_CANCELLED':
       return '微信授权已取消，请重试。';
     case 'SESSION_EXPIRED':
-      return '登录会话已过期，请重试。';
+      return '授权会话已过期，请重试。';
     case 'NETWORK_TIMEOUT':
       return '网络连接超时，请重试。';
     default:
@@ -123,15 +119,6 @@ function ensureAccessLayerElement(): void {
             padding: 1rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
             box-shadow: 0 -1rem 3rem rgb(0 0 0 / 18%);
           }
-          [data-viceme='header'] {
-            display: flex;
-            align-items: center;
-          }
-          [data-viceme='title'] {
-            margin: 0;
-            font-size: 1.125rem;
-            font-weight: 700;
-          }
           [data-viceme='content'] { display: flex; min-height: 0; flex-direction: column; }
           [data-viceme='description'] { margin: 0.75rem 0 1.25rem; color: #71717a; line-height: 1.6; }
           [data-viceme='profile'] {
@@ -174,7 +161,6 @@ function ensureAccessLayerElement(): void {
             color: #71717a;
           }
           [data-viceme='profile-copy'] { min-width: 0; }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='header'],
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='description'] { display: none; }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile'][data-visible='true'] {
             display: flex;
@@ -270,10 +256,7 @@ function ensureAccessLayerElement(): void {
           }
         </style>
         <button data-viceme="backdrop" type="button" tabindex="-1" aria-label="关闭"></button>
-        <section data-viceme="panel" role="dialog" aria-modal="true" aria-labelledby="viceme-layer-title">
-          <div data-viceme="header">
-            <h2 data-viceme="title" id="viceme-layer-title"></h2>
-          </div>
+        <section data-viceme="panel" role="dialog" aria-modal="true" aria-label="ViceMe 授权">
           <div data-viceme="content">
             <p data-viceme="description"></p>
             <section data-viceme="profile" aria-label="关注对象">
@@ -295,9 +278,7 @@ function ensureAccessLayerElement(): void {
       `;
       const panel = shadow.querySelector<HTMLElement>("[data-viceme='panel']")!;
       panel.dataset.action = this.interaction.action;
-      const title = shadow.querySelector<HTMLElement>("[data-viceme='title']")!;
       const description = shadow.querySelector<HTMLElement>("[data-viceme='description']")!;
-      title.textContent = copy.title;
       description.textContent = copy.description;
       const action = shadow.querySelector<HTMLButtonElement>("[data-viceme='action']")!;
       const mainActions = action.parentElement!;
@@ -314,15 +295,20 @@ function ensureAccessLayerElement(): void {
       )!;
       action.textContent = copy.label;
       action.hidden = this.interaction.action === 'CHECKOUT';
-      cancelAction.hidden = this.interaction.action !== 'FOLLOW';
+      cancelAction.hidden = this.interaction.action === 'CHECKOUT';
+      cancelAction.textContent = this.interaction.action === 'SIGN_IN' ? '拒绝' : '取消';
       mainActions.dataset.single = String(cancelAction.hidden);
       const idleActionLabel = copy.label;
-      frame.title = copy.title;
+      frame.title = this.interaction.action === 'SIGN_IN' ? '微信授权' : '支付';
 
       const target = this.interaction.followTarget;
       if (target) {
-        panel.removeAttribute('aria-labelledby');
-        panel.setAttribute('aria-label', `关注 ${target.displayName}`);
+        panel.setAttribute(
+          'aria-label',
+          this.interaction.action === 'SIGN_IN'
+            ? `接受 ${target.displayName} 的授权`
+            : `关注 ${target.displayName}`,
+        );
         profile.dataset.visible = 'true';
         profileName.textContent = target.displayName;
         profileDescription.textContent = target.description ?? '关注后即可继续使用此功能。';

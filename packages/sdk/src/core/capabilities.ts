@@ -202,25 +202,7 @@ function resolveLocale(): 'zh-CN' | 'en-US' {
 
 function resolveWechatClientType(): 'h5' | 'pc' {
   if (typeof navigator === 'undefined') return 'pc';
-  const userAgentData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } })
-    .userAgentData;
-  const userAgent = navigator.userAgent;
-  if (
-    userAgentData?.mobile === true ||
-    /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(userAgent) ||
-    (/Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1)
-  ) {
-    return 'h5';
-  }
-  if (
-    typeof window !== 'undefined' &&
-    navigator.maxTouchPoints > 0 &&
-    window.matchMedia('(pointer: coarse)').matches &&
-    window.matchMedia('(max-width: 48rem)').matches
-  ) {
-    return 'h5';
-  }
-  return 'pc';
+  return /MicroMessenger/i.test(navigator.userAgent) ? 'h5' : 'pc';
 }
 
 export function createCapabilities(deps: CapabilityDeps): {
@@ -330,7 +312,24 @@ export function createCapabilities(deps: CapabilityDeps): {
           throw malformedResponse();
         }
         await authenticate(data.code, data.codeVerifier);
+        if (deps.session.snapshot?.work.capabilities.includes('follow')) {
+          await updateFollow('PUT');
+        }
       },
+    );
+  };
+
+  const getFollowState = async (): Promise<FollowState> => {
+    await deps.ready();
+    return parseFollowState(
+      (await deps.session.request({ method: 'GET', path: '/v1/public/v1/follow' })).body,
+    );
+  };
+
+  const updateFollow = async (method: 'PUT' | 'DELETE'): Promise<FollowState> => {
+    await deps.ready();
+    return parseFollowState(
+      (await deps.session.request({ method, path: '/v1/public/v1/follow' })).body,
     );
   };
 
@@ -342,10 +341,12 @@ export function createCapabilities(deps: CapabilityDeps): {
     },
     async signIn() {
       const presenter = deps.presenter ?? defaultAccessPresenter;
+      const followTarget = (await getFollowState()).target;
       const result = await presenter({
         featureKey: 'auth',
         reason: 'AUTH_REQUIRED',
         action: 'SIGN_IN',
+        followTarget,
         perform: startSignIn,
       });
       if (result === 'dismissed') throw cancelled();
@@ -358,24 +359,9 @@ export function createCapabilities(deps: CapabilityDeps): {
   };
 
   const follow: FollowCapability = {
-    async getState() {
-      await deps.ready();
-      return parseFollowState(
-        (await deps.session.request({ method: 'GET', path: '/v1/public/v1/follow' })).body,
-      );
-    },
-    async follow() {
-      await deps.ready();
-      return parseFollowState(
-        (await deps.session.request({ method: 'PUT', path: '/v1/public/v1/follow' })).body,
-      );
-    },
-    async unfollow() {
-      await deps.ready();
-      return parseFollowState(
-        (await deps.session.request({ method: 'DELETE', path: '/v1/public/v1/follow' })).body,
-      );
-    },
+    getState: getFollowState,
+    follow: () => updateFollow('PUT'),
+    unfollow: () => updateFollow('DELETE'),
   };
 
   const checkMany = async (featureKeys: string[]): Promise<Record<string, AccessDecision>> => {
@@ -465,7 +451,10 @@ export function createCapabilities(deps: CapabilityDeps): {
         attempts += 1
       ) {
         const nextAction = decision.nextAction as AccessInteractionAction;
-        const followTarget = nextAction === 'FOLLOW' ? (await follow.getState()).target : undefined;
+        const followTarget =
+          nextAction === 'FOLLOW' || nextAction === 'SIGN_IN'
+            ? (await follow.getState()).target
+            : undefined;
         const result = await presenter({
           featureKey,
           reason: decision.reason,

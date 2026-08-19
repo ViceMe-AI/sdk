@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>access mobile</title>
+  </head>
+  <body>
+    <button id="gate" type="button">打开功能</button>
+    <script type="module">
+      window.__authorizeBody = null;
+      let following = false;
+      globalThis.fetch = async (input, init = {}) => {
+        const url = new URL(typeof input === 'string' ? input : input.url);
+        const body = init.body ? JSON.parse(String(init.body)) : null;
+        let response;
+        if (url.pathname.endsWith('/work-sessions')) {
+          response = {
+            work: {
+              key: 'wrk_test',
+              capabilities: ['auth', 'follow', 'access', 'checkout'],
+            },
+            token: 'anonymous-work-token',
+            expiresAt: Date.now() + 60_000,
+          };
+        } else if (url.pathname.endsWith('/access/check')) {
+          response = {
+            decisions: {
+              dingdong: following
+                ? { allowed: true, reason: 'FOLLOWING', nextAction: null }
+                : { allowed: false, reason: 'AUTH_REQUIRED', nextAction: 'SIGN_IN' },
+            },
+          };
+        } else if (url.pathname.endsWith('/follow') && init.method === 'GET') {
+          response = {
+            following,
+            followedAt: null,
+            target: {
+              kind: 'CREATOR',
+              displayName: '归藏',
+              avatarUrl: null,
+              description: 'AI 创业者',
+            },
+          };
+        } else if (url.pathname.endsWith('/auth/wechat/authorize')) {
+          window.__authorizeBody = body;
+          response = {
+            authorizationUrl: 'about:blank#wechat-authorization',
+            completionOrigin: window.location.origin,
+          };
+        } else {
+          return new Response(JSON.stringify({ code: 'INTERNAL_ERROR' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify(response), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      };
+
+      const { createViceMe } = await import('/viceme-sdk/0.1.6/index.js');
+      const client = createViceMe({ workKey: 'wrk_test', region: 'cn' });
+      await client.ready();
+      document.querySelector('#gate').addEventListener('click', () => {
+        void client.access.require('dingdong');
+      });
+    </script>
+  </body>
+</html>
