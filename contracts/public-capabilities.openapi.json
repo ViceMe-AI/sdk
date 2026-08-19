@@ -445,6 +445,7 @@
               "OWNER",
               "FOLLOWING",
               "PURCHASED",
+              "ENTITLED",
               "AUTH_REQUIRED",
               "FOLLOW_REQUIRED",
               "PURCHASE_REQUIRED",
