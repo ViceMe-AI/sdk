@@ -2,6 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { defaultAccessPresenter } from '../../src/core/presentation.ts';
+import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('default access presenter', () => {
   it('renders the follow target at the top with cancel and follow actions', async () => {
@@ -14,7 +15,7 @@ describe('default access presenter', () => {
         kind: 'CREATOR',
         displayName: '归藏',
         avatarUrl: 'https://cdn.example.com/creator.jpg',
-        description: 'AI 创业者',
+        description: '专注于 AI 创作工具与智能体工作流。',
       },
       perform,
     });
@@ -32,11 +33,14 @@ describe('default access presenter', () => {
     expect(layer?.shadowRoot?.querySelector("[data-viceme='description']")?.textContent).toBe('');
     expect(
       layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
-    ).toBe('');
+    ).toBe('专注于 AI 创作工具与智能体工作流。');
     expect(layer?.shadowRoot?.querySelector('[data-viceme-cancel]')?.textContent).toBe('取消');
     expect(
       layer?.shadowRoot?.querySelector("[data-viceme='action']")?.parentElement?.dataset.single,
     ).toBe('false');
+    const styles = layer?.shadowRoot?.querySelector('style')?.textContent ?? '';
+    expect(styles).toContain("[data-viceme='panel'][data-action='FOLLOW'] [data-viceme='actions']");
+    expect(styles).toContain('flex: 1 1 0;');
     expect(layer?.shadowRoot?.innerHTML).not.toMatch(/\bpart=|var\(|Canvas|inherit/);
 
     (layer?.shadowRoot?.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
@@ -44,6 +48,29 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('dismissed');
     expect(perform).not.toHaveBeenCalled();
     expect(document.querySelector('viceme-access-layer')).toBeNull();
+  });
+
+  it('shows the default follow copy for an ordinary user', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'dingdong',
+      reason: 'FOLLOW_REQUIRED',
+      action: 'FOLLOW',
+      followTarget: {
+        kind: 'USER',
+        displayName: '普通用户',
+        avatarUrl: null,
+        description: null,
+      },
+      perform: vi.fn(async () => ({ type: 'completed' as const })),
+    });
+    const layer = document.querySelector('viceme-access-layer');
+
+    expect(
+      layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
+    ).toBe('关注后即可继续使用此功能。');
+
+    (layer?.shadowRoot?.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
   });
 
   it('opens checkout directly inside the access layer frame', async () => {
@@ -69,6 +96,15 @@ describe('default access presenter', () => {
         'about:blank#checkout',
       );
     });
+    const frame = layer?.shadowRoot?.querySelector('iframe') as HTMLIFrameElement;
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'viceme:frame:resize', height: 360 },
+        origin: 'null',
+        source: frame.contentWindow,
+      }),
+    );
+    expect(frame.style.height).toBe('360px');
     expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).toBeNull();
     complete();
 
@@ -129,30 +165,53 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('acted');
   });
 
-  it('offers phone verification login without leaving the access layer', async () => {
-    const sendCode = vi.fn(async () => ({ expiresInSeconds: 300, retryAfterSeconds: 60 }));
-    const signIn = vi.fn(async () => undefined);
+  it('explains when the login session has expired', async () => {
     const presented = defaultAccessPresenter({
       featureKey: 'auth',
       reason: 'AUTH_REQUIRED',
       action: 'SIGN_IN',
-      phoneAuth: { sendCode, signIn },
-      perform: vi.fn(async () => ({ type: 'completed' as const })),
+      perform: vi.fn(async () => {
+        throw new ViceMeError({
+          code: 'SESSION_EXPIRED',
+          message: 'The work session has expired.',
+        });
+      }),
     });
-    const shadow = document.querySelector('viceme-access-layer')!.shadowRoot!;
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
 
-    (shadow.querySelector('[data-viceme-phone-action]') as HTMLButtonElement).click();
-    const phone = shadow.querySelector('[data-viceme-phone]') as HTMLInputElement;
-    const code = shadow.querySelector('[data-viceme-code]') as HTMLInputElement;
-    phone.value = '13800138000';
-    code.value = '123456';
-    (shadow.querySelector("[data-viceme='send-code']") as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(sendCode).toHaveBeenCalledWith('13800138000'));
-    (shadow.querySelector("[data-viceme='phone-form']") as HTMLFormElement).dispatchEvent(
-      new Event('submit', { cancelable: true }),
-    );
+    (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
+        '登录会话已过期，请重试。',
+      );
+    });
+    (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+  });
 
-    await expect(presented).resolves.toBe('acted');
-    expect(signIn).toHaveBeenCalledWith('13800138000', '123456');
+  it('reports invalid WeChat login configuration', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      perform: vi.fn(async () => {
+        throw new ViceMeError({
+          code: 'CONFIG_INVALID',
+          message: 'Invalid WeChat sign-in configuration.',
+        });
+      }),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
+
+    (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
+        '微信登录配置无效，请稍后重试。',
+      );
+    });
+    (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
   });
 });

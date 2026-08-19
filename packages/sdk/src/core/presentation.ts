@@ -1,21 +1,13 @@
 import type { FollowTarget } from './capabilities.ts';
+import { isViceMeError } from './errors.ts';
 
 export type AccessInteractionAction = 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT';
-
-export interface PhoneAuthInteraction {
-  sendCode(phone: string): Promise<{
-    expiresInSeconds: number;
-    retryAfterSeconds: number;
-  }>;
-  signIn(phone: string, code: string): Promise<void>;
-}
 
 export interface AccessInteraction {
   featureKey: string;
   reason: string;
   action: AccessInteractionAction;
   followTarget?: FollowTarget;
-  phoneAuth?: PhoneAuthInteraction;
   perform(): Promise<AccessActionResult>;
 }
 
@@ -67,6 +59,24 @@ function actionCopy(action: AccessInteractionAction): {
         description: '完成支付后即可继续使用此功能。',
         label: '重新打开',
       };
+  }
+}
+
+function actionErrorCopy(error: unknown): string {
+  if (!isViceMeError(error)) return '操作未完成，请重试。';
+  switch (error.code) {
+    case 'CONFIG_INVALID':
+      return '微信登录配置无效，请稍后重试。';
+    case 'AUTH_CANCELLED':
+      return '微信授权已取消，请重试。';
+    case 'SESSION_EXPIRED':
+      return '登录会话已过期，请重试。';
+    case 'NETWORK_TIMEOUT':
+      return '网络连接超时，请重试。';
+    default:
+      return error.requestId
+        ? `操作未完成，请重试。请求 ID：${error.requestId}`
+        : '操作未完成，请重试。';
   }
 }
 
@@ -122,7 +132,7 @@ function ensureAccessLayerElement(): void {
             font-size: 1.125rem;
             font-weight: 700;
           }
-          [data-viceme='content'] { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+          [data-viceme='content'] { display: flex; min-height: 0; flex-direction: column; }
           [data-viceme='description'] { margin: 0.75rem 0 1.25rem; color: #71717a; line-height: 1.6; }
           [data-viceme='profile'] {
             display: none;
@@ -158,8 +168,12 @@ function ensureAccessLayerElement(): void {
           }
           [data-viceme='avatar'][hidden], [data-viceme='avatar-fallback'][hidden] { display: none; }
           [data-viceme='profile-name'] { margin: 0; font-size: 1.375rem; font-weight: 700; }
-          [data-viceme='profile-description'] { margin: 0.25rem 0 0; color: #71717a; }
-          [data-viceme='panel'][data-action='FOLLOW'] { min-height: 18rem; }
+          [data-viceme='profile-description'] {
+            margin: 0.25rem 0 0;
+            overflow-wrap: anywhere;
+            color: #71717a;
+          }
+          [data-viceme='profile-copy'] { min-width: 0; }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='header'],
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='description'] { display: none; }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile'][data-visible='true'] {
@@ -184,45 +198,21 @@ function ensureAccessLayerElement(): void {
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-name'] {
             font-size: 1.125rem;
           }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-description'] {
-            display: none;
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='actions'] {
+            justify-content: stretch;
+          }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='secondary-action'],
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='action'] {
+            width: auto;
+            flex: 1 1 0;
           }
           [data-viceme='actions'] {
             display: flex;
             justify-content: flex-end;
             gap: 0.75rem;
-            margin-top: auto;
+            margin-top: 1.5rem;
             padding-top: 0.5rem;
           }
-          [data-viceme='phone-form'] {
-            display: none;
-            min-height: 0;
-            flex: 1;
-            flex-direction: column;
-            gap: 0.875rem;
-            padding-top: 1rem;
-          }
-          [data-viceme='panel'][data-phone='true'] [data-viceme='description'],
-          [data-viceme='panel'][data-phone='true'] [data-viceme='profile'],
-          [data-viceme='panel'][data-phone='true'] > [data-viceme='content'] > [data-viceme='actions'] { display: none; }
-          [data-viceme='panel'][data-phone='true'] [data-viceme='phone-form'] { display: flex; }
-          [data-viceme='field'] { display: grid; gap: 0.375rem; }
-          [data-viceme='field-label'] { color: #3f3f46; font-size: 0.875rem; font-weight: 600; }
-          [data-viceme='input'] {
-            box-sizing: border-box;
-            width: 100%;
-            min-height: 2.75rem;
-            border: 1px solid #d4d4d8;
-            border-radius: 0.75rem;
-            padding: 0.625rem 0.75rem;
-            background: #ffffff;
-            color: #18181b;
-            font: 400 1rem/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-          }
-          [data-viceme='input']:focus { border-color: #18181b; outline: 2px solid #18181b; outline-offset: 2px; }
-          [data-viceme='code-row'] { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.625rem; }
-          [data-viceme='send-code'] { min-width: 7.5rem; border: 1px solid #18181b; background: #ffffff; color: #18181b; }
-          [data-viceme='phone-hint'] { margin: 0; color: #71717a; font-size: 0.75rem; }
           button {
             min-height: 2.75rem;
             border-radius: 0.75rem;
@@ -267,12 +257,10 @@ function ensureAccessLayerElement(): void {
             :host { place-items: center; padding: 1.5rem; }
             [data-viceme='panel'] {
               width: min(28rem, 100%);
-              min-height: 22rem;
               border-radius: 1.25rem;
               padding: 1.25rem;
               box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 24%);
             }
-            [data-viceme='panel'][data-action='FOLLOW'] { min-height: 16rem; }
             [data-viceme='panel'][data-frame='true'] { width: min(52rem, 100%); }
             [data-viceme='panel'][data-action='SIGN_IN'][data-frame='true'] { width: min(30rem, 100%); }
           }
@@ -291,33 +279,16 @@ function ensureAccessLayerElement(): void {
             <section data-viceme="profile" aria-label="关注对象">
               <img data-viceme="avatar" hidden />
               <span data-viceme="avatar-fallback" aria-hidden="true"></span>
-              <p data-viceme="profile-name"></p>
-              <p data-viceme="profile-description"></p>
+              <div data-viceme="profile-copy">
+                <p data-viceme="profile-name"></p>
+                <p data-viceme="profile-description"></p>
+              </div>
             </section>
             <p data-viceme="error" role="alert" aria-live="polite"></p>
             <div data-viceme="actions">
               <button data-viceme="secondary-action" data-viceme-cancel type="button">取消</button>
-              <button data-viceme="secondary-action" data-viceme-phone-action type="button">手机号登录</button>
               <button data-viceme="action" type="button"></button>
             </div>
-            <form data-viceme="phone-form">
-              <label data-viceme="field">
-                <span data-viceme="field-label">手机号</span>
-                <input data-viceme="input" data-viceme-phone type="tel" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="请输入中国大陆手机号" />
-              </label>
-              <label data-viceme="field">
-                <span data-viceme="field-label">验证码</span>
-                <span data-viceme="code-row">
-                  <input data-viceme="input" data-viceme-code type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码" />
-                  <button data-viceme="send-code" type="button">获取验证码</button>
-                </span>
-              </label>
-              <p data-viceme="phone-hint">未注册的手机号验证后将自动创建 ViceMe 账号。</p>
-              <div data-viceme="actions">
-                <button data-viceme="secondary-action" data-viceme-phone-back type="button">返回</button>
-                <button data-viceme="action" data-viceme-phone-submit type="submit">登录</button>
-              </div>
-            </form>
           </div>
           <iframe data-viceme="frame" title="" referrerpolicy="no-referrer" allow="payment"></iframe>
         </section>
@@ -331,7 +302,6 @@ function ensureAccessLayerElement(): void {
       const action = shadow.querySelector<HTMLButtonElement>("[data-viceme='action']")!;
       const mainActions = action.parentElement!;
       const cancelAction = shadow.querySelector<HTMLButtonElement>('[data-viceme-cancel]')!;
-      const phoneAction = shadow.querySelector<HTMLButtonElement>('[data-viceme-phone-action]')!;
       const backdrop = shadow.querySelector<HTMLButtonElement>("[data-viceme='backdrop']")!;
       const error = shadow.querySelector<HTMLElement>("[data-viceme='error']")!;
       const frame = shadow.querySelector<HTMLIFrameElement>("[data-viceme='frame']")!;
@@ -342,17 +312,10 @@ function ensureAccessLayerElement(): void {
       const profileDescription = shadow.querySelector<HTMLElement>(
         "[data-viceme='profile-description']",
       )!;
-      const phoneForm = shadow.querySelector<HTMLFormElement>("[data-viceme='phone-form']")!;
-      const phoneInput = shadow.querySelector<HTMLInputElement>('[data-viceme-phone]')!;
-      const codeInput = shadow.querySelector<HTMLInputElement>('[data-viceme-code]')!;
-      const sendCode = shadow.querySelector<HTMLButtonElement>("[data-viceme='send-code']")!;
-      const phoneBack = shadow.querySelector<HTMLButtonElement>('[data-viceme-phone-back]')!;
-      const phoneSubmit = shadow.querySelector<HTMLButtonElement>('[data-viceme-phone-submit]')!;
       action.textContent = copy.label;
       action.hidden = this.interaction.action === 'CHECKOUT';
       cancelAction.hidden = this.interaction.action !== 'FOLLOW';
-      phoneAction.hidden = !this.interaction.phoneAuth;
-      mainActions.dataset.single = String(cancelAction.hidden && phoneAction.hidden);
+      mainActions.dataset.single = String(cancelAction.hidden);
       const idleActionLabel = copy.label;
       frame.title = copy.title;
 
@@ -362,7 +325,7 @@ function ensureAccessLayerElement(): void {
         panel.setAttribute('aria-label', `关注 ${target.displayName}`);
         profile.dataset.visible = 'true';
         profileName.textContent = target.displayName;
-        profileDescription.textContent = '';
+        profileDescription.textContent = target.description ?? '关注后即可继续使用此功能。';
         avatarFallback.textContent = target.displayName.trim().slice(0, 1) || 'V';
         if (target.avatarUrl) {
           avatar.src = target.avatarUrl;
@@ -373,13 +336,32 @@ function ensureAccessLayerElement(): void {
       }
 
       let activeFrame: AccessFrameAction | null = null;
-      let countdownTimer: number | null = null;
-      const clearCountdown = () => {
-        if (countdownTimer !== null) window.clearInterval(countdownTimer);
-        countdownTimer = null;
+      let activeFrameOrigin: string | null = null;
+      const resizeFrame = (event: MessageEvent) => {
+        if (
+          !activeFrame ||
+          !activeFrameOrigin ||
+          event.source !== frame.contentWindow ||
+          event.origin !== activeFrameOrigin ||
+          typeof event.data !== 'object' ||
+          event.data === null
+        ) {
+          return;
+        }
+        const data = event.data as Record<string, unknown>;
+        if (
+          data.type !== 'viceme:frame:resize' ||
+          typeof data.height !== 'number' ||
+          !Number.isFinite(data.height)
+        ) {
+          return;
+        }
+        const maximum = Math.max(240, Math.floor(window.innerHeight * 0.78));
+        frame.style.height = `${Math.min(maximum, Math.max(240, Math.ceil(data.height)))}px`;
       };
+      window.addEventListener('message', resizeFrame);
       const close = (result: AccessPresentationResult) => {
-        clearCountdown();
+        window.removeEventListener('message', resizeFrame);
         this.dispatchEvent(new CustomEvent('viceme:access-layer-close', { detail: result }));
       };
       const dismissLayer = () => {
@@ -396,91 +378,15 @@ function ensureAccessLayerElement(): void {
             frame.focus();
             return;
           }
-          const focusable =
-            panel.dataset.phone === 'true'
-              ? [phoneInput, codeInput, sendCode, phoneBack, phoneSubmit]
-              : [
-                  ...(cancelAction.hidden ? [] : [cancelAction]),
-                  ...(phoneAction.hidden ? [] : [phoneAction]),
-                  ...(action.hidden ? [] : [action]),
-                ];
+          const focusable = [
+            ...(cancelAction.hidden ? [] : [cancelAction]),
+            ...(action.hidden ? [] : [action]),
+          ];
           const available = focusable.filter((element) => !element.disabled && !element.hidden);
           if (available.length === 0) return;
-          const currentIndex = available.indexOf(
-            shadow.activeElement as HTMLButtonElement | HTMLInputElement,
-          );
+          const currentIndex = available.indexOf(shadow.activeElement as HTMLButtonElement);
           const direction = event.shiftKey ? -1 : 1;
           available[(currentIndex + direction + available.length) % available.length]?.focus();
-        }
-      });
-      phoneInput.addEventListener('input', () => {
-        phoneInput.value = phoneInput.value.replace(/\D/g, '').slice(0, 11);
-      });
-      codeInput.addEventListener('input', () => {
-        codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
-      });
-      phoneAction.addEventListener('click', () => {
-        panel.dataset.phone = 'true';
-        title.textContent = '手机号登录';
-        error.textContent = '';
-        phoneInput.focus();
-      });
-      phoneBack.addEventListener('click', () => {
-        panel.dataset.phone = 'false';
-        title.textContent = copy.title;
-        error.textContent = '';
-        phoneAction.focus();
-      });
-      sendCode.addEventListener('click', async () => {
-        const phone = phoneInput.value;
-        if (!/^1[3-9]\d{9}$/.test(phone)) {
-          error.textContent = '请输入正确的中国大陆手机号。';
-          phoneInput.focus();
-          return;
-        }
-        sendCode.disabled = true;
-        sendCode.textContent = '发送中…';
-        error.textContent = '';
-        try {
-          const result = await this.interaction.phoneAuth!.sendCode(phone);
-          let remaining = result.retryAfterSeconds;
-          sendCode.textContent = `${remaining} 秒后重试`;
-          clearCountdown();
-          countdownTimer = window.setInterval(() => {
-            remaining -= 1;
-            if (remaining <= 0) {
-              clearCountdown();
-              sendCode.disabled = false;
-              sendCode.textContent = '重新获取';
-              return;
-            }
-            sendCode.textContent = `${remaining} 秒后重试`;
-          }, 1_000);
-          codeInput.focus();
-        } catch {
-          sendCode.disabled = false;
-          sendCode.textContent = '获取验证码';
-          error.textContent = '验证码发送失败，请稍后重试。';
-        }
-      });
-      phoneForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const phone = phoneInput.value;
-        const code = codeInput.value;
-        if (!/^1[3-9]\d{9}$/.test(phone) || !/^\d{6}$/.test(code)) {
-          error.textContent = '请输入正确的手机号和 6 位验证码。';
-          return;
-        }
-        phoneSubmit.disabled = true;
-        phoneSubmit.textContent = '登录中…';
-        error.textContent = '';
-        try {
-          await this.interaction.phoneAuth!.signIn(phone, code);
-          close('acted');
-        } catch {
-          phoneSubmit.disabled = false;
-          phoneSubmit.textContent = '登录';
-          error.textContent = '手机号或验证码不正确，请重试。';
         }
       });
       const performAction = async () => {
@@ -492,18 +398,21 @@ function ensureAccessLayerElement(): void {
           const result = await this.interaction.perform();
           if (result.type === 'frame') {
             activeFrame = result;
+            activeFrameOrigin = new URL(result.url, window.location.href).origin;
             panel.dataset.frame = 'true';
             frame.src = result.url;
             frame.focus();
             await result.completion;
           }
           close('acted');
-        } catch {
+        } catch (caught) {
           activeFrame?.cancel();
           activeFrame = null;
+          activeFrameOrigin = null;
           panel.dataset.frame = 'false';
+          frame.style.removeProperty('height');
           frame.removeAttribute('src');
-          error.textContent = '操作未完成，请重试。';
+          error.textContent = actionErrorCopy(caught);
           action.hidden = false;
           action.disabled = false;
           action.removeAttribute('aria-busy');

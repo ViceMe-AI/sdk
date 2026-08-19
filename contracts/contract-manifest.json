@@ -1,6 +1,6 @@
 {
-  "contractVersion": "0.3.2",
-  "sha256": "28f9b5cc1be61b33cfc77eeafe5973c3b6586670b41b92eabe5922c890e8fa6c",
+  "contractVersion": "0.3.3",
+  "sha256": "e7bf753dfd89d6de860605974ecb0b34a86a74dc054b7905eff5921bd17dc0f1",
   "generatedFrom": "sdk-baseline (pending first Shop export)",
-  "generatedAt": "2026-08-17T09:01:44.455Z"
+  "generatedAt": "2026-08-18T08:40:44.276Z"
 }

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ViceMe Public Capabilities API",
-    "version": "0.3.2",
+    "version": "0.3.3",
     "summary": "Public, unauthenticated-visitor endpoints consumed by the ViceMe browser SDK.",
     "description": "Shop-owned public contract for creator work sessions, WeChat login, follows, access decisions, and hosted checkout."
   },
@@ -91,60 +91,6 @@
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/AuthExchangeRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Authenticated work session.",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/AuthExchangeResponse" }
-              }
-            }
-          },
-          "4xx": { "$ref": "#/components/responses/PublicError" },
-          "5xx": { "$ref": "#/components/responses/InternalError" }
-        }
-      }
-    },
-    "/v1/public/v1/auth/phone/verification-codes": {
-      "post": {
-        "tags": ["auth"],
-        "operationId": "sendPhoneVerificationCode",
-        "security": [{ "workSession": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/PhoneVerificationCodeRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Phone verification code sent.",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/VerificationCodeSentResponse" }
-              }
-            }
-          },
-          "4xx": { "$ref": "#/components/responses/PublicError" },
-          "5xx": { "$ref": "#/components/responses/InternalError" }
-        }
-      }
-    },
-    "/v1/public/v1/auth/phone/login": {
-      "post": {
-        "tags": ["auth"],
-        "operationId": "loginWithPhoneVerificationCode",
-        "security": [{ "workSession": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/PhoneLoginRequest" }
             }
           }
         },
@@ -400,12 +346,12 @@
       },
       "AuthAuthorizeRequest": {
         "type": "object",
-        "required": ["codeChallenge", "channel"],
+        "required": ["channel", "locale"],
         "additionalProperties": false,
         "properties": {
-          "codeChallenge": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
           "channel": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
-          "clientType": { "type": "string", "enum": ["h5", "pc"] }
+          "clientType": { "type": "string", "enum": ["h5", "pc"] },
+          "locale": { "type": "string", "enum": ["zh-CN", "en-US"] }
         }
       },
       "AuthAuthorizeResponse": {
@@ -415,32 +361,6 @@
         "properties": {
           "authorizationUrl": { "type": "string", "format": "uri" },
           "completionOrigin": { "type": "string", "format": "uri" }
-        }
-      },
-      "PhoneVerificationCodeRequest": {
-        "type": "object",
-        "required": ["phone"],
-        "additionalProperties": false,
-        "properties": {
-          "phone": { "type": "string", "pattern": "^(?:\\+?86)?1[3-9]\\d{9}$" }
-        }
-      },
-      "PhoneLoginRequest": {
-        "type": "object",
-        "required": ["phone", "code"],
-        "additionalProperties": false,
-        "properties": {
-          "phone": { "type": "string", "pattern": "^(?:\\+?86)?1[3-9]\\d{9}$" },
-          "code": { "type": "string", "pattern": "^\\d{6}$" }
-        }
-      },
-      "VerificationCodeSentResponse": {
-        "type": "object",
-        "required": ["expiresInSeconds", "retryAfterSeconds"],
-        "additionalProperties": false,
-        "properties": {
-          "expiresInSeconds": { "type": "integer", "minimum": 1 },
-          "retryAfterSeconds": { "type": "integer", "minimum": 1 }
         }
       },
       "AuthExchangeRequest": {

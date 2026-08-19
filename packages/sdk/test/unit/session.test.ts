@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SessionManager } from '../../src/session/session.ts';
 import { createMemoryTransport, FIXTURE_WORK } from '../../src/testing.ts';
-import type { ViceMeError } from '../../src/core/errors.ts';
+import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('SessionManager', () => {
   it('establishes once and caches the snapshot', async () => {
@@ -93,5 +93,40 @@ describe('SessionManager', () => {
     expect(first).toBe(second);
     // One initial request + exactly one refresh.
     expect(transport.requests).toHaveLength(2);
+  });
+
+  it('refreshes the work session once when the server rejects a stale token', async () => {
+    let sessionCount = 0;
+    const authorizations: Array<string | undefined> = [];
+    const transport = {
+      async request(request: { path: string; authorization?: string }) {
+        if (request.path === '/v1/public/v1/work-sessions') {
+          sessionCount += 1;
+          return {
+            status: 201,
+            body: {
+              work: { key: 'wrk_test', capabilities: ['auth'] },
+              token: sessionCount === 1 ? 'stale-token' : 'fresh-token',
+              expiresAt: Date.now() + 60_000,
+            },
+          };
+        }
+        authorizations.push(request.authorization);
+        if (request.authorization === 'stale-token') {
+          throw new ViceMeError({
+            code: 'SESSION_EXPIRED',
+            message: 'The work session is stale.',
+          });
+        }
+        return { status: 201, body: { ok: true } };
+      },
+    };
+    const session = new SessionManager({ workKey: 'wrk_test', transport });
+
+    await expect(
+      session.request({ method: 'POST', path: '/v1/public/v1/auth/wechat/authorize' }),
+    ).resolves.toMatchObject({ status: 201 });
+    expect(sessionCount).toBe(2);
+    expect(authorizations).toEqual(['stale-token', 'fresh-token']);
   });
 });

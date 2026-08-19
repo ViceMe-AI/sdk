@@ -153,11 +153,23 @@ export class SessionManager {
   ): Promise<TransportResponse> {
     const snapshot = await this.establish();
     if (!snapshot.token) throw malformedSessionResponse();
-    return this.#options.transport.request({
-      ...request,
-      authorization: snapshot.token,
-      signal: this.#options.signal,
-    });
+    try {
+      return await this.#options.transport.request({
+        ...request,
+        authorization: snapshot.token,
+        signal: this.#options.signal,
+      });
+    } catch (error) {
+      if (!(error instanceof ViceMeError) || error.code !== 'SESSION_EXPIRED') throw error;
+      if (this.#snapshot === snapshot) this.invalidate();
+      const refreshed = await this.establish();
+      if (!refreshed.token) throw malformedSessionResponse();
+      return this.#options.transport.request({
+        ...request,
+        authorization: refreshed.token,
+        signal: this.#options.signal,
+      });
+    }
   }
 
   authenticate(input: { token: string; expiresAt: number; user: WorkUser }): void {
