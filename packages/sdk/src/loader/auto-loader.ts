@@ -201,7 +201,7 @@ async function fetchReleaseManifest(
   } catch {
     response = { ok: false, status: 0 } as Response;
   }
-  // Alias path (e.g. /sdk/v1/) holds no manifest on the S3 topology: it
+  // Alias path (e.g. /viceme-sdk/v1/) holds no manifest on the S3 topology: it
   // carries only the loader object plus the version POINTER. Resolve the
   // pointer and load the exact version beside it.
   if (!response.ok) {
@@ -222,7 +222,7 @@ function fetchWithTimeout(url: URL): Promise<Response> {
   return fetch(url, { credentials: 'omit', signal });
 }
 
-/** Read /sdk/-/aliases/v1 when the loader itself sits under /sdk/v1/. */
+/** Read /viceme-sdk/-/aliases/v1 when the loader sits under /viceme-sdk/v1/. */
 async function resolveAliasPointer(manifestUrl: URL): Promise<string | undefined> {
   if (!/\/viceme-sdk\/[^/]+\/manifest\.json$/.test(manifestUrl.pathname)) return undefined;
   const segment = manifestUrl.pathname.split('/viceme-sdk/')[1]?.split('/')[0];

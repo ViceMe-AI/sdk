@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Atomic stable-alias pointer writer with monotonic-forward / authorized
- * rollback semantics (review P1: a stale rerun must never pull `/sdk/v1`
+ * rollback semantics (review P1: a stale rerun must never pull `/viceme-sdk/v1`
  * backward, and rollback must be an explicit, preconditions-checked
  * operation).
  *

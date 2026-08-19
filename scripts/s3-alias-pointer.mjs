@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * Move the stable `/sdk/v1` alias on the dual-region S3 topology.
+ * Move the stable `/viceme-sdk/v1` alias on the dual-region S3 topology.
  *
  * Per region (credentials via env, region-selected):
  *   1. read the current public pointer and apply the shared policy
  *      (promote = monotonic forward only; rollback = explicit, requires
  *      --from-current to match the live value);
- *   2. publish the loader object at sdk/v1/viceme.min.js with immutable
+ *   2. publish the loader object at bucket key v1/viceme.min.js with immutable
  *      semantics (absent -> upload; identical -> skip; different -> fail);
  *      loader bytes are content-stable, so a torn write stays functional;
- *   3. write the single pointer object sdk/-/aliases/v1 (the one mutable
+ *   3. write the single pointer object at bucket key -/aliases/v1 (the one mutable
  *      object) and poll the public URL until it converges.
  *
  * No CDN edge sits in front of the S3 public entries, so reads are

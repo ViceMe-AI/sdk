@@ -3,15 +3,15 @@ name: Promote CDN
 # Stable-alias management only. Exact-version artifacts are published to
 # both regions automatically by the SDK release publication workflow (npm ->
 # CN/Global S3 -> public read-back); this workflow moves the single
-# `/sdk/v1` alias pointer:
+# `/viceme-sdk/v1` alias pointer:
 #
 #   promote  — forward only (stale reruns can never pull the alias back);
 #   rollback — explicit, requires aliasExpectedCurrent to match the live
 #              pointer (stale/concurrent-move guard) and an older target.
 #
 # The alias path also receives the (content-stable) loader object with
-# immutable semantics; the loader resolves /sdk/v1 by reading the version
-# pointer at /sdk/-/aliases/v1, so a torn write stays functional.
+# immutable semantics; the loader resolves /viceme-sdk/v1 by reading the
+# version pointer at /viceme-sdk/-/aliases/v1, so a torn write stays functional.
 #
 # Inputs are env-passed and strictly validated (semver + regions) before
 # any credential operation; secrets are consumed by scripts as structured
@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact released version to point /sdk/v1 at (e.g. 1.2.3)'
+        description: 'Exact released version to point /viceme-sdk/v1 at (e.g. 1.2.3)'
         required: true
         type: string
       regions:
