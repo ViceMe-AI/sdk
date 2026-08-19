@@ -31,7 +31,8 @@ if (access.dingdong.allowed) enableDingdong();
 if (access.emperor.allowed) enableEmperor();
 
 // Call from a user gesture. A denied decision opens the ViceMe
-// bottom-sheet/in-page Web Component. It never silently follows.
+// bottom-sheet/in-page Web Component. Accepting creator authorization also
+// follows that creator without a second prompt.
 const decision = await client.access.require('emperor');
 if (decision.allowed) enableEmperor();
 
@@ -39,7 +40,7 @@ client.destroy();
 ```
 
 The SDK registers and mounts `<viceme-access-layer>` with isolated ViceMe-owned
-styles. Login and checkout remain inside its iframe area and complete through
+styles. Authorization and checkout remain inside its iframe area and complete through
 an origin- and channel-validated message; no browser popup, page navigation,
 `confirm`, or `alert` is used. Custom site presenters and style inference are
 not part of the current public contract.

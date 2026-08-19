@@ -210,6 +210,75 @@ describe('creator access capabilities', () => {
     expect(transport.requests.filter((request) => request.method === 'PUT')).toHaveLength(1);
   });
 
+  it('follows the creator after accepted authorization without a second follow prompt', async () => {
+    const transport = capabilityTransport();
+    let authenticated = false;
+    const originalRequest = transport.request.bind(transport);
+    transport.request = async (request) => {
+      if (request.path === '/v1/public/v1/access/check') {
+        return {
+          status: 200,
+          body: {
+            decisions: {
+              dingdong: authenticated
+                ? {
+                    allowed: transport.requests.some(
+                      (candidate) =>
+                        candidate.path === '/v1/public/v1/follow' && candidate.method === 'PUT',
+                    ),
+                    reason: transport.requests.some(
+                      (candidate) =>
+                        candidate.path === '/v1/public/v1/follow' && candidate.method === 'PUT',
+                    )
+                      ? 'FOLLOWING'
+                      : 'FOLLOW_REQUIRED',
+                    nextAction: transport.requests.some(
+                      (candidate) =>
+                        candidate.path === '/v1/public/v1/follow' && candidate.method === 'PUT',
+                    )
+                      ? null
+                      : 'FOLLOW',
+                  }
+                : { allowed: false, reason: 'AUTH_REQUIRED', nextAction: 'SIGN_IN' },
+            },
+          },
+        };
+      }
+      const response = await originalRequest(request);
+      if (request.path === '/v1/public/v1/auth/exchange') authenticated = true;
+      return response;
+    };
+    const presenter = vi.fn(async (interaction: AccessInteraction) => {
+      const result = await interaction.perform();
+      if (result.type !== 'frame') throw new Error('expected auth frame');
+      const authorize = transport.requests.find(
+        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: 'https://callback.test',
+          data: {
+            type: 'viceme:auth:complete',
+            workKey: 'wrk_test',
+            channel: (authorize?.body as { channel?: string }).channel,
+            code: 'a'.repeat(32),
+            codeVerifier: 'b'.repeat(43),
+          },
+        }),
+      );
+      await result.completion;
+      return 'acted' as const;
+    });
+    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport, presenter });
+
+    await expect(client.access.require('dingdong')).resolves.toMatchObject({
+      allowed: true,
+      reason: 'FOLLOWING',
+    });
+    expect(presenter).toHaveBeenCalledOnce();
+    expect(transport.requests.filter((request) => request.method === 'PUT')).toHaveLength(1);
+  });
+
   it('returns checkout as an embedded frame instead of navigating the page', async () => {
     const transport = capabilityTransport(false);
     const presenter = vi.fn(
@@ -284,7 +353,7 @@ describe('creator access capabilities', () => {
     });
   });
 
-  it('sends an explicit H5 client type when the browser reports mobile emulation', async () => {
+  it('keeps the QR flow clickable when Chrome reports mobile emulation', async () => {
     const descriptor = Object.getOwnPropertyDescriptor(navigator, 'userAgentData');
     Object.defineProperty(navigator, 'userAgentData', {
       configurable: true,
@@ -309,10 +378,36 @@ describe('creator access capabilities', () => {
       const authorize = transport.requests.find(
         (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
       );
-      expect(authorize?.body).toMatchObject({ clientType: 'h5' });
+      expect(authorize?.body).toMatchObject({ clientType: 'pc' });
     } finally {
       if (descriptor) Object.defineProperty(navigator, 'userAgentData', descriptor);
       else Reflect.deleteProperty(navigator, 'userAgentData');
+    }
+  });
+
+  it('uses the H5 authorization flow inside WeChat', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(navigator, 'userAgent');
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 MicroMessenger/8.0.50',
+    });
+    const transport = capabilityTransport();
+    const presenter = vi.fn(async (interaction: AccessInteraction) => {
+      const result = await interaction.perform();
+      if (result.type !== 'frame') throw new Error('expected auth frame');
+      result.cancel();
+      return 'dismissed' as const;
+    });
+    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport, presenter });
+
+    try {
+      await expect(client.auth.signIn()).rejects.toMatchObject({ code: 'AUTH_CANCELLED' });
+      const authorize = transport.requests.find(
+        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+      );
+      expect(authorize?.body).toMatchObject({ clientType: 'h5' });
+    } finally {
+      if (descriptor) Object.defineProperty(navigator, 'userAgent', descriptor);
     }
   });
 

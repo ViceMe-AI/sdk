@@ -65,9 +65,9 @@ if (client.hasCapability('danmaku')) {
 const decisions = await client.access.checkMany(['dingdong', 'emperor']);
 
 // From a gated user gesture. A denied decision opens the ViceMe in-page Web
-// Component; follow/login/checkout require a second,
-// explicit action inside that interface. Login and payment remain in the
-// bottom sheet or modal instead of navigating the creator page.
+// Component. Accepting creator authorization also follows that creator;
+// payment method selection and confirmation remain explicit. Authorization
+// and payment stay in the bottom sheet or modal.
 await client.access.require('emperor');
 
 client.destroy();
