@@ -1,11 +1,49 @@
 # Changelog
 
-## Unreleased
+## [0.2.0] - 2026-08-19
 
-- Add the `@viceme-ai/sdk/danmaku` hosted overlay capability and publish it in
-  the CDN release manifest.
-- Derive opaque page-position anchors from canonical URL and 10% scroll
-  buckets without requiring host-page event integration.
+### Features
+
+- 支持作品权益访问结果 (`c9293b9`)
+- 增加隔离的 POC 手动发布链 (`7f89b8f`)
+- 调整微信登录与支付交互 (`1dc2f72`)
+- 支持独立预览环境托管 (`836172a`)
+- 提供托管式弹幕能力 (`687f9cb`)
+- 优化默认访问交互 (`d42102d`)
+- 内嵌登录与支付交互 (`36d9329`)
+- 提供权限交互抽屉 (`ba19265`)
+- 移除 Origin 白名单契约 (`16edd27`)
+- 提供创作者访问能力 (`27b7bbe`)
+
+### Fixes
+
+- 优化授权弹层交互 (`913cf02`)
+- 优化创作者授权与支付交互 (`b0a7e4f`)
+- 修复 POC 发布资产恢复 (`eb03198`)
+- 补齐 POC npm 首次发布引导 (`8a962aa`)
+- 优先继承宿主页语言 (`4c3aa11`)
+- 提示微信登录安全上下文要求 (`aa856c2`)
+- 等待弹幕框架加载后同步锚点 (`46d47e5`)
+- 等待弹幕框架加载后同步锚点 (`6649bf1`)
+- 补充预览缓存策略类型 (`a7d183e`)
+- 对齐 POC 版本缓存策略 (`39c3107`)
+- 对齐关注弹层内容与按钮布局 (`7ce2c0d`)
+- 自动恢复失效访问会话 (`04d3002`)
+- 优化访问弹层内容布局 (`d71ec34`)
+- 恢复国内生产 API 地址 (`71b0bf6`)
+- 修正国内 API 版本前缀 (`6879da8`)
+- 支持无来源会话与统一交互 (`725d652`)
+- 更新国内 API 地址 (`0f0031d`)
+- 修正移动端微信登录分流反馈 (`4837239`)
+- 修复微信登录续接并固定交互样式 (`48bcac7`)
+
+### Other Changes
+
+- 切换 POC SDK 到 OIDC 发布 (`d24edb4`)
+- 修正微信登录测试格式 (`b457098`)
+- 升级预览 SDK 版本 (`f8ce8d4`)
+- 补齐弹幕客户端能力桩 (`6645848`)
+- 撤销国内 API 版本前缀测试 (`b44d859`)
 
 ## [0.1.6] - 2026-08-15
 
