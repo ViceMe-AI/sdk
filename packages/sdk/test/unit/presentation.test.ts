@@ -72,7 +72,12 @@ describe('default access presenter', () => {
     expect(shadow.querySelector("[data-viceme='profile-name']")?.textContent).toBe('归藏');
     expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('接受');
     expect(shadow.querySelector('[data-viceme-cancel]')?.textContent).toBe('拒绝');
+    expect(shadow.querySelector("[data-viceme='description']")?.textContent).toBe('');
     expect(shadow.textContent).not.toContain('登录');
+    const styles = shadow.querySelector('style')?.textContent ?? '';
+    expect(styles).toContain("[data-action='SIGN_IN'] [data-viceme='description']");
+    expect(styles).toContain('box-sizing: border-box;');
+    expect(styles).toContain('height: min(22rem, 58dvh);');
 
     (shadow.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
@@ -138,6 +143,35 @@ describe('default access presenter', () => {
     complete();
 
     await expect(presented).resolves.toBe('acted');
+  });
+
+  it('keeps the login relay covered until the WeChat page finishes loading', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      perform: vi.fn(async () => ({
+        type: 'frame' as const,
+        url: 'about:blank#wechat-login',
+        completion: new Promise<void>(() => undefined),
+        cancel: vi.fn(),
+      })),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
+    (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(shadow.querySelector('iframe')?.dataset.ready).toBe('false');
+    });
+    const frame = shadow.querySelector('iframe')!;
+
+    frame.dispatchEvent(new Event('load'));
+    expect(frame.dataset.ready).toBe('false');
+    frame.dispatchEvent(new Event('load'));
+    await vi.waitFor(() => expect(frame.dataset.ready).toBe('true'));
+
+    (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
   });
 
   it('cancels an active checkout frame from the backdrop', async () => {

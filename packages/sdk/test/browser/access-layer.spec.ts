@@ -20,6 +20,16 @@ test('creator authorization stays clickable in Chrome mobile emulation', async (
   await expect(dialog.getByRole('button', { name: '接受' })).toBeEnabled();
   await expect(dialog.getByRole('button', { name: '拒绝' })).toBeEnabled();
   await expect(dialog).not.toContainText('登录');
+  await expect(dialog).not.toContainText('接受后将通过微信');
+  const acceptBox = await dialog.getByRole('button', { name: '接受' }).boundingBox();
+  const rejectBox = await dialog.getByRole('button', { name: '拒绝' }).boundingBox();
+  const dialogBox = await dialog.boundingBox();
+  expect(acceptBox).not.toBeNull();
+  expect(rejectBox).not.toBeNull();
+  expect(dialogBox).not.toBeNull();
+  expect(Math.abs(acceptBox!.y - rejectBox!.y)).toBeLessThan(1);
+  expect(Math.abs(acceptBox!.height - rejectBox!.height)).toBeLessThan(1);
+  expect(dialogBox!.height).toBeLessThan(320);
 
   await dialog.getByRole('button', { name: '接受' }).click();
   await expect
