@@ -35,6 +35,9 @@ test('creator authorization stays clickable in Chrome mobile emulation', async (
   await expect
     .poll(() => page.evaluate(() => window.__authorizeBody))
     .toMatchObject({ clientType: 'pc' });
+  const authorizationFrame = page.locator('viceme-access-layer').locator('iframe').contentFrame();
+  await authorizationFrame.getByRole('button', { name: '继续授权' }).click();
+  await expect(authorizationFrame.getByText('已点击')).toBeVisible();
 
   await context.close();
 });

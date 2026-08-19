@@ -160,20 +160,24 @@ function ensureAccessLayerElement(): void {
             overflow-wrap: anywhere;
             color: #71717a;
           }
-          [data-viceme='profile-copy'] { min-width: 0; }
+          [data-viceme='profile-header'] { min-width: 0; }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='description'],
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='description'] { display: none; }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile'][data-visible='true'],
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile'][data-visible='true'] {
-            display: flex;
-            align-items: center;
-            gap: 0.875rem;
+            display: block;
             margin: 0;
             border: 0;
             padding: 0;
             background: transparent;
             box-shadow: none;
             text-align: left;
+          }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-header'],
+          [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile-header'] {
+            display: flex;
+            align-items: center;
+            gap: 0.875rem;
           }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='avatar'],
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='avatar-fallback'],
@@ -188,6 +192,11 @@ function ensureAccessLayerElement(): void {
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-name'],
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile-name'] {
             font-size: 1.125rem;
+          }
+          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-description'],
+          [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile-description'] {
+            margin-top: 0.875rem;
+            line-height: 1.625;
           }
           [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='actions'],
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='actions'] {
@@ -245,28 +254,9 @@ function ensureAccessLayerElement(): void {
             border-radius: 0.75rem;
             background: #ffffff;
           }
-          [data-viceme='frame-loading'] {
-            position: absolute;
-            inset: 1.25rem;
-            display: none;
-            place-items: center;
-            border-radius: 0.75rem;
-            background: #ffffff;
-          }
-          [data-viceme='frame-loading']::after {
-            width: 1.5rem;
-            height: 1.5rem;
-            border: 2px solid #e4e4e7;
-            border-top-color: #18181b;
-            border-radius: 999px;
-            content: '';
-            animation: viceme-spin 700ms linear infinite;
-          }
           [data-viceme='panel'][data-frame='true'] { max-height: 92dvh; }
           [data-viceme='panel'][data-frame='true'] [data-viceme='content'] { display: none; }
           [data-viceme='panel'][data-frame='true'] [data-viceme='frame'] { display: block; }
-          [data-viceme='panel'][data-frame='true'] [data-viceme='frame'][data-ready='false'] { visibility: hidden; }
-          [data-viceme='panel'][data-frame='true'] [data-viceme='frame'][data-ready='false'] + [data-viceme='frame-loading'] { display: grid; }
           [data-viceme='panel'][data-action='SIGN_IN'][data-frame='true'] [data-viceme='frame'] {
             height: min(22rem, 58dvh);
           }
@@ -285,19 +275,18 @@ function ensureAccessLayerElement(): void {
             [data-viceme='panel'] { animation: viceme-enter 160ms ease-out; }
             @keyframes viceme-enter { from { opacity: 0; transform: translateY(1rem); } }
           }
-          @keyframes viceme-spin { to { transform: rotate(360deg); } }
         </style>
         <button data-viceme="backdrop" type="button" tabindex="-1" aria-label="关闭"></button>
         <section data-viceme="panel" role="dialog" aria-modal="true" aria-label="ViceMe 授权">
           <div data-viceme="content">
             <p data-viceme="description"></p>
             <section data-viceme="profile" aria-label="关注对象">
-              <img data-viceme="avatar" hidden />
-              <span data-viceme="avatar-fallback" aria-hidden="true"></span>
-              <div data-viceme="profile-copy">
+              <div data-viceme="profile-header">
+                <img data-viceme="avatar" hidden />
+                <span data-viceme="avatar-fallback" aria-hidden="true"></span>
                 <p data-viceme="profile-name"></p>
-                <p data-viceme="profile-description"></p>
               </div>
+              <p data-viceme="profile-description"></p>
             </section>
             <p data-viceme="error" role="alert" aria-live="polite"></p>
             <div data-viceme="actions">
@@ -306,7 +295,6 @@ function ensureAccessLayerElement(): void {
             </div>
           </div>
           <iframe data-viceme="frame" title="" referrerpolicy="no-referrer" allow="payment"></iframe>
-          <div data-viceme="frame-loading" aria-hidden="true"></div>
         </section>
       `;
       const panel = shadow.querySelector<HTMLElement>("[data-viceme='panel']")!;
@@ -356,17 +344,6 @@ function ensureAccessLayerElement(): void {
 
       let activeFrame: AccessFrameAction | null = null;
       let activeFrameOrigin: string | null = null;
-      let frameReadyTimer: ReturnType<typeof setTimeout> | null = null;
-      let frameLoadCount = 0;
-      frame.addEventListener('load', () => {
-        if (!activeFrame) return;
-        frameLoadCount += 1;
-        if (this.interaction.action === 'SIGN_IN' && frameLoadCount === 1) return;
-        if (frameReadyTimer) clearTimeout(frameReadyTimer);
-        frameReadyTimer = setTimeout(() => {
-          frame.dataset.ready = 'true';
-        }, 180);
-      });
       const resizeFrame = (event: MessageEvent) => {
         if (
           !activeFrame ||
@@ -391,7 +368,6 @@ function ensureAccessLayerElement(): void {
       };
       window.addEventListener('message', resizeFrame);
       const close = (result: AccessPresentationResult) => {
-        if (frameReadyTimer) clearTimeout(frameReadyTimer);
         window.removeEventListener('message', resizeFrame);
         this.dispatchEvent(new CustomEvent('viceme:access-layer-close', { detail: result }));
       };
@@ -431,8 +407,6 @@ function ensureAccessLayerElement(): void {
             activeFrame = result;
             activeFrameOrigin = new URL(result.url, window.location.href).origin;
             panel.dataset.frame = 'true';
-            frameLoadCount = 0;
-            frame.dataset.ready = 'false';
             frame.src = result.url;
             frame.focus();
             await result.completion;
@@ -443,7 +417,6 @@ function ensureAccessLayerElement(): void {
           activeFrame = null;
           activeFrameOrigin = null;
           panel.dataset.frame = 'false';
-          frame.removeAttribute('data-ready');
           frame.style.removeProperty('height');
           frame.removeAttribute('src');
           error.textContent = actionErrorCopy(caught);
