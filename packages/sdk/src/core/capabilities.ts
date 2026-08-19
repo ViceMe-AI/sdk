@@ -200,11 +200,6 @@ function resolveLocale(): 'zh-CN' | 'en-US' {
     : 'zh-CN';
 }
 
-function resolveWechatClientType(): 'h5' | 'pc' {
-  if (typeof navigator === 'undefined') return 'pc';
-  return /MicroMessenger/i.test(navigator.userAgent) ? 'h5' : 'pc';
-}
-
 export function createCapabilities(deps: CapabilityDeps): {
   auth: AuthCapability;
   follow: FollowCapability;
@@ -296,7 +291,8 @@ export function createCapabilities(deps: CapabilityDeps): {
       path: '/v1/public/v1/auth/wechat/authorize',
       body: {
         channel,
-        clientType: resolveWechatClientType(),
+        // Keep the debuggable QR flow until the embedded WeChat H5 design is restored.
+        clientType: 'pc',
         locale: resolveLocale(),
       },
     });

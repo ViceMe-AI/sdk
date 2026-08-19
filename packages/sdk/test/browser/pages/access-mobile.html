@@ -45,7 +45,7 @@
         } else if (url.pathname.endsWith('/auth/wechat/authorize')) {
           window.__authorizeBody = body;
           response = {
-            authorizationUrl: 'about:blank#wechat-authorization',
+            authorizationUrl: `${window.location.origin}/pages/authorization-frame.html`,
             completionOrigin: window.location.origin,
           };
         } else {

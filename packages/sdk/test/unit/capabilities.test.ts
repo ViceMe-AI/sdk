@@ -385,7 +385,7 @@ describe('creator access capabilities', () => {
     }
   });
 
-  it('uses the H5 authorization flow inside WeChat', async () => {
+  it('temporarily keeps the QR authorization flow inside WeChat', async () => {
     const descriptor = Object.getOwnPropertyDescriptor(navigator, 'userAgent');
     Object.defineProperty(navigator, 'userAgent', {
       configurable: true,
@@ -405,7 +405,7 @@ describe('creator access capabilities', () => {
       const authorize = transport.requests.find(
         (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
       );
-      expect(authorize?.body).toMatchObject({ clientType: 'h5' });
+      expect(authorize?.body).toMatchObject({ clientType: 'pc' });
     } finally {
       if (descriptor) Object.defineProperty(navigator, 'userAgent', descriptor);
     }

@@ -70,6 +70,16 @@ describe('default access presenter', () => {
 
     expect(shadow.querySelector("[data-viceme='title']")).toBeNull();
     expect(shadow.querySelector("[data-viceme='profile-name']")?.textContent).toBe('归藏');
+    const profileHeader = shadow.querySelector("[data-viceme='profile-header']");
+    expect(profileHeader?.contains(shadow.querySelector("[data-viceme='avatar-fallback']"))).toBe(
+      true,
+    );
+    expect(profileHeader?.contains(shadow.querySelector("[data-viceme='profile-name']"))).toBe(
+      true,
+    );
+    expect(
+      profileHeader?.contains(shadow.querySelector("[data-viceme='profile-description']")),
+    ).toBe(false);
     expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('接受');
     expect(shadow.querySelector('[data-viceme-cancel]')?.textContent).toBe('拒绝');
     expect(shadow.querySelector("[data-viceme='description']")?.textContent).toBe('');
@@ -145,7 +155,7 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('acted');
   });
 
-  it('keeps the login relay covered until the WeChat page finishes loading', async () => {
+  it('shows the login relay directly without a click-blocking loading layer', async () => {
     const presented = defaultAccessPresenter({
       featureKey: 'auth',
       reason: 'AUTH_REQUIRED',
@@ -161,14 +171,11 @@ describe('default access presenter', () => {
     const shadow = layer.shadowRoot!;
     (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
     await vi.waitFor(() => {
-      expect(shadow.querySelector('iframe')?.dataset.ready).toBe('false');
+      expect(shadow.querySelector('iframe')?.getAttribute('src')).toBe('about:blank#wechat-login');
     });
     const frame = shadow.querySelector('iframe')!;
-
-    frame.dispatchEvent(new Event('load'));
-    expect(frame.dataset.ready).toBe('false');
-    frame.dispatchEvent(new Event('load'));
-    await vi.waitFor(() => expect(frame.dataset.ready).toBe('true'));
+    expect(frame.hasAttribute('data-ready')).toBe(false);
+    expect(shadow.querySelector("[data-viceme='frame-loading']")).toBeNull();
 
     (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
