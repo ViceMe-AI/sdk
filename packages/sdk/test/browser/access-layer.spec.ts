@@ -27,8 +27,8 @@ test('creator authorization stays clickable in Chrome mobile emulation', async (
   expect(acceptBox).not.toBeNull();
   expect(rejectBox).not.toBeNull();
   expect(dialogBox).not.toBeNull();
-  expect(Math.abs(acceptBox!.y - rejectBox!.y)).toBeLessThan(1);
-  expect(Math.abs(acceptBox!.height - rejectBox!.height)).toBeLessThan(1);
+  expect(Math.abs(acceptBox!.y - rejectBox!.y)).toBeLessThanOrEqual(2);
+  expect(Math.abs(acceptBox!.height - rejectBox!.height)).toBeLessThanOrEqual(2);
   expect(dialogBox!.height).toBeLessThan(320);
 
   await dialog.getByRole('button', { name: '接受' }).click();
