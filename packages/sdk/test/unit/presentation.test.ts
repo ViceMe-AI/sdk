@@ -141,6 +141,9 @@ describe('default access presenter', () => {
       );
     });
     const frame = layer?.shadowRoot?.querySelector('iframe') as HTMLIFrameElement;
+    expect(layer?.shadowRoot?.querySelector('style')?.textContent).toContain(
+      'height: min(72dvh, 40rem);',
+    );
     window.dispatchEvent(
       new MessageEvent('message', {
         data: { type: 'viceme:frame:resize', height: 360 },
