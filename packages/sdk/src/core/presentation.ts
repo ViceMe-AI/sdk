@@ -249,7 +249,7 @@ function ensureAccessLayerElement(): void {
           [data-viceme='frame'] {
             display: none;
             width: 100%;
-            height: min(72dvh, 42rem);
+            height: min(72dvh, 40rem);
             border: 0;
             border-radius: 0.75rem;
             background: #ffffff;
