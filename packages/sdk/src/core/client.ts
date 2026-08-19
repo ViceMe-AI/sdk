@@ -51,6 +51,8 @@ export class ViceMeClientImpl implements ViceMeClient {
   readonly #config: ViceMeConfig;
   readonly #internalSignal = new AbortController();
   #readyPromise: Promise<void> | undefined;
+  /** Detaches the caller-signal listener; undefined when none was attached. */
+  #detachCallerAbort: (() => void) | undefined;
 
   constructor(deps: ViceMeClientDeps) {
     this.#config = deps.config;
@@ -74,7 +76,12 @@ export class ViceMeClientImpl implements ViceMeClient {
       // synchronously so a pre-cancelled caller cannot issue session
       // requests or reach the network at all.
       if (callerSignal.aborted) abortInternal();
-      else callerSignal.addEventListener('abort', abortInternal, { once: true });
+      else {
+        callerSignal.addEventListener('abort', abortInternal, { once: true });
+        this.#detachCallerAbort = () => {
+          callerSignal.removeEventListener('abort', abortInternal);
+        };
+      }
     }
   }
 
@@ -155,5 +162,9 @@ export class ViceMeClientImpl implements ViceMeClient {
     this.#session.destroy();
     this.#lifecycle.clearListeners();
     this.#readyPromise = undefined;
+    // A destroyed client must not stay reachable through the caller's own
+    // (possibly long-lived, never-aborting) signal.
+    this.#detachCallerAbort?.();
+    this.#detachCallerAbort = undefined;
   }
 }

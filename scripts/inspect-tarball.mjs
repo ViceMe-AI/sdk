@@ -12,6 +12,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readApiMajor } from './lib/version-source.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -117,7 +118,9 @@ try {
   if (!output.includes('smoke-ok')) throw new Error(`smoke test failed: ${output}`);
 
   const manifest = JSON.parse(readFileSync(join(pkgDir, 'dist', 'manifest.json'), 'utf8'));
-  if (manifest.apiMajor !== 1) throw new Error('manifest apiMajor mismatch');
+  if (manifest.apiMajor !== readApiMajor(sdkDir)) {
+    throw new Error('manifest apiMajor does not match src/version.ts API_MAJOR');
+  }
   if (!manifest.files['index.js']?.sha256) throw new Error('manifest missing index.js digest');
 
   console.log(`tarball audit passed (${entries.length} entries, ${output.trim()})`);

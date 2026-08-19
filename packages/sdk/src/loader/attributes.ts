@@ -80,6 +80,14 @@ export function parseLoaderAttributes(element: Element): LoaderAttributes {
       'Loader attribute "data-viceme-target" is required when features are declared.',
     );
   }
+  try {
+    // Probe-parse the selector now: an invalid selector is a configuration
+    // error and must fail closed here, never surface later as a retryable
+    // INTERNAL_ERROR from querySelectorAll.
+    element.matches(target);
+  } catch {
+    throw configInvalid('Loader attribute "data-viceme-target" is not a valid CSS selector.');
+  }
 
   const rawTheme = element.getAttribute('data-viceme-theme');
   if (rawTheme !== null && !THEMES.has(rawTheme)) {

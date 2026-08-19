@@ -15,8 +15,8 @@ receipt within 5 business days.
 
 - All packages published from this repository (`@viceme-ai/sdk` and its
   subpaths).
-- The CDN auto-loader and release artifacts published to `cdn.viceme.cn` /
-  the GLOBAL CDN endpoint.
+- The public auto-loader and release artifacts published under
+  `https://s3.viceme.cn/viceme-sdk/` and `https://s3.viceme.ai/viceme-sdk/`.
 
 ## Out of scope
 
