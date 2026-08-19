@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.3.3, sha256 e7bf753dfd89d6de…)
+ * (contractVersion 0.3.3, sha256 9d2219499d6087a3…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -243,7 +243,7 @@ export interface components {
         AccessDecision: {
             allowed: boolean;
             /** @enum {string} */
-            reason: "OWNER" | "FOLLOWING" | "PURCHASED" | "AUTH_REQUIRED" | "FOLLOW_REQUIRED" | "PURCHASE_REQUIRED" | "FEATURE_NOT_FOUND" | "FEATURE_DISABLED" | "POLICY_UNSUPPORTED";
+            reason: "OWNER" | "FOLLOWING" | "PURCHASED" | "ENTITLED" | "AUTH_REQUIRED" | "FOLLOW_REQUIRED" | "PURCHASE_REQUIRED" | "FEATURE_NOT_FOUND" | "FEATURE_DISABLED" | "POLICY_UNSUPPORTED";
             /** @enum {string|null} */
             nextAction: "SIGN_IN" | "FOLLOW" | "CHECKOUT" | null;
         };

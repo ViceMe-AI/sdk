@@ -30,6 +30,7 @@ export type AccessReason =
   | 'OWNER'
   | 'FOLLOWING'
   | 'PURCHASED'
+  | 'ENTITLED'
   | 'AUTH_REQUIRED'
   | 'FOLLOW_REQUIRED'
   | 'PURCHASE_REQUIRED'
@@ -146,6 +147,7 @@ function parseDecision(value: unknown): AccessDecision {
     'OWNER',
     'FOLLOWING',
     'PURCHASED',
+    'ENTITLED',
     'AUTH_REQUIRED',
     'FOLLOW_REQUIRED',
     'PURCHASE_REQUIRED',
