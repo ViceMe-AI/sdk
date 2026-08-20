@@ -15,7 +15,7 @@ name: SDK release publication
 #
 # Recovery: workflow_dispatch with the existing tag converges every step —
 # npm (integrity match), release assets (idempotent), and both S3 regions
-# (immutable put semantics). The /sdk/v1 stable alias stays a separate,
+# (immutable put semantics). The /viceme-sdk/v1 stable alias stays a separate,
 # explicit Promote CDN operation (promote forward / authorized rollback).
 
 on:

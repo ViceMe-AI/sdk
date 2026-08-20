@@ -10,7 +10,7 @@
  *   - target bytes differ           -> HARD FAIL (immutable violation)
  *
  * Usage:
- *   node scripts/upload-plan.mjs --dist <dir> --base https://<host>/sdk/<version>/
+ *   node scripts/upload-plan.mjs --dist <dir> --base https://<host>/viceme-sdk/<version>/
  *
  * Prints the files to upload (one POSIX relative path per line) to stdout.
  * The workflow then uploads exactly those files, per region, and re-runs
@@ -31,7 +31,7 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 if (!args.dist || !args.base) {
-  console.error('usage: upload-plan.mjs --dist <dir> --base https://host/sdk/<version>/');
+  console.error('usage: upload-plan.mjs --dist <dir> --base https://host/viceme-sdk/<version>/');
   process.exit(2);
 }
 

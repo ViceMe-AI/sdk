@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Atomic stable-alias pointer writer with monotonic-forward / authorized
- * rollback semantics (review P1: a stale rerun must never pull `/sdk/v1`
+ * rollback semantics (review P1: a stale rerun must never pull `/viceme-sdk/v1`
  * backward, and rollback must be an explicit, preconditions-checked
  * operation).
  *
@@ -22,7 +22,7 @@
  * Usage:
  *   node scripts/write-alias-pointer.mjs --version 1.2.3 \
  *     --regions cn,global \
- *     --hosts cn=https://cdn.viceme.cn,global=https://cdn.viceme.ai \
+ *     --hosts cn=https://s3.viceme.cn,global=https://s3.viceme.ai \
  *     --upload-command "<cmd invoked as: cmd <region> <local-file> <object-key>>" \
  *     [--mode promote|rollback] [--from-current 1.2.2] \
  *     [--purge-command "<cmd invoked as: cmd <region> <object-key>>"] \

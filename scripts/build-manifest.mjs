@@ -15,6 +15,7 @@ import { dirname, join, relative } from 'node:path';
 import { createGzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
+import { readApiMajor } from './lib/version-source.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sdkDir = join(here, '..', 'packages', 'sdk');
@@ -52,7 +53,9 @@ async function gzipBytes(file) {
 const files = await listFiles(distDir);
 const manifest = {
   version: pkg.version,
-  apiMajor: 1,
+  // Must come from the runtime source of truth: the loader refuses a
+  // manifest whose major does not match its own API_MAJOR.
+  apiMajor: readApiMajor(sdkDir),
   loader: 'viceme.min.js',
   features: {},
   files: {},

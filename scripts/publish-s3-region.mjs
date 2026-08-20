@@ -14,8 +14,8 @@
  * Usage (secret values arrive via env, never argv):
  *   S3_ENDPOINT=... S3_BUCKET=viceme-sdk S3_ACCESS_KEY_ID=... \
  *   S3_SECRET_ACCESS_KEY=... node scripts/publish-s3-region.mjs \
- *     --dist release/dist --prefix sdk/1.2.3 \
- *     --public-base https://s3.viceme.cn/sdk/1.2.3/ --label CN
+ *     --dist release/dist --prefix 1.2.3/ \
+ *     --public-base https://s3.viceme.cn/viceme-sdk/1.2.3/ --label CN
  *
  * Optional env: EXPECT_BUCKET (default viceme-sdk — the dedicated SDK
  * bucket, never shared), AWS_BIN (tests).

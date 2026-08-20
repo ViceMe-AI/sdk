@@ -296,6 +296,10 @@ test.describe('attribute validation (fail closed)', () => {
     },
     { name: 'target matches nothing', attrs: { ...VALID_ATTRS, 'data-viceme-target': '#nope' } },
     { name: 'target matches multiple', attrs: { ...VALID_ATTRS, 'data-viceme-target': '.multi' } },
+    {
+      name: 'target is not a valid CSS selector',
+      attrs: { ...VALID_ATTRS, 'data-viceme-target': '#host[' },
+    },
   ];
 
   for (const { name, attrs } of cases) {
