@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTestViceMe, createMemoryTransport, FIXTURE_WORK } from '../../src/testing.ts';
 import { createFetchTransport } from '../../src/transport/transport.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
@@ -84,6 +84,29 @@ describe('ViceMeClient', () => {
     });
     expect(transport.requests).toHaveLength(0);
     expect(client.state).toBe('FAILED');
+  });
+
+  it('destroy() detaches the caller-signal abort listener', async () => {
+    // A long-lived host AbortController must not retain a destroyed client
+    // through the abort listener attached in the constructor.
+    const controller = new AbortController();
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport: createMemoryTransport({ work: FIXTURE_WORK }),
+      signal: controller.signal,
+    });
+    await client.ready();
+    client.destroy();
+
+    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    // Aborting after destroy stays a no-op for the destroyed client.
+    controller.abort(new DOMException('late cancel', 'AbortError'));
+    expect(client.state).toBe('DESTROYED');
+    await expect(client.ready()).rejects.toSatisfy((err: unknown) => {
+      return err instanceof ViceMeError && err.code === 'CLIENT_DESTROYED';
+    });
   });
 
   it('destroy during body read cancels the response and fails closed', async () => {
