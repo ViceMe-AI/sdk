@@ -10,6 +10,8 @@
     <script type="module">
       window.__authorizeBody = null;
       let following = false;
+      const followOnly = new URLSearchParams(window.location.search).has('follow');
+      const checkoutOnly = new URLSearchParams(window.location.search).has('checkout');
       globalThis.fetch = async (input, init = {}) => {
         const url = new URL(typeof input === 'string' ? input : input.url);
         const body = init.body ? JSON.parse(String(init.body)) : null;
@@ -28,7 +30,11 @@
             decisions: {
               dingdong: following
                 ? { allowed: true, reason: 'FOLLOWING', nextAction: null }
-                : { allowed: false, reason: 'AUTH_REQUIRED', nextAction: 'SIGN_IN' },
+                : checkoutOnly
+                  ? { allowed: false, reason: 'PURCHASE_REQUIRED', nextAction: 'CHECKOUT' }
+                  : followOnly
+                    ? { allowed: false, reason: 'FOLLOW_REQUIRED', nextAction: 'FOLLOW' }
+                    : { allowed: false, reason: 'AUTH_REQUIRED', nextAction: 'SIGN_IN' },
             },
           };
         } else if (url.pathname.endsWith('/follow') && init.method === 'GET') {
@@ -41,6 +47,24 @@
               avatarUrl: null,
               description: 'AI 创业者',
             },
+          };
+        } else if (url.pathname.endsWith('/follow') && init.method === 'PUT') {
+          following = true;
+          response = {
+            following: true,
+            followedAt: new Date().toISOString(),
+            target: {
+              kind: 'CREATOR',
+              displayName: '归藏',
+              avatarUrl: null,
+              description: 'AI 创业者',
+            },
+          };
+        } else if (url.pathname.endsWith('/checkout/sessions')) {
+          response = {
+            checkoutUrl: `${window.location.origin}/pages/authorization-frame.html`,
+            alreadyOwned: false,
+            completionOrigin: window.location.origin,
           };
         } else if (url.pathname.endsWith('/auth/wechat/authorize')) {
           window.__authorizeBody = body;

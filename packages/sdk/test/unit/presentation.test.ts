@@ -23,27 +23,37 @@ describe('default access presenter', () => {
     expect(layer?.shadowRoot?.querySelector("[data-viceme='panel']")?.getAttribute('role')).toBe(
       'dialog',
     );
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='action']")?.textContent).toBe('关注');
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='action']")?.textContent).toBe(
+      '关注并继续',
+    );
     expect(layer?.shadowRoot?.querySelector("[data-viceme='profile-name']")?.textContent).toBe(
-      '归藏',
+      '归藏 · Web 创作者',
     );
     expect(layer?.shadowRoot?.querySelector("[data-viceme='dismiss']")).toBeNull();
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).toBeNull();
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='title']")).toBeNull();
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).not.toBeNull();
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='title']")?.textContent).toBe(
+      '关注创作者',
+    );
     expect(layer?.shadowRoot?.querySelector("[data-viceme='description']")?.textContent).toBe('');
     expect(
       layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
     ).toBe('专注于 AI 创作工具与智能体工作流。');
-    expect(layer?.shadowRoot?.querySelector('[data-viceme-cancel]')?.textContent).toBe('取消');
+    expect(
+      (layer?.shadowRoot?.querySelector('[data-viceme-cancel]') as HTMLButtonElement).hidden,
+    ).toBe(true);
     expect(
       layer?.shadowRoot?.querySelector("[data-viceme='action']")?.parentElement?.dataset.single,
-    ).toBe('false');
+    ).toBe('true');
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='benefit']")?.textContent).toBe(
+      '关注 归藏，获取作品更新与专属权益',
+    );
+    expect(layer?.shadowRoot?.textContent).not.toContain('好评');
     const styles = layer?.shadowRoot?.querySelector('style')?.textContent ?? '';
     expect(styles).toContain("[data-viceme='panel'][data-action='FOLLOW'] [data-viceme='actions']");
     expect(styles).toContain('flex: 1 1 0;');
     expect(layer?.shadowRoot?.innerHTML).not.toMatch(/\bpart=|var\(|Canvas|inherit/);
 
-    (layer?.shadowRoot?.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
+    (layer?.shadowRoot?.querySelector("[data-viceme='close']") as HTMLButtonElement).click();
 
     await expect(presented).resolves.toBe('dismissed');
     expect(perform).not.toHaveBeenCalled();
@@ -68,7 +78,7 @@ describe('default access presenter', () => {
     expect(layer).not.toBeNull();
     const shadow = layer!.shadowRoot!;
 
-    expect(shadow.querySelector("[data-viceme='title']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='title']")).not.toBeNull();
     expect(shadow.querySelector("[data-viceme='profile-name']")?.textContent).toBe('归藏');
     const profileHeader = shadow.querySelector("[data-viceme='profile-header']");
     expect(profileHeader?.contains(shadow.querySelector("[data-viceme='avatar-fallback']"))).toBe(
@@ -113,7 +123,7 @@ describe('default access presenter', () => {
       layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
     ).toBe('关注后即可继续使用此功能。');
 
-    (layer?.shadowRoot?.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
+    (layer?.shadowRoot?.querySelector("[data-viceme='close']") as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
   });
 
@@ -144,6 +154,9 @@ describe('default access presenter', () => {
     expect(layer?.shadowRoot?.querySelector('style')?.textContent).toContain(
       'height: min(72dvh, 40rem);',
     );
+    expect(layer?.shadowRoot?.querySelector('style')?.textContent).toContain(
+      'width: min(36rem, 100%);',
+    );
     window.dispatchEvent(
       new MessageEvent('message', {
         data: { type: 'viceme:frame:resize', height: 360 },
@@ -152,7 +165,7 @@ describe('default access presenter', () => {
       }),
     );
     expect(frame.style.height).toBe('360px');
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).toBeNull();
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).not.toBeNull();
     complete();
 
     await expect(presented).resolves.toBe('acted');
