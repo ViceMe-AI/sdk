@@ -164,11 +164,11 @@ package is published under the `poc` dist-tag, then the exact npm bytes are
 attached to the POC GitHub prerelease and written to:
 
 ```text
-https://viceme-shop-storage-poc.preview.tencent-zeabur.cn/start/poc/sdk/releases/v<version>/...
+https://s3-poc.viceme.cn/start/poc/sdk/releases/v<version>/...
 ```
 
 Both SDK regions are compiled against the POC Gateway
-`https://viceme-shop-web-poc.preview.tencent-zeabur.cn/api`; neither build can
+`https://poc.viceme.cn/api`; neither build can
 fall back to the formal API. The workflow never writes the formal npm package,
 `latest` tag, stable release tags, or formal CN/GLOBAL S3 buckets.
 

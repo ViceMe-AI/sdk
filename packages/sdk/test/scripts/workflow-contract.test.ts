@@ -138,6 +138,9 @@ describe('workflow contracts', () => {
     expect(publication).toContain('test "${GITHUB_REF}" = "refs/heads/poc"');
     expect(publication).toContain("POC_PACKAGE: '@viceme-ai/sdk-poc'");
     expect(publication).toContain('DIST_TAG: poc');
+    expect(publication).toContain("POC_API_BASE_URL: 'https://poc.viceme.cn/api'");
+    expect(publication).toContain("POC_WIDGET_ORIGIN: 'https://poc.viceme.cn'");
+    expect(publication).toContain("POC_PUBLIC_STORAGE_BASE: 'https://s3-poc.viceme.cn/start'");
     expect(publication).toContain('node scripts/prepare-poc-package.mjs --version "$VERSION"');
     expect(publication).toContain('id-token: write');
     expect(publication).toContain('npm install --global npm@11.12.1');
@@ -150,5 +153,8 @@ describe('workflow contracts', () => {
     expect(publication).toContain('EXPECT_BUCKET: start');
     expect(publication).not.toContain('s3.viceme.cn/viceme-sdk');
     expect(publication).not.toContain('s3.viceme.ai/viceme-sdk');
+
+    const recovery = workflow('poc-artifact-recovery.yml');
+    expect(recovery).toContain("POC_PUBLIC_STORAGE_BASE: 'https://s3-poc.viceme.cn/start'");
   });
 });

@@ -24,9 +24,9 @@ concurrency:
 env:
   POC_PACKAGE: '@viceme-ai/sdk-poc'
   DIST_TAG: poc
-  POC_API_BASE_URL: 'https://viceme-shop-web-poc.preview.tencent-zeabur.cn/api'
-  POC_WIDGET_ORIGIN: 'https://viceme-shop-web-poc.preview.tencent-zeabur.cn'
-  POC_PUBLIC_STORAGE_BASE: 'https://viceme-shop-storage-poc.preview.tencent-zeabur.cn/start'
+  POC_API_BASE_URL: 'https://poc.viceme.cn/api'
+  POC_WIDGET_ORIGIN: 'https://poc.viceme.cn'
+  POC_PUBLIC_STORAGE_BASE: 'https://s3-poc.viceme.cn/start'
 
 jobs:
   metadata:

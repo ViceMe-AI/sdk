@@ -19,7 +19,7 @@ concurrency:
 
 env:
   POC_PACKAGE: '@viceme-ai/sdk-poc'
-  POC_PUBLIC_STORAGE_BASE: 'https://viceme-shop-storage-poc.preview.tencent-zeabur.cn/start'
+  POC_PUBLIC_STORAGE_BASE: 'https://s3-poc.viceme.cn/start'
 
 jobs:
   recover:
