@@ -31,8 +31,8 @@ if (access.dingdong.allowed) enableDingdong();
 if (access.emperor.allowed) enableEmperor();
 
 // Call from a user gesture. A denied decision opens the ViceMe
-// bottom-sheet/in-page Web Component. Follow consent and creator details appear in
-// the sign-in layer; accepted authorization automatically follows the creator.
+// bottom-sheet/in-page Web Component. Creator details and recent work covers appear
+// above one authorization action; accepted authorization automatically follows.
 const decision = await client.access.require('emperor');
 if (decision.allowed) enableEmperor();
 
@@ -43,7 +43,8 @@ The SDK registers and mounts `<viceme-access-layer>` with isolated ViceMe-owned
 styles. Authorization and checkout remain inside its iframe area and complete through
 an origin- and channel-validated message; no browser popup, page navigation,
 `confirm`, or `alert` is used. Custom site presenters and style inference are
-not part of the current public contract.
+not part of the current public contract. WeChat opens directly inside the frame,
+and the checkout frame keeps a stable height while its content loads.
 
 Static HTML sites can use the CDN auto-loader instead — see the
 [repository README](https://github.com/ViceMe-AI/sdk).

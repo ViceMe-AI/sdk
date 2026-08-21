@@ -15,26 +15,29 @@ test('sign-in stays clickable in a content-sized mobile access layer', async ({
   await page.goto(`${origin}/pages/access-mobile.html`);
 
   await page.getByRole('button', { name: '打开功能' }).click();
-  const dialog = page.getByRole('dialog', { name: '接受 归藏 的授权' });
+  const dialog = page.getByRole('dialog', { name: '授权 归藏' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('归藏')).toBeVisible();
   await expect(dialog.getByText('AI 创业者')).toBeVisible();
-  await expect(dialog.getByText('关注创作者')).toBeVisible();
-  await expect(dialog.getByText('登录授权后将自动关注该创作者')).toBeVisible();
+  await expect(dialog.getByText('2 个作品')).toBeVisible();
+  await expect(dialog.locator("[data-viceme='profile-cover']")).toHaveCount(2);
+  await expect(dialog.getByText('关注创作者')).toHaveCount(0);
+  await expect(dialog.getByText('登录授权后将自动关注该创作者')).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: '关闭' })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '登录' })).toBeEnabled();
-  await expect(dialog.getByRole('button', { name: '拒绝' })).toBeEnabled();
-  const acceptBox = await dialog.getByRole('button', { name: '登录' }).boundingBox();
-  const rejectBox = await dialog.getByRole('button', { name: '拒绝' }).boundingBox();
+  await expect(dialog.getByRole('button', { name: '授权' })).toBeEnabled();
+  await expect(dialog.getByRole('button', { name: '拒绝' })).toHaveCount(0);
+  const avatarBox = await dialog.locator("[data-viceme='avatar-fallback']").boundingBox();
+  const nameBox = await dialog.getByText('归藏').boundingBox();
+  const acceptBox = await dialog.getByRole('button', { name: '授权' }).boundingBox();
   const dialogBox = await dialog.boundingBox();
+  expect(avatarBox).not.toBeNull();
+  expect(nameBox).not.toBeNull();
   expect(acceptBox).not.toBeNull();
-  expect(rejectBox).not.toBeNull();
   expect(dialogBox).not.toBeNull();
-  expect(Math.abs(acceptBox!.y - rejectBox!.y)).toBeLessThan(1);
-  expect(Math.abs(acceptBox!.height - rejectBox!.height)).toBeLessThan(1);
-  expect(dialogBox!.height).toBeLessThan(480);
+  expect(nameBox!.y).toBeGreaterThan(avatarBox!.y + avatarBox!.height);
+  expect(dialogBox!.height).toBeLessThan(620);
 
-  await dialog.getByRole('button', { name: '登录' }).click();
+  await dialog.getByRole('button', { name: '授权' }).click();
   await expect
     .poll(() => page.evaluate(() => window.__authorizeBody))
     .toMatchObject({ clientType: 'pc' });

@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.3.3, sha256 03ef3a26819bb649…)
+ * (contractVersion 0.3.3, sha256 e9700c076c0c180c…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -236,6 +236,8 @@ export interface components {
             /** Format: uri */
             avatarUrl: string | null;
             description: string | null;
+            workCount: number;
+            coverUrls: string[];
         };
         AccessCheckRequest: {
             featureKeys: string[];

@@ -41,6 +41,8 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
               displayName: '归藏',
               avatarUrl: 'https://cdn.example.com/creator.jpg',
               description: 'AI 创业者',
+              workCount: 2,
+              coverUrls: ['https://cdn.example.com/work-one.jpg'],
             },
           },
         };
@@ -56,6 +58,8 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
               displayName: '归藏',
               avatarUrl: 'https://cdn.example.com/creator.jpg',
               description: 'AI 创业者',
+              workCount: 2,
+              coverUrls: ['https://cdn.example.com/work-one.jpg'],
             },
           },
         };
