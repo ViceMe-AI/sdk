@@ -45,6 +45,7 @@ export interface AccessDecision {
 }
 
 export interface CheckoutOptions {
+  featureKey: string;
   locale?: 'zh-CN' | 'en-US';
 }
 
@@ -73,7 +74,7 @@ export interface AccessCapability {
 }
 
 export interface CheckoutCapability {
-  open(options?: CheckoutOptions): Promise<CheckoutResult>;
+  open(options: CheckoutOptions): Promise<CheckoutResult>;
 }
 
 interface CapabilityDeps {
@@ -308,9 +309,6 @@ export function createCapabilities(deps: CapabilityDeps): {
           throw malformedResponse();
         }
         await authenticate(data.code, data.codeVerifier);
-        if (deps.session.snapshot?.work.capabilities.includes('follow')) {
-          await updateFollow('PUT');
-        }
       },
     );
   };
@@ -337,12 +335,10 @@ export function createCapabilities(deps: CapabilityDeps): {
     },
     async signIn() {
       const presenter = deps.presenter ?? defaultAccessPresenter;
-      const followTarget = (await getFollowState()).target;
       const result = await presenter({
         featureKey: 'auth',
         reason: 'AUTH_REQUIRED',
         action: 'SIGN_IN',
-        followTarget,
         perform: startSignIn,
       });
       if (result === 'dismissed') throw cancelled();
@@ -378,11 +374,13 @@ export function createCapabilities(deps: CapabilityDeps): {
   };
 
   const startCheckout = async (
-    options: CheckoutOptions = {},
+    featureKey: string,
+    options: Omit<CheckoutOptions, 'featureKey'> = {},
   ): Promise<{ result: CheckoutResult; action: AccessActionResult }> => {
     await deps.ready();
     const channel = randomVerifier();
     const body = {
+      featureKey,
       locale: options.locale ?? 'zh-CN',
       channel,
     };
@@ -412,15 +410,15 @@ export function createCapabilities(deps: CapabilityDeps): {
   };
 
   const checkout: CheckoutCapability = {
-    async open(options = {}) {
+    async open(options) {
       const presenter = deps.presenter ?? defaultAccessPresenter;
       let checkoutResult: CheckoutResult | undefined;
       const presented = await presenter({
-        featureKey: 'checkout',
+        featureKey: options.featureKey,
         reason: 'PURCHASE_REQUIRED',
         action: 'CHECKOUT',
         perform: async () => {
-          const prepared = await startCheckout(options);
+          const prepared = await startCheckout(options.featureKey, options);
           checkoutResult = prepared.result;
           return prepared.action;
         },
@@ -447,15 +445,14 @@ export function createCapabilities(deps: CapabilityDeps): {
         attempts += 1
       ) {
         const nextAction = decision.nextAction as AccessInteractionAction;
-        const followTarget =
-          nextAction === 'FOLLOW' || nextAction === 'SIGN_IN'
-            ? (await follow.getState()).target
-            : undefined;
+        const followTarget = nextAction === 'FOLLOW' ? (await follow.getState()).target : undefined;
+        const user = nextAction === 'FOLLOW' ? deps.session.snapshot?.user : undefined;
         const result = await presenter({
           featureKey,
           reason: decision.reason,
           action: nextAction,
           ...(followTarget ? { followTarget } : {}),
+          ...(user ? { user } : {}),
           perform: async () => {
             if (nextAction === 'SIGN_IN') {
               return startSignIn();
@@ -463,7 +460,7 @@ export function createCapabilities(deps: CapabilityDeps): {
               await follow.follow();
               return { type: 'completed' };
             } else {
-              return (await startCheckout()).action;
+              return (await startCheckout(featureKey)).action;
             }
           },
         });

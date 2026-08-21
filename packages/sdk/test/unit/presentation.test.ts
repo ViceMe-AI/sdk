@@ -5,12 +5,17 @@ import { defaultAccessPresenter } from '../../src/core/presentation.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('default access presenter', () => {
-  it('renders the follow target at the top with cancel and follow actions', async () => {
+  it('renders the signed-in account and follow target with reject and accept actions', async () => {
     const perform = vi.fn(async () => ({ type: 'completed' as const }));
     const presented = defaultAccessPresenter({
       featureKey: 'dingdong',
       reason: 'FOLLOW_REQUIRED',
       action: 'FOLLOW',
+      user: {
+        subject: 'user-subject-1234',
+        nickname: '+86181****0899',
+        avatarUrl: null,
+      },
       followTarget: {
         kind: 'CREATOR',
         displayName: '归藏',
@@ -23,7 +28,10 @@ describe('default access presenter', () => {
     expect(layer?.shadowRoot?.querySelector("[data-viceme='panel']")?.getAttribute('role')).toBe(
       'dialog',
     );
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='action']")?.textContent).toBe('关注');
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='action']")?.textContent).toBe('接受');
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='account-name']")?.textContent).toBe(
+      '+86181****0899',
+    );
     expect(layer?.shadowRoot?.querySelector("[data-viceme='profile-name']")?.textContent).toBe(
       '归藏',
     );
@@ -34,7 +42,7 @@ describe('default access presenter', () => {
     expect(
       layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
     ).toBe('专注于 AI 创作工具与智能体工作流。');
-    expect(layer?.shadowRoot?.querySelector('[data-viceme-cancel]')?.textContent).toBe('取消');
+    expect(layer?.shadowRoot?.querySelector('[data-viceme-cancel]')?.textContent).toBe('拒绝');
     expect(
       layer?.shadowRoot?.querySelector("[data-viceme='action']")?.parentElement?.dataset.single,
     ).toBe('false');
@@ -50,18 +58,12 @@ describe('default access presenter', () => {
     expect(document.querySelector('viceme-access-layer')).toBeNull();
   });
 
-  it('shows creator consent with accept and reject actions and no title', async () => {
+  it('shows a login action before creator consent', async () => {
     const perform = vi.fn(async () => ({ type: 'completed' as const }));
     const presented = defaultAccessPresenter({
       featureKey: 'auth',
       reason: 'AUTH_REQUIRED',
       action: 'SIGN_IN',
-      followTarget: {
-        kind: 'CREATOR',
-        displayName: '归藏',
-        avatarUrl: null,
-        description: 'AI 创业者',
-      },
       perform,
     });
     const layer = document.querySelector('viceme-access-layer');
@@ -69,25 +71,17 @@ describe('default access presenter', () => {
     const shadow = layer!.shadowRoot!;
 
     expect(shadow.querySelector("[data-viceme='title']")).toBeNull();
-    expect(shadow.querySelector("[data-viceme='profile-name']")?.textContent).toBe('归藏');
-    const profileHeader = shadow.querySelector("[data-viceme='profile-header']");
-    expect(profileHeader?.contains(shadow.querySelector("[data-viceme='avatar-fallback']"))).toBe(
-      true,
-    );
-    expect(profileHeader?.contains(shadow.querySelector("[data-viceme='profile-name']"))).toBe(
-      true,
-    );
     expect(
-      profileHeader?.contains(shadow.querySelector("[data-viceme='profile-description']")),
-    ).toBe(false);
-    expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('接受');
+      shadow.querySelector("[data-viceme='profile']")?.getAttribute('data-visible'),
+    ).toBeNull();
+    expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('登录');
     expect(shadow.querySelector('[data-viceme-cancel]')?.textContent).toBe('拒绝');
     expect(shadow.querySelector("[data-viceme='description']")?.textContent).toBe('');
-    expect(shadow.textContent).not.toContain('登录');
+    expect(shadow.textContent).toContain('登录');
     const styles = shadow.querySelector('style')?.textContent ?? '';
     expect(styles).toContain("[data-action='SIGN_IN'] [data-viceme='description']");
     expect(styles).toContain('box-sizing: border-box;');
-    expect(styles).toContain('height: min(22rem, 58dvh);');
+    expect(styles).toContain('height: min(72dvh, 34rem);');
 
     (shadow.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
@@ -142,7 +136,7 @@ describe('default access presenter', () => {
     });
     const frame = layer?.shadowRoot?.querySelector('iframe') as HTMLIFrameElement;
     expect(layer?.shadowRoot?.querySelector('style')?.textContent).toContain(
-      'height: min(72dvh, 40rem);',
+      'height: min(82dvh, 44rem);',
     );
     window.dispatchEvent(
       new MessageEvent('message', {

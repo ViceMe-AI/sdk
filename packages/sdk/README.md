@@ -23,8 +23,8 @@ if (access.dingdong.allowed) enableDingdong();
 if (access.emperor.allowed) enableEmperor();
 
 // Call from a user gesture. A denied decision opens the ViceMe
-// bottom-sheet/in-page Web Component. Accepting creator authorization also
-// follows that creator without a second prompt.
+// bottom-sheet/in-page Web Component. Follow consent appears after sign-in in
+// the same layer, and only accepting it follows the creator.
 const decision = await client.access.require('emperor');
 if (decision.allowed) enableEmperor();
 
