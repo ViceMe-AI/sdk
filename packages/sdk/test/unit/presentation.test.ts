@@ -16,6 +16,8 @@ describe('default access presenter', () => {
         displayName: '归藏',
         avatarUrl: 'https://cdn.example.com/creator.jpg',
         description: '专注于 AI 创作工具与智能体工作流。',
+        workCount: 2,
+        coverUrls: ['https://cdn.example.com/work-one.jpg', 'https://cdn.example.com/work-two.jpg'],
       },
       perform,
     });
@@ -31,23 +33,24 @@ describe('default access presenter', () => {
     expect(shadow.querySelector("[data-viceme='profile-description']")?.textContent).toBe(
       '专注于 AI 创作工具与智能体工作流。',
     );
-    expect(shadow.querySelector("[data-viceme='profile-title']")?.textContent).toBe('关注创作者');
-    expect(shadow.querySelector("[data-viceme='profile-consent']")?.textContent).toBe(
-      '登录授权后将自动关注该创作者',
-    );
+    expect(shadow.querySelector("[data-viceme='profile-title']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile-consent']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile-stats']")?.textContent).toBe('2 个作品');
+    expect(shadow.querySelectorAll("[data-viceme='profile-cover']")).toHaveLength(2);
     expect(shadow.querySelector("[data-viceme='close']")?.getAttribute('aria-label')).toBe('关闭');
-    expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('登录');
-    expect(shadow.querySelector('[data-viceme-cancel]')?.textContent).toBe('拒绝');
+    expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('授权');
+    expect(shadow.querySelector('[data-viceme-cancel]')).toBeNull();
     expect(shadow.querySelector("[data-viceme='description']")?.textContent).toBe('');
-    expect(shadow.textContent).toContain('登录');
+    expect(shadow.textContent).toContain('授权');
     const styles = shadow.querySelector('style')?.textContent ?? '';
     expect(styles).toContain("[data-action='SIGN_IN'] [data-viceme='description']");
     expect(styles).toContain('box-sizing: border-box;');
     expect(styles).not.toContain('min-height: min(32rem');
     expect(styles).not.toContain("[data-viceme='close']:hover");
-    expect(styles).toContain('height: 8rem;');
+    expect(styles).toContain('height: min(92dvh, 46rem);');
+    expect(styles).not.toContain('height: 8rem;');
 
-    (shadow.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
+    (shadow.querySelector("[data-viceme='close']") as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
     expect(perform).not.toHaveBeenCalled();
   });
@@ -69,6 +72,9 @@ describe('default access presenter', () => {
       })),
     });
     const layer = document.querySelector('viceme-access-layer');
+    expect(
+      layer?.shadowRoot?.querySelector("[data-viceme='panel']")?.getAttribute('data-frame'),
+    ).toBe('true');
 
     await vi.waitFor(() => {
       expect(layer?.shadowRoot?.querySelector('iframe')?.getAttribute('src')).toBe(
@@ -77,7 +83,7 @@ describe('default access presenter', () => {
     });
     const frame = layer?.shadowRoot?.querySelector('iframe') as HTMLIFrameElement;
     expect(layer?.shadowRoot?.querySelector('style')?.textContent).toContain(
-      'height: min(82dvh, 44rem);',
+      'height: min(92dvh, 46rem);',
     );
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -86,7 +92,7 @@ describe('default access presenter', () => {
         source: frame.contentWindow,
       }),
     );
-    expect(frame.style.height).toBe('360px');
+    expect(frame.style.height).toBe('');
     expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).not.toBeNull();
     complete();
 
@@ -122,7 +128,7 @@ describe('default access presenter', () => {
         source: frame.contentWindow,
       }),
     );
-    expect(frame.style.height).toBe('96px');
+    expect(frame.style.height).toBe('');
 
     (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
@@ -172,7 +178,7 @@ describe('default access presenter', () => {
       .querySelector('viceme-access-layer')
       ?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement;
 
-    expect(action.parentElement?.dataset.single).toBe('false');
+    expect(action.parentElement?.dataset.single).toBe('true');
     action.click();
 
     expect(action.disabled).toBe(true);

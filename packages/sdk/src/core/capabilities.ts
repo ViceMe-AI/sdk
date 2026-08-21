@@ -23,6 +23,8 @@ export interface FollowTarget {
   displayName: string;
   avatarUrl: string | null;
   description: string | null;
+  workCount: number;
+  coverUrls: string[];
 }
 
 export type AccessReason =
@@ -125,7 +127,12 @@ function parseFollowState(value: unknown): FollowState {
     !(target.kind === 'CREATOR' || target.kind === 'USER') ||
     typeof target.displayName !== 'string' ||
     !(typeof target.avatarUrl === 'string' || target.avatarUrl === null) ||
-    !(typeof target.description === 'string' || target.description === null)
+    !(typeof target.description === 'string' || target.description === null) ||
+    !Number.isInteger(target.workCount) ||
+    (target.workCount as number) < 0 ||
+    !Array.isArray(target.coverUrls) ||
+    target.coverUrls.length > 2 ||
+    !target.coverUrls.every((url) => typeof url === 'string')
   ) {
     throw malformedResponse();
   }
@@ -137,6 +144,8 @@ function parseFollowState(value: unknown): FollowState {
       displayName: target.displayName,
       avatarUrl: target.avatarUrl,
       description: target.description,
+      workCount: target.workCount as number,
+      coverUrls: target.coverUrls as string[],
     },
   };
 }
