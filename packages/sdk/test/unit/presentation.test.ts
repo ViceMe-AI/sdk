@@ -5,17 +5,12 @@ import { defaultAccessPresenter } from '../../src/core/presentation.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('default access presenter', () => {
-  it('renders the signed-in account and follow target with reject and accept actions', async () => {
+  it('shows complete creator information in the login consent layer', async () => {
     const perform = vi.fn(async () => ({ type: 'completed' as const }));
     const presented = defaultAccessPresenter({
-      featureKey: 'dingdong',
-      reason: 'FOLLOW_REQUIRED',
-      action: 'FOLLOW',
-      user: {
-        subject: 'user-subject-1234',
-        nickname: '+86181****0899',
-        avatarUrl: null,
-      },
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
       followTarget: {
         kind: 'CREATOR',
         displayName: '归藏',
@@ -25,55 +20,17 @@ describe('default access presenter', () => {
       perform,
     });
     const layer = document.querySelector('viceme-access-layer');
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='panel']")?.getAttribute('role')).toBe(
-      'dialog',
-    );
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='action']")?.textContent).toBe('接受');
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='account-name']")?.textContent).toBe(
-      '+86181****0899',
-    );
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='profile-name']")?.textContent).toBe(
-      '归藏',
-    );
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='dismiss']")).toBeNull();
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).toBeNull();
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='title']")).toBeNull();
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='description']")?.textContent).toBe('');
-    expect(
-      layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
-    ).toBe('专注于 AI 创作工具与智能体工作流。');
-    expect(layer?.shadowRoot?.querySelector('[data-viceme-cancel]')?.textContent).toBe('拒绝');
-    expect(
-      layer?.shadowRoot?.querySelector("[data-viceme='action']")?.parentElement?.dataset.single,
-    ).toBe('false');
-    const styles = layer?.shadowRoot?.querySelector('style')?.textContent ?? '';
-    expect(styles).toContain("[data-viceme='panel'][data-action='FOLLOW'] [data-viceme='actions']");
-    expect(styles).toContain('flex: 1 1 0;');
-    expect(layer?.shadowRoot?.innerHTML).not.toMatch(/\bpart=|var\(|Canvas|inherit/);
-
-    (layer?.shadowRoot?.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
-
-    await expect(presented).resolves.toBe('dismissed');
-    expect(perform).not.toHaveBeenCalled();
-    expect(document.querySelector('viceme-access-layer')).toBeNull();
-  });
-
-  it('shows a login action before creator consent', async () => {
-    const perform = vi.fn(async () => ({ type: 'completed' as const }));
-    const presented = defaultAccessPresenter({
-      featureKey: 'auth',
-      reason: 'AUTH_REQUIRED',
-      action: 'SIGN_IN',
-      perform,
-    });
-    const layer = document.querySelector('viceme-access-layer');
     expect(layer).not.toBeNull();
     const shadow = layer!.shadowRoot!;
 
     expect(shadow.querySelector("[data-viceme='title']")).toBeNull();
-    expect(
-      shadow.querySelector("[data-viceme='profile']")?.getAttribute('data-visible'),
-    ).toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile']")?.getAttribute('data-visible')).toBe(
+      'true',
+    );
+    expect(shadow.querySelector("[data-viceme='profile-name']")?.textContent).toBe('归藏');
+    expect(shadow.querySelector("[data-viceme='profile-description']")?.textContent).toBe(
+      '专注于 AI 创作工具与智能体工作流。',
+    );
     expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('登录');
     expect(shadow.querySelector('[data-viceme-cancel]')?.textContent).toBe('拒绝');
     expect(shadow.querySelector("[data-viceme='description']")?.textContent).toBe('');
@@ -86,29 +43,6 @@ describe('default access presenter', () => {
     (shadow.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
     expect(perform).not.toHaveBeenCalled();
-  });
-
-  it('shows the default follow copy for an ordinary user', async () => {
-    const presented = defaultAccessPresenter({
-      featureKey: 'dingdong',
-      reason: 'FOLLOW_REQUIRED',
-      action: 'FOLLOW',
-      followTarget: {
-        kind: 'USER',
-        displayName: '普通用户',
-        avatarUrl: null,
-        description: null,
-      },
-      perform: vi.fn(async () => ({ type: 'completed' as const })),
-    });
-    const layer = document.querySelector('viceme-access-layer');
-
-    expect(
-      layer?.shadowRoot?.querySelector("[data-viceme='profile-description']")?.textContent,
-    ).toBe('关注后即可继续使用此功能。');
-
-    (layer?.shadowRoot?.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
-    await expect(presented).resolves.toBe('dismissed');
   });
 
   it('opens checkout directly inside the access layer frame', async () => {

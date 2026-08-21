@@ -183,13 +183,9 @@ describe('creator access capabilities', () => {
     ).toBe(false);
   });
 
-  it('follows only after the user activates the follow action in the presenter', async () => {
+  it('automatically follows an authenticated user without opening a second layer', async () => {
     const transport = capabilityTransport();
-    const presenter = vi.fn(async (interaction: { perform(): Promise<{ type: string }> }) => {
-      expect(transport.requests.some((request) => request.method === 'PUT')).toBe(false);
-      await interaction.perform();
-      return 'acted' as const;
-    });
+    const presenter = vi.fn();
     const client = createTestViceMe({
       workKey: 'wrk_test',
       region: 'cn',
@@ -202,19 +198,11 @@ describe('creator access capabilities', () => {
       reason: 'FOLLOWING',
       nextAction: null,
     });
-    expect(presenter).toHaveBeenCalledOnce();
-    expect(presenter).toHaveBeenCalledWith(
-      expect.objectContaining({
-        followTarget: expect.objectContaining({
-          kind: 'CREATOR',
-          displayName: '归藏',
-        }),
-      }),
-    );
+    expect(presenter).not.toHaveBeenCalled();
     expect(transport.requests.filter((request) => request.method === 'PUT')).toHaveLength(1);
   });
 
-  it('asks for follow consent in the signed-in layer after login', async () => {
+  it('shows creator consent before login and automatically follows after authorization', async () => {
     const transport = capabilityTransport();
     let authenticated = false;
     const originalRequest = transport.request.bind(transport);
@@ -253,32 +241,28 @@ describe('creator access capabilities', () => {
       return response;
     };
     const presenter = vi.fn(async (interaction: AccessInteraction) => {
+      expect(interaction).toMatchObject({
+        action: 'SIGN_IN',
+        followTarget: { displayName: '归藏', description: 'AI 创业者' },
+      });
       const result = await interaction.perform();
-      if (interaction.action === 'SIGN_IN') {
-        if (result.type !== 'frame') throw new Error('expected auth frame');
-        const authorize = transport.requests.find(
-          (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
-        );
-        window.dispatchEvent(
-          new MessageEvent('message', {
-            origin: 'https://callback.test',
-            data: {
-              type: 'viceme:auth:complete',
-              workKey: 'wrk_test',
-              channel: (authorize?.body as { channel?: string }).channel,
-              code: 'a'.repeat(32),
-              codeVerifier: 'b'.repeat(43),
-            },
-          }),
-        );
-        await result.completion;
-      } else {
-        expect(interaction).toMatchObject({
-          action: 'FOLLOW',
-          user: { nickname: 'Visitor' },
-          followTarget: { displayName: '归藏' },
-        });
-      }
+      if (result.type !== 'frame') throw new Error('expected auth frame');
+      const authorize = transport.requests.find(
+        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: 'https://callback.test',
+          data: {
+            type: 'viceme:auth:complete',
+            workKey: 'wrk_test',
+            channel: (authorize?.body as { channel?: string }).channel,
+            code: 'a'.repeat(32),
+            codeVerifier: 'b'.repeat(43),
+          },
+        }),
+      );
+      await result.completion;
       return 'acted' as const;
     });
     const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport, presenter });
@@ -287,7 +271,7 @@ describe('creator access capabilities', () => {
       allowed: true,
       reason: 'FOLLOWING',
     });
-    expect(presenter).toHaveBeenCalledTimes(2);
+    expect(presenter).toHaveBeenCalledOnce();
     expect(transport.requests.filter((request) => request.method === 'PUT')).toHaveLength(1);
   });
 
@@ -324,34 +308,29 @@ describe('creator access capabilities', () => {
 
   it('completes embedded login from the callback origin returned by the API', async () => {
     const transport = capabilityTransport();
-    const presenter = vi.fn(
-      async (interaction: {
-        perform(): Promise<{
-          type: string;
-          completion?: Promise<void>;
-        }>;
-      }) => {
-        const result = await interaction.perform();
-        const authorize = transport.requests.find(
-          (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
-        );
-        const channel = (authorize?.body as { channel?: string }).channel;
-        window.dispatchEvent(
-          new MessageEvent('message', {
-            origin: 'https://callback.test',
-            data: {
-              type: 'viceme:auth:complete',
-              workKey: 'wrk_test',
-              channel,
-              code: 'a'.repeat(32),
-              codeVerifier: 'b'.repeat(43),
-            },
-          }),
-        );
-        await result.completion;
-        return 'acted' as const;
-      },
-    );
+    const presenter = vi.fn(async (interaction: AccessInteraction) => {
+      expect(interaction.followTarget).toMatchObject({ displayName: '归藏' });
+      const result = await interaction.perform();
+      if (result.type !== 'frame') throw new Error('expected auth frame');
+      const authorize = transport.requests.find(
+        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+      );
+      const channel = (authorize?.body as { channel?: string }).channel;
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: 'https://callback.test',
+          data: {
+            type: 'viceme:auth:complete',
+            workKey: 'wrk_test',
+            channel,
+            code: 'a'.repeat(32),
+            codeVerifier: 'b'.repeat(43),
+          },
+        }),
+      );
+      await result.completion;
+      return 'acted' as const;
+    });
     const client = createTestViceMe({
       workKey: 'wrk_test',
       region: 'cn',
@@ -363,6 +342,7 @@ describe('creator access capabilities', () => {
       authenticated: true,
       user: { nickname: 'Visitor' },
     });
+    expect(transport.requests.filter((request) => request.method === 'PUT')).toHaveLength(1);
   });
 
   it('keeps the QR flow clickable when Chrome reports mobile emulation', async () => {

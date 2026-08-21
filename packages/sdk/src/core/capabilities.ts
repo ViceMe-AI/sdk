@@ -3,7 +3,6 @@ import {
   defaultAccessPresenter,
   type AccessActionResult,
   type AccessFrameAction,
-  type AccessInteractionAction,
   type AccessPresenter,
 } from './presentation.ts';
 import type { SessionManager, WorkUser } from '../session/session.ts';
@@ -284,7 +283,9 @@ export function createCapabilities(deps: CapabilityDeps): {
     };
   };
 
-  const startSignIn = async (): Promise<AccessActionResult> => {
+  const startSignIn = async (
+    afterAuthenticate?: () => Promise<void>,
+  ): Promise<AccessActionResult> => {
     await deps.ready();
     const channel = randomVerifier();
     const response = await deps.session.request({
@@ -309,6 +310,7 @@ export function createCapabilities(deps: CapabilityDeps): {
           throw malformedResponse();
         }
         await authenticate(data.code, data.codeVerifier);
+        await afterAuthenticate?.();
       },
     );
   };
@@ -335,11 +337,16 @@ export function createCapabilities(deps: CapabilityDeps): {
     },
     async signIn() {
       const presenter = deps.presenter ?? defaultAccessPresenter;
+      const followTarget = (await getFollowState()).target;
       const result = await presenter({
         featureKey: 'auth',
         reason: 'AUTH_REQUIRED',
         action: 'SIGN_IN',
-        perform: startSignIn,
+        followTarget,
+        perform: () =>
+          startSignIn(async () => {
+            await updateFollow('PUT');
+          }),
       });
       if (result === 'dismissed') throw cancelled();
       return this.getState();
@@ -444,21 +451,24 @@ export function createCapabilities(deps: CapabilityDeps): {
         !decision.allowed && decision.nextAction && attempts < 3;
         attempts += 1
       ) {
-        const nextAction = decision.nextAction as AccessInteractionAction;
-        const followTarget = nextAction === 'FOLLOW' ? (await follow.getState()).target : undefined;
-        const user = nextAction === 'FOLLOW' ? deps.session.snapshot?.user : undefined;
+        const nextAction = decision.nextAction;
+        if (nextAction === 'FOLLOW') {
+          await follow.follow();
+          decision = await this.check(featureKey);
+          continue;
+        }
+        const followTarget =
+          nextAction === 'SIGN_IN' ? (await follow.getState()).target : undefined;
         const result = await presenter({
           featureKey,
           reason: decision.reason,
           action: nextAction,
           ...(followTarget ? { followTarget } : {}),
-          ...(user ? { user } : {}),
           perform: async () => {
             if (nextAction === 'SIGN_IN') {
-              return startSignIn();
-            } else if (nextAction === 'FOLLOW') {
-              await follow.follow();
-              return { type: 'completed' };
+              return startSignIn(async () => {
+                await follow.follow();
+              });
             } else {
               return (await startCheckout(featureKey)).action;
             }

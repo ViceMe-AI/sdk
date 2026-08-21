@@ -7,6 +7,7 @@ test('sign-in stays clickable in the taller mobile access layer', async ({
   test.skip(browserName !== 'chromium');
   const context = await browser.newContext({
     isMobile: true,
+    reducedMotion: 'reduce',
     viewport: { width: 390, height: 844 },
   });
   const page = await context.newPage();
@@ -14,8 +15,10 @@ test('sign-in stays clickable in the taller mobile access layer', async ({
   await page.goto(`${origin}/pages/access-mobile.html`);
 
   await page.getByRole('button', { name: '打开功能' }).click();
-  const dialog = page.getByRole('dialog', { name: 'ViceMe 授权' });
+  const dialog = page.getByRole('dialog', { name: '接受 归藏 的授权' });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('归藏')).toBeVisible();
+  await expect(dialog.getByText('AI 创业者')).toBeVisible();
   await expect(dialog.getByRole('button', { name: '登录' })).toBeEnabled();
   await expect(dialog.getByRole('button', { name: '拒绝' })).toBeEnabled();
   const acceptBox = await dialog.getByRole('button', { name: '登录' }).boundingBox();
