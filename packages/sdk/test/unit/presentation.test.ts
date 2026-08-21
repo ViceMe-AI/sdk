@@ -31,6 +31,11 @@ describe('default access presenter', () => {
     expect(shadow.querySelector("[data-viceme='profile-description']")?.textContent).toBe(
       '专注于 AI 创作工具与智能体工作流。',
     );
+    expect(shadow.querySelector("[data-viceme='profile-title']")?.textContent).toBe('关注创作者');
+    expect(shadow.querySelector("[data-viceme='profile-consent']")?.textContent).toBe(
+      '登录授权后将自动关注该创作者',
+    );
+    expect(shadow.querySelector("[data-viceme='close']")?.getAttribute('aria-label')).toBe('关闭');
     expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('登录');
     expect(shadow.querySelector('[data-viceme-cancel]')?.textContent).toBe('拒绝');
     expect(shadow.querySelector("[data-viceme='description']")?.textContent).toBe('');
@@ -38,7 +43,9 @@ describe('default access presenter', () => {
     const styles = shadow.querySelector('style')?.textContent ?? '';
     expect(styles).toContain("[data-action='SIGN_IN'] [data-viceme='description']");
     expect(styles).toContain('box-sizing: border-box;');
-    expect(styles).toContain('height: min(72dvh, 34rem);');
+    expect(styles).not.toContain('min-height: min(32rem');
+    expect(styles).not.toContain("[data-viceme='close']:hover");
+    expect(styles).toContain('height: 8rem;');
 
     (shadow.querySelector('[data-viceme-cancel]') as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
@@ -80,7 +87,7 @@ describe('default access presenter', () => {
       }),
     );
     expect(frame.style.height).toBe('360px');
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).toBeNull();
+    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).not.toBeNull();
     complete();
 
     await expect(presented).resolves.toBe('acted');
@@ -107,6 +114,15 @@ describe('default access presenter', () => {
     const frame = shadow.querySelector('iframe')!;
     expect(frame.hasAttribute('data-ready')).toBe(false);
     expect(shadow.querySelector("[data-viceme='frame-loading']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='close']")).not.toBeNull();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'viceme:frame:resize', height: 72 },
+        origin: 'null',
+        source: frame.contentWindow,
+      }),
+    );
+    expect(frame.style.height).toBe('96px');
 
     (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
