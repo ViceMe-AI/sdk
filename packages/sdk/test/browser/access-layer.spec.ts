@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('sign-in stays clickable in the taller mobile access layer', async ({
+test('sign-in stays clickable in a content-sized mobile access layer', async ({
   browser,
   browserName,
 }) => {
@@ -19,6 +19,9 @@ test('sign-in stays clickable in the taller mobile access layer', async ({
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('归藏')).toBeVisible();
   await expect(dialog.getByText('AI 创业者')).toBeVisible();
+  await expect(dialog.getByText('关注创作者')).toBeVisible();
+  await expect(dialog.getByText('登录授权后将自动关注该创作者')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '关闭' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: '登录' })).toBeEnabled();
   await expect(dialog.getByRole('button', { name: '拒绝' })).toBeEnabled();
   const acceptBox = await dialog.getByRole('button', { name: '登录' }).boundingBox();
@@ -29,13 +32,14 @@ test('sign-in stays clickable in the taller mobile access layer', async ({
   expect(dialogBox).not.toBeNull();
   expect(Math.abs(acceptBox!.y - rejectBox!.y)).toBeLessThan(1);
   expect(Math.abs(acceptBox!.height - rejectBox!.height)).toBeLessThan(1);
-  expect(dialogBox!.height).toBeGreaterThan(480);
+  expect(dialogBox!.height).toBeLessThan(480);
 
   await dialog.getByRole('button', { name: '登录' }).click();
   await expect
     .poll(() => page.evaluate(() => window.__authorizeBody))
     .toMatchObject({ clientType: 'pc' });
   const authorizationFrame = page.locator('viceme-access-layer').locator('iframe').contentFrame();
+  await expect(dialog.getByRole('button', { name: '关闭' })).toBeVisible();
   await authorizationFrame.getByRole('button', { name: '继续授权' }).click();
   await expect(authorizationFrame.getByText('已点击')).toBeVisible();
 

@@ -105,34 +105,31 @@ function ensureAccessLayerElement(): void {
             box-sizing: border-box;
             display: flex;
             width: 100%;
-            min-height: min(32rem, calc(100dvh - 2rem));
             max-height: min(92dvh, 46rem);
             flex-direction: column;
             overflow: auto;
             border-radius: 1.25rem 1.25rem 0 0;
             background: #ffffff;
             color: #18181b;
-            padding: 1rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+            padding: 3.75rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
             box-shadow: 0 -1rem 3rem rgb(0 0 0 / 18%);
           }
-          [data-viceme='content'] { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+          [data-viceme='content'] { display: flex; min-height: 0; flex-direction: column; }
           [data-viceme='close'] {
             position: absolute;
-            top: 0.875rem;
-            left: 0.875rem;
-            z-index: 1;
-            display: none;
+            top: 0.75rem;
+            left: 0.75rem;
             width: 2.75rem;
-            min-height: 2.75rem;
+            height: 2.75rem;
             border: 0;
             border-radius: 999px;
             padding: 0;
             background: transparent;
             color: #52525b;
             font-size: 2rem;
-            font-weight: 300;
+            font-weight: 400;
+            line-height: 1;
           }
-          [data-viceme='close']:hover { background: #f4f4f5; color: #18181b; }
           [data-viceme='description'] { margin: 0.75rem 0 1.25rem; color: #71717a; line-height: 1.6; }
           [data-viceme='profile'] {
             display: none;
@@ -173,6 +170,21 @@ function ensureAccessLayerElement(): void {
             overflow-wrap: anywhere;
             color: #71717a;
           }
+          [data-viceme='profile-title'] {
+            display: none;
+            margin: 0 0 1.25rem;
+            text-align: center;
+            font-size: 1.25rem;
+            font-weight: 700;
+          }
+          [data-viceme='profile-consent'] {
+            display: none;
+            margin: 1rem 0 0;
+            color: #71717a;
+            font-size: 0.875rem;
+            line-height: 1.625;
+            text-align: center;
+          }
           [data-viceme='profile-header'] { min-width: 0; }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='description'] { display: none; }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile'][data-visible='true'] {
@@ -183,6 +195,10 @@ function ensureAccessLayerElement(): void {
             background: transparent;
             box-shadow: none;
             text-align: left;
+          }
+          [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile'][data-visible='true'] [data-viceme='profile-title'],
+          [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile'][data-visible='true'] [data-viceme='profile-consent'] {
+            display: block;
           }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile-header'] {
             display: flex;
@@ -216,8 +232,7 @@ function ensureAccessLayerElement(): void {
             display: flex;
             justify-content: flex-end;
             gap: 0.75rem;
-            margin-top: auto;
-            padding-top: 0.5rem;
+            margin-top: 1.25rem;
           }
           button {
             box-sizing: border-box;
@@ -248,7 +263,8 @@ function ensureAccessLayerElement(): void {
           [data-viceme='actions'][data-single='true'] [data-viceme='action'] { width: 100%; }
           button:disabled { cursor: wait; opacity: 0.5; }
           button[hidden] { display: none; }
-          [data-viceme='error'] { min-height: 1.25rem; margin: 0 0 0.75rem; color: #b91c1c; font-size: 0.875rem; }
+          [data-viceme='error'] { margin: 0.75rem 0 0; color: #b91c1c; font-size: 0.875rem; }
+          [data-viceme='error']:empty { display: none; }
           [data-viceme='frame'] {
             display: none;
             width: 100%;
@@ -262,14 +278,14 @@ function ensureAccessLayerElement(): void {
           [data-viceme='panel'][data-frame='true'] [data-viceme='content'] { display: none; }
           [data-viceme='panel'][data-frame='true'] [data-viceme='frame'] { display: block; }
           [data-viceme='panel'][data-action='SIGN_IN'][data-frame='true'] [data-viceme='frame'] {
-            height: min(72dvh, 34rem);
+            height: 8rem;
           }
           @media (min-width: 48rem) {
             :host { place-items: center; padding: 1.5rem; }
             [data-viceme='panel'] {
               width: min(24rem, 100%);
               border-radius: 1.25rem;
-              padding: 1.25rem;
+              padding: 3.75rem 1.25rem 1.25rem;
               box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 24%);
             }
             [data-viceme='panel'][data-frame='true'] { width: min(30rem, 100%); }
@@ -286,12 +302,14 @@ function ensureAccessLayerElement(): void {
           <div data-viceme="content">
             <p data-viceme="description"></p>
             <section data-viceme="profile" aria-label="关注对象">
+              <p data-viceme="profile-title">关注创作者</p>
               <div data-viceme="profile-header">
                 <img data-viceme="avatar" hidden />
                 <span data-viceme="avatar-fallback" aria-hidden="true"></span>
                 <p data-viceme="profile-name"></p>
               </div>
               <p data-viceme="profile-description"></p>
+              <p data-viceme="profile-consent">登录授权后将自动关注该创作者</p>
             </section>
             <p data-viceme="error" role="alert" aria-live="polite"></p>
             <div data-viceme="actions">
@@ -369,8 +387,9 @@ function ensureAccessLayerElement(): void {
         ) {
           return;
         }
-        const maximum = Math.max(240, Math.floor(window.innerHeight * 0.86));
-        frame.style.height = `${Math.min(maximum, Math.max(240, Math.ceil(data.height)))}px`;
+        const minimum = this.interaction.action === 'SIGN_IN' ? 96 : 240;
+        const maximum = Math.max(minimum, Math.floor(window.innerHeight * 0.86));
+        frame.style.height = `${Math.min(maximum, Math.max(minimum, Math.ceil(data.height)))}px`;
       };
       window.addEventListener('message', resizeFrame);
       const close = (result: AccessPresentationResult) => {
@@ -397,6 +416,7 @@ function ensureAccessLayerElement(): void {
             return;
           }
           const focusable = [
+            closeAction,
             ...(cancelAction.hidden ? [] : [cancelAction]),
             ...(action.hidden ? [] : [action]),
           ];
