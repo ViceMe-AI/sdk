@@ -10,7 +10,6 @@
     <script type="module">
       window.__authorizeBody = null;
       let following = false;
-      const followOnly = new URLSearchParams(window.location.search).has('follow');
       const checkoutOnly = new URLSearchParams(window.location.search).has('checkout');
       globalThis.fetch = async (input, init = {}) => {
         const url = new URL(typeof input === 'string' ? input : input.url);
@@ -32,9 +31,7 @@
                 ? { allowed: true, reason: 'FOLLOWING', nextAction: null }
                 : checkoutOnly
                   ? { allowed: false, reason: 'PURCHASE_REQUIRED', nextAction: 'CHECKOUT' }
-                  : followOnly
-                    ? { allowed: false, reason: 'FOLLOW_REQUIRED', nextAction: 'FOLLOW' }
-                    : { allowed: false, reason: 'AUTH_REQUIRED', nextAction: 'SIGN_IN' },
+                  : { allowed: false, reason: 'AUTH_REQUIRED', nextAction: 'SIGN_IN' },
             },
           };
         } else if (url.pathname.endsWith('/follow') && init.method === 'GET') {

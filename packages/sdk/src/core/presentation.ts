@@ -1,15 +1,13 @@
 import type { FollowTarget } from './capabilities.ts';
-import type { WorkUser } from '../session/session.ts';
 import { isViceMeError } from './errors.ts';
 
-export type AccessInteractionAction = 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT';
+export type AccessInteractionAction = 'SIGN_IN' | 'CHECKOUT';
 
 export interface AccessInteraction {
   featureKey: string;
   reason: string;
   action: AccessInteractionAction;
   followTarget?: FollowTarget;
-  user?: WorkUser;
   perform(): Promise<AccessActionResult>;
 }
 
@@ -46,11 +44,6 @@ function actionCopy(action: AccessInteractionAction): {
       return {
         description: '',
         label: '登录',
-      };
-    case 'FOLLOW':
-      return {
-        description: '',
-        label: '接受',
       };
     case 'CHECKOUT':
       return {
@@ -123,30 +116,24 @@ function ensureAccessLayerElement(): void {
             box-shadow: 0 -1rem 3rem rgb(0 0 0 / 18%);
           }
           [data-viceme='content'] { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-          [data-viceme='description'] { margin: 0.75rem 0 1.25rem; color: #71717a; line-height: 1.6; }
-          [data-viceme='account'] {
+          [data-viceme='close'] {
+            position: absolute;
+            top: 0.875rem;
+            left: 0.875rem;
+            z-index: 1;
             display: none;
-            align-items: center;
-            gap: 0.875rem;
-            margin-bottom: 2rem;
-          }
-          [data-viceme='account'][data-visible='true'] { display: flex; }
-          [data-viceme='account-avatar'], [data-viceme='account-fallback'] {
-            width: 3.25rem;
-            height: 3.25rem;
-            flex: 0 0 3.25rem;
+            width: 2.75rem;
+            min-height: 2.75rem;
+            border: 0;
             border-radius: 999px;
-            object-fit: cover;
-            background: #f4f4f5;
+            padding: 0;
+            background: transparent;
+            color: #52525b;
+            font-size: 2rem;
+            font-weight: 300;
           }
-          [data-viceme='account-fallback'] {
-            display: grid;
-            place-items: center;
-            font-size: 1.25rem;
-            font-weight: 700;
-          }
-          [data-viceme='account-avatar'][hidden], [data-viceme='account-fallback'][hidden] { display: none; }
-          [data-viceme='account-name'] { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 1.125rem; font-weight: 700; }
+          [data-viceme='close']:hover { background: #f4f4f5; color: #18181b; }
+          [data-viceme='description'] { margin: 0.75rem 0 1.25rem; color: #71717a; line-height: 1.6; }
           [data-viceme='profile'] {
             display: none;
             margin: 0 0 1.25rem;
@@ -187,8 +174,6 @@ function ensureAccessLayerElement(): void {
             color: #71717a;
           }
           [data-viceme='profile-header'] { min-width: 0; }
-          [data-viceme='benefit'] { display: none; }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='description'],
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='description'] { display: none; }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile'][data-visible='true'] {
             display: block;
@@ -227,47 +212,6 @@ function ensureAccessLayerElement(): void {
             width: auto;
             flex: 1 1 0;
           }
-          [data-viceme='panel'][data-action='FOLLOW'] { padding-top: 1.5rem; }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='title'],
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='close'],
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='benefit'] { display: flex; }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='title'] { display: block; }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile'][data-visible='true'] {
-            display: block;
-            margin: 2rem 0 0;
-            border: 0;
-            padding: 0;
-            box-shadow: none;
-          }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='avatar'],
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='avatar-fallback'] {
-            width: 7rem;
-            height: 7rem;
-            margin-bottom: 1.25rem;
-            border: 0.25rem solid #fafafa;
-            box-shadow: 0 0 0 1px #e4e4e7;
-          }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-name'] {
-            font-size: 1.25rem;
-          }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='profile-description'] {
-            margin-top: 0.5rem;
-            line-height: 1.625;
-          }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='benefit'] {
-            justify-content: center;
-            margin: 1.5rem 0 0;
-            color: #71717a;
-            text-align: center;
-          }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='actions'] {
-            margin-top: 1.5rem;
-            padding-top: 0;
-          }
-          [data-viceme='panel'][data-action='FOLLOW'] [data-viceme='action'] {
-            width: 100%;
-            min-height: 3.25rem;
-          }
           [data-viceme='actions'] {
             display: flex;
             justify-content: flex-end;
@@ -278,7 +222,7 @@ function ensureAccessLayerElement(): void {
           button {
             box-sizing: border-box;
             display: inline-flex;
-            min-height: 2.75rem;
+            height: 3.25rem;
             align-items: center;
             justify-content: center;
             border-radius: 0.75rem;
@@ -340,13 +284,7 @@ function ensureAccessLayerElement(): void {
         <section data-viceme="panel" role="dialog" aria-modal="true" aria-label="ViceMe 授权">
           <button data-viceme="close" type="button" aria-label="关闭">×</button>
           <div data-viceme="content">
-            <h2 data-viceme="title">关注创作者</h2>
             <p data-viceme="description"></p>
-            <section data-viceme="account" aria-label="当前账号">
-              <img data-viceme="account-avatar" hidden />
-              <span data-viceme="account-fallback" aria-hidden="true"></span>
-              <p data-viceme="account-name"></p>
-            </section>
             <section data-viceme="profile" aria-label="关注对象">
               <div data-viceme="profile-header">
                 <img data-viceme="avatar" hidden />
@@ -355,7 +293,6 @@ function ensureAccessLayerElement(): void {
               </div>
               <p data-viceme="profile-description"></p>
             </section>
-            <p data-viceme="benefit"></p>
             <p data-viceme="error" role="alert" aria-live="polite"></p>
             <div data-viceme="actions">
               <button data-viceme="secondary-action" data-viceme-cancel type="button">取消</button>
@@ -376,14 +313,6 @@ function ensureAccessLayerElement(): void {
       const backdrop = shadow.querySelector<HTMLButtonElement>("[data-viceme='backdrop']")!;
       const error = shadow.querySelector<HTMLElement>("[data-viceme='error']")!;
       const frame = shadow.querySelector<HTMLIFrameElement>("[data-viceme='frame']")!;
-      const account = shadow.querySelector<HTMLElement>("[data-viceme='account']")!;
-      const accountAvatar = shadow.querySelector<HTMLImageElement>(
-        "[data-viceme='account-avatar']",
-      )!;
-      const accountFallback = shadow.querySelector<HTMLElement>(
-        "[data-viceme='account-fallback']",
-      )!;
-      const accountName = shadow.querySelector<HTMLElement>("[data-viceme='account-name']")!;
       const profile = shadow.querySelector<HTMLElement>("[data-viceme='profile']")!;
       const avatar = shadow.querySelector<HTMLImageElement>("[data-viceme='avatar']")!;
       const avatarFallback = shadow.querySelector<HTMLElement>("[data-viceme='avatar-fallback']")!;
@@ -391,31 +320,13 @@ function ensureAccessLayerElement(): void {
       const profileDescription = shadow.querySelector<HTMLElement>(
         "[data-viceme='profile-description']",
       )!;
-      const benefit = shadow.querySelector<HTMLElement>("[data-viceme='benefit']")!;
       action.textContent = copy.label;
       action.hidden = this.interaction.action === 'CHECKOUT';
       cancelAction.hidden = this.interaction.action === 'CHECKOUT';
-      cancelAction.textContent =
-        this.interaction.action === 'SIGN_IN' || this.interaction.action === 'FOLLOW'
-          ? '拒绝'
-          : '取消';
+      cancelAction.textContent = this.interaction.action === 'SIGN_IN' ? '拒绝' : '取消';
       mainActions.dataset.single = String(cancelAction.hidden);
       const idleActionLabel = copy.label;
       frame.title = this.interaction.action === 'SIGN_IN' ? '微信授权' : '支付';
-
-      const user = this.interaction.user;
-      if (user) {
-        const displayName = user.nickname?.trim() || 'ViceMe 用户';
-        account.dataset.visible = 'true';
-        accountName.textContent = displayName;
-        accountFallback.textContent = displayName.slice(0, 1) || 'V';
-        if (user.avatarUrl) {
-          accountAvatar.src = user.avatarUrl;
-          accountAvatar.alt = `${displayName}的头像`;
-          accountAvatar.hidden = false;
-          accountFallback.hidden = true;
-        }
-      }
 
       const target = this.interaction.followTarget;
       if (target) {
@@ -426,14 +337,8 @@ function ensureAccessLayerElement(): void {
             : `关注 ${target.displayName}`,
         );
         profile.dataset.visible = 'true';
-        profileName.textContent =
-          this.interaction.action === 'FOLLOW' && target.kind === 'CREATOR'
-            ? `${target.displayName} · Web 创作者`
-            : target.displayName;
-        profileDescription.textContent = target.description ?? '关注后即可继续使用此功能。';
-        if (this.interaction.action === 'FOLLOW') {
-          benefit.textContent = `关注 ${target.displayName}，获取作品更新与专属权益`;
-        }
+        profileName.textContent = target.displayName;
+        profileDescription.textContent = target.description ?? '接受登录授权后将自动关注该创作者。';
         avatarFallback.textContent = target.displayName.trim().slice(0, 1) || 'V';
         if (target.avatarUrl) {
           avatar.src = target.avatarUrl;
@@ -492,7 +397,6 @@ function ensureAccessLayerElement(): void {
             return;
           }
           const focusable = [
-            ...(this.interaction.action === 'FOLLOW' ? [closeAction] : []),
             ...(cancelAction.hidden ? [] : [cancelAction]),
             ...(action.hidden ? [] : [action]),
           ];
