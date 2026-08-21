@@ -473,9 +473,10 @@
       },
       "CheckoutRequest": {
         "type": "object",
-        "required": ["channel"],
+        "required": ["featureKey", "channel"],
         "additionalProperties": false,
         "properties": {
+          "featureKey": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
           "locale": { "type": "string", "enum": ["zh-CN", "en-US"], "default": "zh-CN" },
           "channel": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
         }

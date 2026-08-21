@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('creator authorization stays clickable in Chrome mobile emulation', async ({
+test('sign-in stays clickable in the taller mobile access layer', async ({
   browser,
   browserName,
 }) => {
@@ -14,24 +14,21 @@ test('creator authorization stays clickable in Chrome mobile emulation', async (
   await page.goto(`${origin}/pages/access-mobile.html`);
 
   await page.getByRole('button', { name: '打开功能' }).click();
-  const dialog = page.getByRole('dialog', { name: '接受 归藏 的授权' });
+  const dialog = page.getByRole('dialog', { name: 'ViceMe 授权' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText('归藏')).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '接受' })).toBeEnabled();
+  await expect(dialog.getByRole('button', { name: '登录' })).toBeEnabled();
   await expect(dialog.getByRole('button', { name: '拒绝' })).toBeEnabled();
-  await expect(dialog).not.toContainText('登录');
-  await expect(dialog).not.toContainText('接受后将通过微信');
-  const acceptBox = await dialog.getByRole('button', { name: '接受' }).boundingBox();
+  const acceptBox = await dialog.getByRole('button', { name: '登录' }).boundingBox();
   const rejectBox = await dialog.getByRole('button', { name: '拒绝' }).boundingBox();
   const dialogBox = await dialog.boundingBox();
   expect(acceptBox).not.toBeNull();
   expect(rejectBox).not.toBeNull();
   expect(dialogBox).not.toBeNull();
-  expect(Math.abs(acceptBox!.y - rejectBox!.y)).toBeLessThanOrEqual(3);
-  expect(Math.abs(acceptBox!.height - rejectBox!.height)).toBeLessThanOrEqual(2);
-  expect(dialogBox!.height).toBeLessThan(320);
+  expect(Math.abs(acceptBox!.y - rejectBox!.y)).toBeLessThan(1);
+  expect(Math.abs(acceptBox!.height - rejectBox!.height)).toBeLessThan(1);
+  expect(dialogBox!.height).toBeGreaterThan(480);
 
-  await dialog.getByRole('button', { name: '接受' }).click();
+  await dialog.getByRole('button', { name: '登录' }).click();
   await expect
     .poll(() => page.evaluate(() => window.__authorizeBody))
     .toMatchObject({ clientType: 'pc' });

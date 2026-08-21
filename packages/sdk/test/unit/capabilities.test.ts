@@ -151,11 +151,15 @@ describe('creator access capabilities', () => {
       presenter,
     });
 
-    await expect(client.checkout.open({ locale: 'zh-CN' })).resolves.toEqual({
-      checkoutUrl: 'https://shop.example.com/zh-CN/checkout?skill=dagou-tap',
-      alreadyOwned: true,
-    });
-    expect(transport.requests.at(-1)?.body).toEqual(expect.objectContaining({ locale: 'zh-CN' }));
+    await expect(client.checkout.open({ featureKey: 'emperor', locale: 'zh-CN' })).resolves.toEqual(
+      {
+        checkoutUrl: 'https://shop.example.com/zh-CN/checkout?skill=dagou-tap',
+        alreadyOwned: true,
+      },
+    );
+    expect(transport.requests.at(-1)?.body).toEqual(
+      expect.objectContaining({ featureKey: 'emperor', locale: 'zh-CN' }),
+    );
   });
 
   it('does not perform a required action when the interaction layer is dismissed', async () => {
@@ -210,7 +214,7 @@ describe('creator access capabilities', () => {
     expect(transport.requests.filter((request) => request.method === 'PUT')).toHaveLength(1);
   });
 
-  it('follows the creator after accepted authorization without a second follow prompt', async () => {
+  it('asks for follow consent in the signed-in layer after login', async () => {
     const transport = capabilityTransport();
     let authenticated = false;
     const originalRequest = transport.request.bind(transport);
@@ -250,23 +254,31 @@ describe('creator access capabilities', () => {
     };
     const presenter = vi.fn(async (interaction: AccessInteraction) => {
       const result = await interaction.perform();
-      if (result.type !== 'frame') throw new Error('expected auth frame');
-      const authorize = transport.requests.find(
-        (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
-      );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          origin: 'https://callback.test',
-          data: {
-            type: 'viceme:auth:complete',
-            workKey: 'wrk_test',
-            channel: (authorize?.body as { channel?: string }).channel,
-            code: 'a'.repeat(32),
-            codeVerifier: 'b'.repeat(43),
-          },
-        }),
-      );
-      await result.completion;
+      if (interaction.action === 'SIGN_IN') {
+        if (result.type !== 'frame') throw new Error('expected auth frame');
+        const authorize = transport.requests.find(
+          (request) => request.path === '/v1/public/v1/auth/wechat/authorize',
+        );
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            origin: 'https://callback.test',
+            data: {
+              type: 'viceme:auth:complete',
+              workKey: 'wrk_test',
+              channel: (authorize?.body as { channel?: string }).channel,
+              code: 'a'.repeat(32),
+              codeVerifier: 'b'.repeat(43),
+            },
+          }),
+        );
+        await result.completion;
+      } else {
+        expect(interaction).toMatchObject({
+          action: 'FOLLOW',
+          user: { nickname: 'Visitor' },
+          followTarget: { displayName: '归藏' },
+        });
+      }
       return 'acted' as const;
     });
     const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport, presenter });
@@ -275,7 +287,7 @@ describe('creator access capabilities', () => {
       allowed: true,
       reason: 'FOLLOWING',
     });
-    expect(presenter).toHaveBeenCalledOnce();
+    expect(presenter).toHaveBeenCalledTimes(2);
     expect(transport.requests.filter((request) => request.method === 'PUT')).toHaveLength(1);
   });
 
