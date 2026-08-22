@@ -359,14 +359,18 @@ function ensureAccessLayerElement(): void {
           profileDescription.title = target.description!;
         }
         profileStats.textContent = `${target.workCount} 个作品`;
-        for (const [index, coverUrl] of target.coverUrls.entries()) {
-          const cover = document.createElement('img');
-          cover.dataset.viceme = 'profile-cover';
-          cover.src = coverUrl;
-          cover.alt = `${target.displayName}的作品封面 ${index + 1}`;
-          profileCovers.append(cover);
+        if (target.coverUrls.length === 0) {
+          profileCovers.remove();
+        } else {
+          for (const [index, coverUrl] of target.coverUrls.entries()) {
+            const cover = document.createElement('img');
+            cover.dataset.viceme = 'profile-cover';
+            cover.src = coverUrl;
+            cover.alt = `${target.displayName}的作品封面 ${index + 1}`;
+            profileCovers.append(cover);
+          }
+          profileCovers.dataset.visible = 'true';
         }
-        profileCovers.dataset.visible = String(target.coverUrls.length > 0);
         avatarFallback.textContent = target.displayName.trim().slice(0, 1) || 'V';
         if (target.avatarUrl) {
           avatar.src = target.avatarUrl;

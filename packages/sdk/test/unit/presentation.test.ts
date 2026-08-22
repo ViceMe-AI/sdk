@@ -65,6 +65,31 @@ describe('default access presenter', () => {
     expect(perform).not.toHaveBeenCalled();
   });
 
+  it('omits the cover layer when the creator has no covers', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      followTarget: {
+        kind: 'CREATOR',
+        displayName: '归藏',
+        avatarUrl: null,
+        description: 'AI 创业者',
+        workCount: 0,
+        coverUrls: [],
+      },
+      perform: vi.fn(),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
+
+    expect(shadow.querySelector("[data-viceme='profile']")).not.toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile-covers']")).toBeNull();
+
+    (shadow.querySelector("[data-viceme='close']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+  });
+
   it('opens checkout directly inside the access layer frame', async () => {
     let complete!: () => void;
     const completion = new Promise<void>((resolve) => {
