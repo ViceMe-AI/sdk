@@ -6,6 +6,7 @@ import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('default access presenter', () => {
   it('shows complete creator information in the login consent layer', async () => {
+    const fullDescription = '专注于 AI 创作工具与智能体工作流。'.repeat(4);
     const perform = vi.fn(async () => ({ type: 'completed' as const }));
     const presented = defaultAccessPresenter({
       featureKey: 'auth',
@@ -15,7 +16,7 @@ describe('default access presenter', () => {
         kind: 'CREATOR',
         displayName: '归藏',
         avatarUrl: 'https://cdn.example.com/creator.jpg',
-        description: '专注于 AI 创作工具与智能体工作流。',
+        description: fullDescription,
         workCount: 2,
         coverUrls: ['https://cdn.example.com/work-one.jpg', 'https://cdn.example.com/work-two.jpg'],
       },
@@ -31,11 +32,18 @@ describe('default access presenter', () => {
     );
     expect(shadow.querySelector("[data-viceme='profile-name']")?.textContent).toBe('归藏');
     expect(shadow.querySelector("[data-viceme='profile-description']")?.textContent).toBe(
-      '专注于 AI 创作工具与智能体工作流。',
+      `${[...fullDescription].slice(0, 50).join('')}…`,
+    );
+    expect(shadow.querySelector("[data-viceme='profile-description']")?.getAttribute('title')).toBe(
+      fullDescription,
     );
     expect(shadow.querySelector("[data-viceme='profile-title']")).toBeNull();
     expect(shadow.querySelector("[data-viceme='profile-consent']")).toBeNull();
     expect(shadow.querySelector("[data-viceme='profile-stats']")?.textContent).toBe('2 个作品');
+    const summary = shadow.querySelector("[data-viceme='profile-summary']");
+    expect(shadow.querySelector("[data-viceme='profile-name']")?.parentElement).toBe(summary);
+    expect(shadow.querySelector("[data-viceme='profile-stats']")?.parentElement).toBe(summary);
+    expect(shadow.querySelector("[data-viceme='profile-separator']")?.textContent).toBe('·');
     expect(shadow.querySelectorAll("[data-viceme='profile-cover']")).toHaveLength(2);
     expect(shadow.querySelector("[data-viceme='close']")?.getAttribute('aria-label')).toBe('关闭');
     expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('授权');
@@ -45,6 +53,8 @@ describe('default access presenter', () => {
     const styles = shadow.querySelector('style')?.textContent ?? '';
     expect(styles).toContain("[data-action='SIGN_IN'] [data-viceme='description']");
     expect(styles).toContain('box-sizing: border-box;');
+    expect(styles).toContain('background: transparent;');
+    expect(styles).not.toContain('background: rgb(0 0 0 / 56%);');
     expect(styles).not.toContain('min-height: min(32rem');
     expect(styles).not.toContain("[data-viceme='close']:hover");
     expect(styles).toContain('height: min(92dvh, 46rem);');
@@ -116,12 +126,17 @@ describe('default access presenter', () => {
     });
     const layer = document.querySelector('viceme-access-layer')!;
     const shadow = layer.shadowRoot!;
+    const panel = shadow.querySelector("[data-viceme='panel']") as HTMLElement;
+    vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
+      height: 432,
+    } as DOMRect);
     (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(shadow.querySelector('iframe')?.getAttribute('src')).toBe('about:blank#wechat-login');
     });
     const frame = shadow.querySelector('iframe')!;
     expect(frame.hasAttribute('data-ready')).toBe(false);
+    expect(panel.style.height).toBe('432px');
     expect(shadow.querySelector("[data-viceme='frame-loading']")).toBeNull();
     expect(shadow.querySelector("[data-viceme='close']")).not.toBeNull();
     window.dispatchEvent(

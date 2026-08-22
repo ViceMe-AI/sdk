@@ -30,6 +30,7 @@ export type AccessPresentationResult = 'acted' | 'dismissed';
 export type AccessPresenter = (interaction: AccessInteraction) => Promise<AccessPresentationResult>;
 
 const ELEMENT_NAME = 'viceme-access-layer';
+const PROFILE_DESCRIPTION_LIMIT = 50;
 
 interface AccessLayerElement extends HTMLElement {
   interaction: AccessInteraction;
@@ -98,7 +99,7 @@ function ensureAccessLayerElement(): void {
             inset: 0;
             border: 0;
             border-radius: 0;
-            background: rgb(0 0 0 / 56%);
+            background: transparent;
           }
           [data-viceme='panel'] {
             position: relative;
@@ -164,15 +165,25 @@ function ensureAccessLayerElement(): void {
             font-weight: 700;
           }
           [data-viceme='avatar'][hidden], [data-viceme='avatar-fallback'][hidden] { display: none; }
+          [data-viceme='profile-summary'] {
+            display: flex;
+            min-width: 0;
+            align-items: baseline;
+            justify-content: center;
+            gap: 0.5rem;
+          }
           [data-viceme='profile-name'] { margin: 0; font-size: 1.375rem; font-weight: 700; }
+          [data-viceme='profile-separator'], [data-viceme='profile-stats'] {
+            color: #71717a;
+          }
           [data-viceme='profile-description'] {
             margin: 0.25rem 0 0;
             overflow-wrap: anywhere;
             color: #71717a;
           }
+          [data-viceme='profile-description']:empty { display: none; }
           [data-viceme='profile-stats'] {
-            margin: 0.375rem 0 0;
-            color: #71717a;
+            margin: 0;
             font-size: 0.875rem;
           }
           [data-viceme='profile-header'] { min-width: 0; }
@@ -286,9 +297,12 @@ function ensureAccessLayerElement(): void {
               <div data-viceme="profile-header">
                 <img data-viceme="avatar" hidden />
                 <span data-viceme="avatar-fallback" aria-hidden="true"></span>
-                <p data-viceme="profile-name"></p>
+                <div data-viceme="profile-summary">
+                  <p data-viceme="profile-name"></p>
+                  <span data-viceme="profile-separator" aria-hidden="true">·</span>
+                  <p data-viceme="profile-stats"></p>
+                </div>
               </div>
-              <p data-viceme="profile-stats"></p>
               <p data-viceme="profile-description"></p>
               <div data-viceme="profile-covers" aria-label="作品封面"></div>
             </section>
@@ -336,7 +350,14 @@ function ensureAccessLayerElement(): void {
         );
         profile.dataset.visible = 'true';
         profileName.textContent = target.displayName;
-        profileDescription.textContent = target.description ?? '';
+        const descriptionCharacters = [...(target.description ?? '')];
+        profileDescription.textContent =
+          descriptionCharacters.length > PROFILE_DESCRIPTION_LIMIT
+            ? `${descriptionCharacters.slice(0, PROFILE_DESCRIPTION_LIMIT).join('')}…`
+            : descriptionCharacters.join('');
+        if (descriptionCharacters.length > PROFILE_DESCRIPTION_LIMIT) {
+          profileDescription.title = target.description!;
+        }
         profileStats.textContent = `${target.workCount} 个作品`;
         for (const [index, coverUrl] of target.coverUrls.entries()) {
           const cover = document.createElement('img');
@@ -394,6 +415,10 @@ function ensureAccessLayerElement(): void {
           const result = await this.interaction.perform();
           if (result.type === 'frame') {
             activeFrame = result;
+            if (this.interaction.action === 'SIGN_IN') {
+              const currentHeight = panel.getBoundingClientRect().height;
+              if (currentHeight > 0) panel.style.height = `${currentHeight}px`;
+            }
             panel.dataset.frame = 'true';
             frame.src = result.url;
             frame.focus();
