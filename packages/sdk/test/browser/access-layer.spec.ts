@@ -43,6 +43,9 @@ test('sign-in stays clickable in a content-sized mobile access layer', async ({
     .toMatchObject({ clientType: 'pc' });
   const authorizationFrame = page.locator('viceme-access-layer').locator('iframe').contentFrame();
   await expect(dialog.getByRole('button', { name: '关闭' })).toBeVisible();
+  await expect
+    .poll(async () => (await dialog.boundingBox())?.height)
+    .toBeCloseTo(dialogBox!.height, 0);
   await authorizationFrame.getByRole('button', { name: '继续授权' }).click();
   await expect(authorizationFrame.getByText('已点击')).toBeVisible();
 
