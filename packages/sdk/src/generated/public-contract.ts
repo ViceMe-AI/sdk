@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.1.0, sha256 a9c5d56d90eb2654…)
+ * (contractVersion 0.4.0, sha256 3e487a33d9633e4d…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -13,20 +13,18 @@
  */
 
 export interface paths {
-    "/public/v1/work-sessions": {
+    "/v1/danmaku/messages": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List public danmaku messages for one page-position anchor */
+        get: operations["listDanmakuMessages"];
         put?: never;
-        /**
-         * Establish a public visitor session for a Work
-         * @description Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS: exact registered origins only, credentials disabled.
-         */
-        post: operations["createWorkSession"];
+        /** Create a public danmaku message */
+        post: operations["createDanmakuMessage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -37,42 +35,40 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Public opaque work key. */
+        /** @description Public opaque SDK Work key. */
         WorkKey: string;
-        /** @description Enabled capability name for the work. */
-        CapabilityName: string;
-        CreateWorkSessionRequest: {
+        /** @description Opaque page-position anchor derived by the external SDK. */
+        DanmakuAnchorKey: string;
+        DanmakuCursor: string;
+        DanmakuMessage: {
+            /** Format: uuid */
+            id: string;
             workKey: components["schemas"]["WorkKey"];
+            content: string;
+            anchorKey: components["schemas"]["DanmakuAnchorKey"] | null;
+            /** Format: date-time */
+            createdAt: string;
         };
-        WorkDescriptor: {
-            key: components["schemas"]["WorkKey"];
-            capabilities: components["schemas"]["CapabilityName"][];
-        } & {
-            [key: string]: unknown;
+        DanmakuMessagesResponse: {
+            items: components["schemas"]["DanmakuMessage"][];
+            nextCursor: components["schemas"]["DanmakuCursor"] | null;
+            total: number;
         };
-        /** @description Unknown additional fields are allowed and ignored by the SDK (forward compatibility). */
-        WorkSession: {
-            work: components["schemas"]["WorkDescriptor"];
-            /** @description Short-lived capability token; memory-only in the SDK. */
-            token?: string;
-            /** @description Epoch milliseconds when the token expires. */
-            expiresAt?: number;
-        } & {
-            [key: string]: unknown;
+        CreateDanmakuMessageRequest: {
+            workKey: components["schemas"]["WorkKey"];
+            content: string;
+            anchorKey?: components["schemas"]["DanmakuAnchorKey"];
         };
         ErrorBody: {
-            error: {
-                /** @enum {string} */
-                code: "CONFIG_INVALID" | "WORK_NOT_FOUND" | "ORIGIN_NOT_ALLOWED" | "CAPABILITY_DISABLED" | "SESSION_EXPIRED" | "RATE_LIMITED" | "NETWORK_TIMEOUT" | "CHECKOUT_UNAVAILABLE" | "INTERNAL_ERROR";
-                message?: string;
-                retryable?: boolean;
-                requestId?: string;
-            };
+            statusCode: number;
+            code: string;
+            message: string | string[];
+            requestId: string;
         };
     };
     responses: {
-        /** @description Invalid configuration. */
-        ValidationError: {
+        /** @description Invalid query or body. */
+        BadRequest: {
             headers: {
                 [name: string]: unknown;
             };
@@ -80,16 +76,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorBody"];
             };
         };
-        /** @description Origin not registered for this work (fail closed). */
-        OriginNotAllowed: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorBody"];
-            };
-        };
-        /** @description Unknown, private, or disabled work. */
+        /** @description Unknown, inactive, or non-PUBLIC danmaku work. */
         WorkNotFound: {
             headers: {
                 [name: string]: unknown;
@@ -98,7 +85,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorBody"];
             };
         };
-        /** @description Rate limit exceeded (retryable). */
+        /** @description Danmaku write rate limit exceeded. */
         RateLimited: {
             headers: {
                 [name: string]: unknown;
@@ -107,7 +94,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorBody"];
             };
         };
-        /** @description Server error (retryable). */
+        /** @description Unexpected Shop error. */
         InternalError: {
             headers: {
                 [name: string]: unknown;
@@ -124,7 +111,35 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    createWorkSession: {
+    listDanmakuMessages: {
+        parameters: {
+            query: {
+                workKey: components["schemas"]["WorkKey"];
+                anchorKey?: components["schemas"]["DanmakuAnchorKey"];
+                cursor?: components["schemas"]["DanmakuCursor"];
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Messages for the requested public work and anchor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DanmakuMessagesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["WorkNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createDanmakuMessage: {
         parameters: {
             query?: never;
             header?: never;
@@ -133,26 +148,23 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateWorkSessionRequest"];
+                "application/json": components["schemas"]["CreateDanmakuMessageRequest"];
             };
         };
         responses: {
-            /** @description Session established. */
+            /** @description Message created. */
             201: {
                 headers: {
-                    /** @description Server request id for support correlation. */
-                    "x-request-id"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkSession"];
+                    "application/json": components["schemas"]["DanmakuMessage"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["OriginNotAllowed"];
+            400: components["responses"]["BadRequest"];
             404: components["responses"]["WorkNotFound"];
             429: components["responses"]["RateLimited"];
-            "5xx": components["responses"]["InternalError"];
+            500: components["responses"]["InternalError"];
         };
     };
 }

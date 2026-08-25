@@ -1,51 +1,93 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "ViceMe Public Capabilities API",
-    "version": "0.1.0",
-    "summary": "Public, unauthenticated-visitor endpoints consumed by the ViceMe browser SDK.",
-    "description": "BASELINE SNAPSHOT (sdk-baseline): documents exactly what the SDK core (B0.1) consumes. The authority for this contract is the Shop API; this file will be replaced verbatim by the first Shop-generated export of /public/v1/** (see contracts/README.md). Compatibility rules follow public-sdk.md §12.3."
+    "title": "ViceMe Public Danmaku API",
+    "version": "0.4.0",
+    "summary": "Public danmaku messages consumed inside the Shop-hosted iframe.",
+    "description": "Shop owns the only public SDK-work data API. It accepts anonymous reads and writes only for active SDK Works with an active danmaku feature using the PUBLIC policy. The external ViceMe SDK does not call this API directly."
   },
   "servers": [
-    { "url": "https://api.viceme.cn", "description": "CN region public API" },
-    { "url": "https://api.viceme.ai", "description": "GLOBAL region public API" }
+    { "url": "https://viceme.cn", "description": "CN Shop gateway" },
+    { "url": "https://viceme.ai", "description": "GLOBAL Shop gateway" }
   ],
-  "tags": [{ "name": "work-sessions", "description": "Public visitor sessions" }],
+  "security": [],
+  "tags": [{ "name": "danmaku", "description": "Public hosted danmaku messages" }],
   "paths": {
-    "/public/v1/work-sessions": {
+    "/v1/danmaku/messages": {
+      "get": {
+        "tags": ["danmaku"],
+        "operationId": "listDanmakuMessages",
+        "summary": "List public danmaku messages for one page-position anchor",
+        "parameters": [
+          {
+            "name": "workKey",
+            "in": "query",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/WorkKey" }
+          },
+          {
+            "name": "anchorKey",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/DanmakuAnchorKey" }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/DanmakuCursor" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 80,
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Messages for the requested public work and anchor.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DanmakuMessagesResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/WorkNotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
       "post": {
-        "tags": ["work-sessions"],
-        "operationId": "createWorkSession",
-        "summary": "Establish a public visitor session for a Work",
-        "description": "Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS: exact registered origins only, credentials disabled.",
+        "tags": ["danmaku"],
+        "operationId": "createDanmakuMessage",
+        "summary": "Create a public danmaku message",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateWorkSessionRequest" }
+              "schema": { "$ref": "#/components/schemas/CreateDanmakuMessageRequest" }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Session established.",
-            "headers": {
-              "x-request-id": {
-                "schema": { "type": "string" },
-                "description": "Server request id for support correlation."
-              }
-            },
+            "description": "Message created.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/WorkSession" }
+                "schema": { "$ref": "#/components/schemas/DanmakuMessage" }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "403": { "$ref": "#/components/responses/OriginNotAllowed" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
           "404": { "$ref": "#/components/responses/WorkNotFound" },
           "429": { "$ref": "#/components/responses/RateLimited" },
-          "5xx": { "$ref": "#/components/responses/InternalError" }
+          "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
     }
@@ -55,92 +97,81 @@
       "WorkKey": {
         "type": "string",
         "pattern": "^wrk_[A-Za-z0-9_-]{4,124}$",
-        "description": "Public opaque work key."
+        "description": "Public opaque SDK Work key."
       },
-      "CapabilityName": {
+      "DanmakuAnchorKey": {
         "type": "string",
-        "pattern": "^[a-z][a-z0-9-]{1,31}$",
-        "description": "Enabled capability name for the work."
+        "minLength": 1,
+        "maxLength": 128,
+        "description": "Opaque page-position anchor derived by the external SDK."
       },
-      "CreateWorkSessionRequest": {
+      "DanmakuCursor": {
+        "type": "string",
+        "pattern": "^[0-9a-z]+\\.[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      },
+      "DanmakuMessage": {
         "type": "object",
-        "required": ["workKey"],
+        "required": ["id", "workKey", "content", "anchorKey", "createdAt"],
         "additionalProperties": false,
         "properties": {
-          "workKey": { "$ref": "#/components/schemas/WorkKey" }
-        }
-      },
-      "WorkDescriptor": {
-        "type": "object",
-        "required": ["key", "capabilities"],
-        "additionalProperties": true,
-        "properties": {
-          "key": { "$ref": "#/components/schemas/WorkKey" },
-          "capabilities": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/CapabilityName" },
-            "minItems": 0
-          }
-        }
-      },
-      "WorkSession": {
-        "type": "object",
-        "required": ["work"],
-        "additionalProperties": true,
-        "description": "Unknown additional fields are allowed and ignored by the SDK (forward compatibility).",
-        "properties": {
-          "work": { "$ref": "#/components/schemas/WorkDescriptor" },
-          "token": {
-            "type": "string",
-            "description": "Short-lived capability token; memory-only in the SDK."
+          "id": { "type": "string", "format": "uuid" },
+          "workKey": { "$ref": "#/components/schemas/WorkKey" },
+          "content": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "anchorKey": {
+            "oneOf": [{ "$ref": "#/components/schemas/DanmakuAnchorKey" }, { "type": "null" }]
           },
-          "expiresAt": {
-            "type": "integer",
-            "description": "Epoch milliseconds when the token expires."
-          }
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "DanmakuMessagesResponse": {
+        "type": "object",
+        "required": ["items", "nextCursor", "total"],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DanmakuMessage" }
+          },
+          "nextCursor": {
+            "oneOf": [{ "$ref": "#/components/schemas/DanmakuCursor" }, { "type": "null" }]
+          },
+          "total": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "CreateDanmakuMessageRequest": {
+        "type": "object",
+        "required": ["workKey", "content"],
+        "additionalProperties": false,
+        "properties": {
+          "workKey": { "$ref": "#/components/schemas/WorkKey" },
+          "content": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "anchorKey": { "$ref": "#/components/schemas/DanmakuAnchorKey" }
         }
       },
       "ErrorBody": {
         "type": "object",
-        "required": ["error"],
+        "required": ["statusCode", "code", "message", "requestId"],
+        "additionalProperties": false,
         "properties": {
-          "error": {
-            "type": "object",
-            "required": ["code"],
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "CONFIG_INVALID",
-                  "WORK_NOT_FOUND",
-                  "ORIGIN_NOT_ALLOWED",
-                  "CAPABILITY_DISABLED",
-                  "SESSION_EXPIRED",
-                  "RATE_LIMITED",
-                  "NETWORK_TIMEOUT",
-                  "CHECKOUT_UNAVAILABLE",
-                  "INTERNAL_ERROR"
-                ]
-              },
-              "message": { "type": "string", "maxLength": 200 },
-              "retryable": { "type": "boolean" },
-              "requestId": { "type": "string" }
-            }
-          }
+          "statusCode": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+          "message": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string" }
+              }
+            ]
+          },
+          "requestId": { "type": "string", "minLength": 1, "maxLength": 128 }
         }
       }
     },
     "responses": {
-      "ValidationError": {
-        "description": "Invalid configuration.",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorBody" }
-          }
-        }
-      },
-      "OriginNotAllowed": {
-        "description": "Origin not registered for this work (fail closed).",
+      "BadRequest": {
+        "description": "Invalid query or body.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorBody" }
@@ -148,7 +179,7 @@
         }
       },
       "WorkNotFound": {
-        "description": "Unknown, private, or disabled work.",
+        "description": "Unknown, inactive, or non-PUBLIC danmaku work.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorBody" }
@@ -156,7 +187,7 @@
         }
       },
       "RateLimited": {
-        "description": "Rate limit exceeded (retryable).",
+        "description": "Danmaku write rate limit exceeded.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorBody" }
@@ -164,7 +195,7 @@
         }
       },
       "InternalError": {
-        "description": "Server error (retryable).",
+        "description": "Unexpected Shop error.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorBody" }

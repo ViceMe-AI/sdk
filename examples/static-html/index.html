@@ -3,74 +3,28 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ViceMe SDK — static HTML example</title>
-    <!--
-      ViceMe SDK static HTML example (documentation form).
-
-      Two first-class integration styles are shown below:
-      1. Declarative auto-mount via the CDN loader (no build step).
-      2. Browser-native ESM with explicit lifecycle control.
-
-      Replace `wrk_public_example` with your real public work key. The work
-      key is public and opaque — it is not a secret and must never be one.
-    -->
+    <title>ViceMe hosted danmaku example</title>
     <style>
       body {
-        font-family: system-ui, sans-serif;
-        max-width: 42rem;
-        margin: 2rem auto;
-        padding: 0 1rem;
-        line-height: 1.5;
-      }
-      #viceme-danmaku {
-        min-height: 8rem;
-        border: 1px dashed #cbd5e1;
-        border-radius: 8px;
-      }
-      code {
-        background: #f1f5f9;
-        padding: 0.125rem 0.375rem;
-        border-radius: 4px;
+        min-height: 180vh;
+        margin: 0;
+        padding: 2rem;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
       }
     </style>
   </head>
   <body>
-    <h1>ViceMe SDK — static HTML</h1>
-    <p>
-      Style 1 — declarative auto-mount. The loader reads
-      <code>data-viceme-*</code> attributes, loads the same-version core and feature chunks from the
-      release manifest, and mounts into the target.
-    </p>
-
-    <div id="viceme-danmaku"></div>
+    <main>
+      <h1>Third-party host page</h1>
+      <p>The host adds no SDK CSS or API calls. Replace the public work key below.</p>
+      <button type="button">Host-page action</button>
+    </main>
+    <!-- prettier-ignore -->
     <script
-      defer
-      src="https://cdn.viceme.cn/sdk/v1/viceme.min.js"
-      integrity="sha384-REPLACE-WITH-RELEASE-SRI"
-      crossorigin="anonymous"
-      data-viceme-work="wrk_public_example"
-      data-viceme-region="cn"
-      data-viceme-features="danmaku"
-      data-viceme-target="#viceme-danmaku"
-      data-viceme-theme="auto"
-    ></script>
-    <!--
-      The `danmaku` feature is not part of the 0.x releases yet. This page is
-      the integration template: once a capability ships, replace the SRI hash
-      from the release manifest and it works unchanged.
-    -->
-
-    <hr />
-
-    <p>
-      Style 2 — browser-native ESM with explicit lifecycle control (paste into a
-      <code>&lt;script type="module"&gt;</code>):
-    </p>
-    <pre><code>import { createViceMe } from 'https://cdn.viceme.cn/sdk/1.0.0/index.js';
-
-const client = createViceMe({ workKey: 'wrk_public_example', region: 'cn' });
-await client.ready();
-
-window.addEventListener('pagehide', () => client.destroy());</code></pre>
+      defer src="https://viceme.cn/viceme-sdk/v1/viceme.min.js" data-viceme-work="wrk_public_example" data-viceme-region="cn"
+      data-viceme-features="danmaku" data-viceme-target="body"
+      data-viceme-theme="auto"></script>
   </body>
 </html>

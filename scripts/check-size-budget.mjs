@@ -15,7 +15,7 @@ const distDir = join(here, '..', 'packages', 'sdk', 'dist');
 const BUDGETS = {
   'index.js': { gzip: 15 * 1024, label: 'core ESM' },
   'viceme.min.js': { gzip: 8 * 1024, label: 'CDN loader' },
-  'testing.js': { gzip: 12 * 1024, label: 'testing adapter' },
+  'danmaku.js': { gzip: 16 * 1024, label: 'hosted danmaku capability' },
 };
 
 const manifest = JSON.parse(await readFile(join(distDir, 'manifest.json'), 'utf8'));

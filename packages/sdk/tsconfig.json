@@ -7,9 +7,9 @@
     "src",
     "test",
     "vite.config.esm.ts",
+    "vite.config.endpoints.ts",
     "vite.config.loader.ts",
     "vite.config.bootstrap.ts",
-    "vite.config.fixture.ts",
     "playwright.config.ts"
   ]
 }

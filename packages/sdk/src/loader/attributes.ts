@@ -16,7 +16,7 @@ export type ViceMeTheme = 'light' | 'dark' | 'auto';
 export interface LoaderAttributes {
   workKey: string;
   region: ViceMeRegion;
-  /** Deduplicated feature names in declared order. */
+  /** The only released public feature. */
   features: string[];
   /** CSS selector; required whenever features are declared. */
   target?: string;
@@ -33,7 +33,6 @@ const KNOWN_ATTRIBUTES: ReadonlySet<string> = new Set([
   'data-viceme-loader',
 ]);
 
-const FEATURE_NAME_PATTERN = /^[a-z][a-z0-9-]{1,31}$/;
 const THEMES: ReadonlySet<string> = new Set(['light', 'dark', 'auto']);
 
 export function parseLoaderAttributes(element: Element): LoaderAttributes {
@@ -54,21 +53,10 @@ export function parseLoaderAttributes(element: Element): LoaderAttributes {
   }
 
   const rawFeatures = element.getAttribute('data-viceme-features');
-  if (rawFeatures === null || rawFeatures.trim() === '') {
-    throw configInvalid('Loader attribute "data-viceme-features" is required.');
+  if (rawFeatures !== 'danmaku') {
+    throw configInvalid('Loader attribute "data-viceme-features" must be exactly "danmaku".');
   }
-  const features: string[] = [];
-  for (const part of rawFeatures.split(',')) {
-    const feature = part.trim();
-    if (feature === '') continue;
-    if (!FEATURE_NAME_PATTERN.test(feature)) {
-      throw configInvalid(`Loader feature name "${feature}" is not a valid capability name.`);
-    }
-    if (!features.includes(feature)) features.push(feature);
-  }
-  if (features.length === 0) {
-    throw configInvalid('Loader attribute "data-viceme-features" must list at least one feature.');
-  }
+  const features = ['danmaku'];
 
   const target = element.getAttribute('data-viceme-target');
   if (target === '') {
@@ -79,6 +67,14 @@ export function parseLoaderAttributes(element: Element): LoaderAttributes {
     throw configInvalid(
       'Loader attribute "data-viceme-target" is required when features are declared.',
     );
+  }
+  try {
+    // Probe-parse the selector now: an invalid selector is a configuration
+    // error and must fail closed here, never surface later as a retryable
+    // INTERNAL_ERROR from querySelectorAll.
+    element.matches(target);
+  } catch {
+    throw configInvalid('Loader attribute "data-viceme-target" is not a valid CSS selector.');
   }
 
   const rawTheme = element.getAttribute('data-viceme-theme');

@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import {
-  resolveApiBaseUrl,
-  validatePublicConfig,
-  PUBLIC_API_BASE_URLS,
-} from '../../src/core/config.ts';
+
+import { validatePublicConfig } from '../../src/core/config.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('validatePublicConfig', () => {
-  it('accepts the public shape', () => {
-    const cfg = validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn' });
-    expect(cfg).toEqual({ workKey: 'wrk_public_xxx', region: 'cn', signal: undefined });
+  it('accepts exactly workKey and region', () => {
+    expect(validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn' })).toEqual({
+      workKey: 'wrk_public_xxx',
+      region: 'cn',
+    });
   });
 
   it('rejects non-object input', () => {
@@ -17,11 +16,14 @@ describe('validatePublicConfig', () => {
     expect(() => validatePublicConfig(null)).toThrow(ViceMeError);
   });
 
-  it('rejects unknown fields (no apiBaseUrl smuggling)', () => {
-    expect(() =>
-      validatePublicConfig({ workKey: 'wrk_test', region: 'cn', apiBaseUrl: 'http://evil' }),
-    ).toThrow(/Unknown configuration field "apiBaseUrl"/);
-  });
+  it.each(['apiBaseUrl', 'signal', 'transport', 'token', 'presenter'])(
+    'rejects removed or internal field %s',
+    (field) => {
+      expect(() =>
+        validatePublicConfig({ workKey: 'wrk_test', region: 'cn', [field]: 'nope' }),
+      ).toThrow(`Unknown configuration field "${field}"`);
+    },
+  );
 
   it('rejects malformed work keys', () => {
     expect(() => validatePublicConfig({ workKey: 'WRK_test', region: 'cn' })).toThrow();
@@ -32,18 +34,5 @@ describe('validatePublicConfig', () => {
   it('rejects invalid regions', () => {
     expect(() => validatePublicConfig({ workKey: 'wrk_test', region: 'eu' })).toThrow();
     expect(() => validatePublicConfig({ workKey: 'wrk_test' })).toThrow();
-  });
-
-  it('rejects non-AbortSignal signal', () => {
-    expect(() =>
-      validatePublicConfig({ workKey: 'wrk_test', region: 'cn', signal: 'x' }),
-    ).toThrow();
-  });
-});
-
-describe('resolveApiBaseUrl', () => {
-  it('returns one documented host per region', () => {
-    expect(resolveApiBaseUrl('cn')).toBe(PUBLIC_API_BASE_URLS.cn);
-    expect(resolveApiBaseUrl('global')).toBe(PUBLIC_API_BASE_URLS.global);
   });
 });

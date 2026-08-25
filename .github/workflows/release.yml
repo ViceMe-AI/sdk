@@ -15,7 +15,7 @@ name: SDK release publication
 #
 # Recovery: workflow_dispatch with the existing tag converges every step —
 # npm (integrity match), release assets (idempotent), and both S3 regions
-# (immutable put semantics). The /sdk/v1 stable alias stays a separate,
+# (immutable put semantics). The /viceme-sdk/v1 stable alias stays a separate,
 # explicit Promote CDN operation (promote forward / authorized rollback).
 
 on:
@@ -123,6 +123,10 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ needs.metadata.outputs.sha }}
+      - name: Require a finalized publication license
+        run: |
+          test -s LICENSE
+          test ! -e LICENSE-PENDING.md
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with: { version: 11 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
