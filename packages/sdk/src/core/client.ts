@@ -1,8 +1,8 @@
 /**
  * Headless ViceMe client.
  *
- * The core never touches the DOM: `document`, auto-mount, and UI lifecycle
- * live exclusively in the loader and capability `mount` layers. `ready()` is
+ * `ready()` and access checks remain headless. Interactive authentication and
+ * checkout touch `window` only when the caller explicitly invokes them. `ready()` is
  * idempotent per instance (shares one promise), `destroy()` is idempotent and
  * synchronously cancels requests and subscriptions; every business method on a
  * destroyed client fails with `CLIENT_DESTROYED`.
@@ -14,12 +14,22 @@ import type { ViceMeConfig, ViceMeRegion } from './config.ts';
 import { SessionManager } from '../session/session.ts';
 import type { Transport } from '../transport/transport.ts';
 import { API_MAJOR, SDK_VERSION } from '../version.ts';
+import {
+  createCapabilities,
+  type AccessCapability,
+  type AuthCapability,
+  type CheckoutCapability,
+} from './capabilities.ts';
+import type { AccessPresenter } from './presentation.ts';
 
 export interface ViceMeClient {
   readonly version: string;
   readonly workKey: string;
   readonly region: ViceMeRegion;
   readonly state: ViceMeClientState;
+  readonly auth: AuthCapability;
+  readonly access: AccessCapability;
+  readonly checkout: CheckoutCapability;
   ready(): Promise<void>;
   hasCapability(name: string): boolean;
   destroy(): void;
@@ -41,6 +51,8 @@ class DestroySignalReason extends DOMException {
 export interface ViceMeClientDeps {
   config: ViceMeConfig;
   transport: Transport;
+  /** Interaction override for the testing entry only. */
+  presenter?: AccessPresenter;
   /** Injectable clock (testing only). */
   now?: () => number;
 }
@@ -51,6 +63,9 @@ export class ViceMeClientImpl implements ViceMeClient {
   readonly #config: ViceMeConfig;
   readonly #internalSignal = new AbortController();
   #readyPromise: Promise<void> | undefined;
+  readonly auth: AuthCapability;
+  readonly access: AccessCapability;
+  readonly checkout: CheckoutCapability;
   /** Detaches the caller-signal listener; undefined when none was attached. */
   #detachCallerAbort: (() => void) | undefined;
 
@@ -62,6 +77,15 @@ export class ViceMeClientImpl implements ViceMeClient {
       signal: this.#internalSignal.signal,
       ...(deps.now !== undefined ? { now: deps.now } : {}),
     });
+    const capabilities = createCapabilities({
+      session: this.#session,
+      workKey: deps.config.workKey,
+      presenter: deps.presenter,
+      ready: () => this.ready(),
+    });
+    this.auth = capabilities.auth;
+    this.access = capabilities.access;
+    this.checkout = capabilities.checkout;
     const callerSignal = deps.config.signal;
     if (callerSignal) {
       // Propagate the caller's own abort reason when one was set.

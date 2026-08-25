@@ -1,7 +1,7 @@
 # Public API Contract Snapshots
 
 This directory holds machine-readable snapshots of the Shop public API
-(`/public/v1/**`) that the SDK compiles against.
+(`/v1/public/v1/**`) that the SDK compiles against.
 
 ## Authority
 
@@ -17,7 +17,7 @@ This directory holds machine-readable snapshots of the Shop public API
 
 `public-capabilities.openapi.json` is currently a **sdk-baseline** snapshot:
 it documents exactly what the SDK core consumes today (`POST
-/public/v1/work-sessions`). It will be replaced verbatim by the first
+/v1/public/v1/work-sessions`). It will be replaced verbatim by the first
 Shop-generated contract artifact (Shop B0.2 PR). The manifest records the
 provenance:
 

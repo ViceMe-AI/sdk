@@ -18,12 +18,25 @@ import { createViceMe } from '@viceme-ai/sdk';
 const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
 await client.ready();
 
-if (client.hasCapability('danmaku')) {
-  // capability subpath, e.g. '@viceme-ai/sdk/danmaku'
-}
+const access = await client.access.checkMany(['dingdong', 'emperor']);
+if (access.dingdong.allowed) enableDingdong();
+if (access.emperor.allowed) enableEmperor();
+
+// Call from a user gesture. A denied decision opens the ViceMe
+// bottom-sheet/in-page Web Component. Creator details and recent work covers appear
+// above one authorization action; accepted authorization automatically follows.
+const decision = await client.access.require('emperor');
+if (decision.allowed) enableEmperor();
 
 client.destroy();
 ```
+
+The SDK registers and mounts `<viceme-access-layer>` with isolated ViceMe-owned
+styles. Authorization and checkout remain inside its iframe area and complete through
+an origin- and channel-validated message; no browser popup, page navigation,
+`confirm`, or `alert` is used. Custom site presenters and style inference are
+not part of the current public contract. WeChat opens directly inside the frame,
+and the checkout frame keeps a stable height while its content loads.
 
 Static HTML sites can use the CDN auto-loader instead — see the
 [repository README](https://github.com/ViceMe-AI/sdk).
@@ -44,5 +57,4 @@ await client.ready();
 ```
 
 Consumers branch on stable `ViceMeError.code` values only — never on error
-messages. Status: `0.x` infrastructure phase; capability subpaths land as
-their public API contracts go live.
+messages. Work-session tokens and work-scoped users remain in memory only.

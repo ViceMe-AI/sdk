@@ -271,7 +271,6 @@ async function loadCore(baseUrl: URL): Promise<CoreModule> {
 const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set([
   'CONFIG_INVALID',
   'WORK_NOT_FOUND',
-  'ORIGIN_NOT_ALLOWED',
   'CAPABILITY_DISABLED',
   'CLIENT_DESTROYED',
   'SESSION_EXPIRED',

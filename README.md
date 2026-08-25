@@ -2,15 +2,15 @@
 
 Public, versioned SDK that lets any website — static HTML, browser-native ESM,
 React, Next.js, or Agent-generated projects — load ViceMe capabilities (danmaku,
-hosted checkout, …) through one shared headless core.
+creator login, following, and hosted checkout) through one shared core.
 
 - **Package**: [`@viceme-ai/sdk`](./packages/sdk) — browser core, Work context,
   public session, and capability subpaths.
 - **React**: `@viceme-ai/react` will be published as a thin binding on top of
   the same core once the first real hooks/components exist. It is deliberately
   **not** created empty in this repository.
-- **Status**: `0.x` infrastructure phase. No capability subpath (`danmaku`,
-  `payment`) is exported until the matching public API contract is live.
+- **Status**: `0.x`. Creator access capabilities are backed by the committed
+  Shop public API contract.
 
 ## Install
 
@@ -58,9 +58,13 @@ import { createViceMe } from '@viceme-ai/sdk';
 const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
 await client.ready();
 
-if (client.hasCapability('fixture')) {
-  // capability-specific subpath, e.g. '@viceme-ai/sdk/danmaku'
-}
+const decisions = await client.access.checkMany(['dingdong', 'emperor']);
+
+// From a gated user gesture. A denied decision opens the ViceMe in-page Web
+// Component. Follow gates show the creator in the sign-in consent layer and
+// automatically follow after accepted authorization. Payment selection and confirmation
+// remain explicit inside the bottom sheet or modal.
+await client.access.require('emperor');
 
 client.destroy();
 ```
@@ -95,6 +99,9 @@ interface ViceMeClient {
   readonly state: 'CREATED' | 'INITIALIZING' | 'READY' | 'DEGRADED' | 'FAILED' | 'DESTROYED';
 
   ready(): Promise<void>;
+  readonly auth: AuthCapability;
+  readonly access: AccessCapability;
+  readonly checkout: CheckoutCapability;
   hasCapability(name: string): boolean;
   destroy(): void;
 }

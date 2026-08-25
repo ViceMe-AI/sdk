@@ -8,7 +8,6 @@
  */
 
 import { configInvalid } from './errors.ts';
-
 export type ViceMeRegion = 'cn' | 'global';
 
 export interface ViceMeConfig {
@@ -29,7 +28,7 @@ const REGIONS: ReadonlySet<string> = new Set(['cn', 'global']);
  */
 export const PUBLIC_API_BASE_URLS: Readonly<Record<ViceMeRegion, string>> = {
   cn: 'https://api.viceme.cn',
-  global: 'https://api.viceme.ai',
+  global: 'https://api.viceme.ai/v1',
 };
 
 export function resolveApiBaseUrl(region: ViceMeRegion): string {
@@ -69,5 +68,9 @@ export function validatePublicConfig(input: unknown): ViceMeConfig {
   if (raw.signal !== undefined && !(raw.signal instanceof AbortSignal)) {
     throw configInvalid('Configuration field "signal" must be an AbortSignal.');
   }
-  return { workKey: raw.workKey, region: raw.region, signal: raw.signal };
+  return {
+    workKey: raw.workKey,
+    region: raw.region,
+    signal: raw.signal,
+  };
 }

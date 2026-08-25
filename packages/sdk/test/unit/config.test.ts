@@ -9,7 +9,11 @@ import { ViceMeError } from '../../src/core/errors.ts';
 describe('validatePublicConfig', () => {
   it('accepts the public shape', () => {
     const cfg = validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn' });
-    expect(cfg).toEqual({ workKey: 'wrk_public_xxx', region: 'cn', signal: undefined });
+    expect(cfg).toEqual({
+      workKey: 'wrk_public_xxx',
+      region: 'cn',
+      signal: undefined,
+    });
   });
 
   it('rejects non-object input', () => {
@@ -39,11 +43,22 @@ describe('validatePublicConfig', () => {
       validatePublicConfig({ workKey: 'wrk_test', region: 'cn', signal: 'x' }),
     ).toThrow();
   });
+
+  it('rejects custom presenters while the interaction contract is ViceMe-owned', () => {
+    expect(() =>
+      validatePublicConfig({
+        workKey: 'wrk_test',
+        region: 'cn',
+        presenter: async () => 'dismissed',
+      }),
+    ).toThrow(/Unknown configuration field "presenter"/);
+  });
 });
 
 describe('resolveApiBaseUrl', () => {
   it('returns one documented host per region', () => {
-    expect(resolveApiBaseUrl('cn')).toBe(PUBLIC_API_BASE_URLS.cn);
+    expect(resolveApiBaseUrl('cn')).toBe('https://api.viceme.cn');
+    expect(PUBLIC_API_BASE_URLS.cn).toBe('https://api.viceme.cn');
     expect(resolveApiBaseUrl('global')).toBe(PUBLIC_API_BASE_URLS.global);
   });
 });
