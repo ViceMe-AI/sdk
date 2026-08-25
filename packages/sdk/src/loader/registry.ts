@@ -2,8 +2,8 @@
  * Loader registry.
  *
  * Only the CDN loader maintains this registry (explicit `createViceMe()`
- * instances never register). Core clients are shared by
- * `major + region + workKey`; capability mounts are deduplicated by
+ * instances never register). Local clients are shared by
+ * `major + region + workKey`; danmaku mounts are deduplicated by
  * `clientKey + capability + target Element identity`.
  *
  * The registry itself is never exposed on `window` — only the fixed

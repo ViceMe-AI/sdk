@@ -39,7 +39,7 @@ const files = new Map<string, ServedFile>();
 const indexBody = Buffer.from('export const SDK_VERSION = "0.1.0";\n');
 const loaderBody = Buffer.from('(function(){/* data-viceme loader */})();\n');
 const bootstrapBody = Buffer.from('(function(){/* fixed alias bootstrap */})();\n');
-const chunkBody = Buffer.from('export {};\n');
+const danmakuBody = Buffer.from('export const mount = () => {};\n');
 
 let server:
   | {
@@ -50,11 +50,11 @@ let server:
 
 beforeAll(async () => {
   await writeFile(join(distDir, 'index.js'), indexBody);
-  await writeFile(join(distDir, 'testing.js'), chunkBody);
+  await writeFile(join(distDir, 'danmaku.js'), danmakuBody);
   await writeFile(join(distDir, 'viceme.min.js'), loaderBody);
 
   files.set('index.js', { body: indexBody, contentType: 'text/javascript; charset=utf-8' });
-  files.set('testing.js', { body: chunkBody, contentType: 'text/javascript; charset=utf-8' });
+  files.set('danmaku.js', { body: danmakuBody, contentType: 'text/javascript; charset=utf-8' });
   files.set('viceme.min.js', {
     body: loaderBody,
     contentType: 'text/javascript; charset=utf-8',
@@ -64,10 +64,10 @@ beforeAll(async () => {
     version: '0.1.0',
     apiMajor: 1,
     loader: 'viceme.min.js',
-    features: {},
+    features: { danmaku: 'danmaku.js' },
     files: {
       'index.js': await digestInfo(indexBody),
-      'testing.js': await digestInfo(chunkBody),
+      'danmaku.js': await digestInfo(danmakuBody),
       'viceme.min.js': await digestInfo(loaderBody),
     },
   };
@@ -171,7 +171,7 @@ describe('verify-cdn.mjs', () => {
       ['0.1.0/manifest.json', readFileSync(join(distDir, 'manifest.json'))],
       ['0.1.0/index.js', indexBody],
       ['0.1.0/viceme.min.js', loaderBody],
-      ['0.1.0/testing.js', chunkBody],
+      ['0.1.0/danmaku.js', danmakuBody],
     ]);
     const httpServer = createServer((req, res) => {
       const key = decodeURIComponent((req.url ?? '').replace(/^\/viceme-sdk\//, ''));

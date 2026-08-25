@@ -1,22 +1,54 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>loader static (deferred, before DOM ready)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>loader static</title>
     <style>
       body {
-        font-family: system-ui, sans-serif;
+        min-height: 3200px;
+        margin: 0;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      main {
+        padding: 32px;
+      }
+      #host-bottom-action {
+        position: fixed;
+        bottom: 12px;
+        left: 16px;
+      }
+      #host-bottom-status {
+        position: fixed;
+        bottom: 16px;
+        left: 148px;
+      }
+      #host-through-action {
+        position: fixed;
+        bottom: 80px;
+        left: calc(50% + 40px);
+        width: 160px;
+      }
+      #host-through-status {
+        position: fixed;
+        bottom: 84px;
+        left: calc(50% + 230px);
       }
     </style>
   </head>
   <body>
     <main>
       <h1>Host page</h1>
-      <p id="status">untouched</p>
-      <div id="viceme-host"></div>
+      <button id="host-action" type="button">Host action</button>
+      <output id="host-status">idle</output>
+      <button id="host-bottom-action" type="button">Bottom host action</button>
+      <output id="host-bottom-status">idle</output>
+      <button id="host-through-action" type="button">Through-frame host action</button>
+      <output id="host-through-status">idle</output>
     </main>
     <script>
-      // Record every viceme:* event for assertions (host events bubble).
       window.__events = [];
       for (const type of [
         'viceme:ready',
@@ -28,15 +60,20 @@
           window.__events.push({ type, detail: event.detail });
         });
       }
+      document.querySelector('#host-action').addEventListener('click', () => {
+        document.querySelector('#host-status').textContent = 'clicked';
+      });
+      document.querySelector('#host-bottom-action').addEventListener('click', () => {
+        document.querySelector('#host-bottom-status').textContent = 'clicked';
+      });
+      document.querySelector('#host-through-action').addEventListener('click', () => {
+        document.querySelector('#host-through-status').textContent = 'clicked';
+      });
     </script>
+    <!-- prettier-ignore -->
     <script
-      defer
-      src="/viceme-sdk/v1/viceme.min.js"
-      data-viceme-work="wrk_test"
-      data-viceme-region="cn"
-      data-viceme-features="fixture"
-      data-viceme-target="#viceme-host"
-      data-viceme-theme="dark"
-    ></script>
+      defer src="/viceme-sdk/v1/viceme.min.js" data-viceme-work="wrk_test" data-viceme-region="cn"
+      data-viceme-features="danmaku" data-viceme-target="body"
+      data-viceme-theme="auto"></script>
   </body>
 </html>

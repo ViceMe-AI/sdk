@@ -36,17 +36,24 @@ https://s3.viceme.cn/viceme-sdk/<version>/...   (region cn)
 https://s3.viceme.ai/viceme-sdk/<version>/...   (region global)
 ```
 
-`/viceme-sdk/v1` is an alias, NOT a copy of a version: it carries the loader
-object plus a single version pointer at `viceme-sdk/-/aliases/v1` (the one
-mutable object). The loader resolves the pointer at runtime (see
-`resolveAliasPointer` in `packages/sdk/src/loader/auto-loader.ts`), so
-moving the alias is one atomic pointer write per region. If a CDN edge
+On the direct S3 hosts, `/viceme-sdk/v1` is an alias, NOT a copy of a version:
+its fixed bootstrap reads the single version pointer at
+`viceme-sdk/-/aliases/v1`, then injects the exact-version full loader. The
+public Shop route `https://viceme.cn/viceme-sdk/v1/*` is different: it proxies
+the complete artifact set from one configured exact release and never follows
+the S3 pointer at request time. If a CDN edge
 (`cdn.viceme.cn` / `cdn.viceme.ai`) is introduced later, keep these exact
 paths and add edge caching in front — the URL contract must not change.
 
 ## Releasing a stable npm version
 
 The release flow follows the same two-workflow state machine as the CLI:
+
+`0.1.6` is the already-used baseline for this development cycle. Feature
+branches intentionally leave it unchanged; the release preparation workflow
+must atomically advance the package, runtime, and changelog to `0.2.0` before
+the `dev -> main` promotion. Its existing comparison against the version on
+`main` fails closed if a normal publication attempts to reuse `0.1.6`.
 
 1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
    `release-pr.yml` workflow uses the same stable-version algorithm as the CLI:

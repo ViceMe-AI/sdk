@@ -90,18 +90,29 @@ try {
     const { createViceMe, ViceMeError, isViceMeError, SDK_VERSION } = await import(
       new URL('./dist/index.js', import.meta.url).href
     );
-    const { createTestViceMe, createMemoryTransport } = await import(
-      new URL('./dist/testing.js', import.meta.url).href
+    const { mountDanmaku } = await import(
+      new URL('./dist/danmaku.js', import.meta.url).href
     );
     if (typeof createViceMe !== 'function') throw new Error('createViceMe missing');
+    if (typeof mountDanmaku !== 'function') throw new Error('mountDanmaku missing');
     if (typeof ViceMeError !== 'function' || !isViceMeError(new ViceMeError({ code: 'INTERNAL_ERROR', message: 'x' }))) {
       throw new Error('error model missing');
     }
-    const transport = createMemoryTransport({ work: { key: 'wrk_test', capabilities: ['fixture'] } });
-    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });
+    let networkCalls = 0;
+    globalThis.fetch = async () => {
+      networkCalls += 1;
+      throw new Error('unexpected network request');
+    };
+    const client = createViceMe({ workKey: 'wrk_test', region: 'cn' });
+    if (client.state !== 'CREATED') throw new Error('unexpected initial state');
     await client.ready();
-    if (!client.hasCapability('fixture')) throw new Error('capability discovery broken');
-    if (client.version !== SDK_VERSION) throw new Error('version mismatch');
+    if (networkCalls !== 0) throw new Error('local initialization reached the network');
+    if (!client.hasCapability('danmaku') || client.hasCapability('checkout')) {
+      throw new Error('PUBLIC-only capability check broken');
+    }
+    for (const removed of ['auth', 'access', 'checkout', 'follow', 'session']) {
+      if (removed in client) throw new Error('removed client surface restored: ' + removed);
+    }
     client.destroy();
     console.log('smoke-ok ' + SDK_VERSION);
   `;
@@ -122,6 +133,9 @@ try {
     throw new Error('manifest apiMajor does not match src/version.ts API_MAJOR');
   }
   if (!manifest.files['index.js']?.sha256) throw new Error('manifest missing index.js digest');
+  if (!manifest.files['danmaku.js']?.sha256) throw new Error('manifest missing danmaku.js digest');
+  if (manifest.features?.danmaku !== 'danmaku.js')
+    throw new Error('manifest missing danmaku feature');
 
   console.log(`tarball audit passed (${entries.length} entries, ${output.trim()})`);
 } finally {

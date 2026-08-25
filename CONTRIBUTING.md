@@ -21,7 +21,7 @@ pnpm format        # prettier --write
 pnpm format:check  # prettier --check
 pnpm typecheck     # tsc --noEmit for packages
 pnpm test          # vitest unit tests
-pnpm test:browser  # Playwright fixture tests (local dist + mocked public API)
+pnpm test:browser  # Playwright tests (local dist + mocked hosted iframe)
 pnpm pack:check    # tarball content audit + import smoke from the real tarball
 pnpm contracts:generate # snapshot -> generated TS types + contract manifest
 pnpm contracts:check   # drift gate: committed types/manifest must match snapshot
@@ -48,38 +48,31 @@ These decisions are already made; PRs must not reopen them:
 2. Capabilities ship as subpath exports (`@viceme-ai/sdk/<capability>`); a
    subpath may not exist until the capability is real.
 3. Pure HTML/JavaScript is a first-class delivery path. React is an optional
-   thin binding over the same core — it never re-implements session, transport,
-   or error handling.
+   thin binding over the same local core.
 4. Dependency direction:
 
    ```text
-   generated contract -> transport/session -> capability client (headless)
-     -> capability mount/Web Component -> CDN loader or React binding
+   local Work config -> hosted danmaku mount -> CDN loader or framework binding
+     -> Shop-hosted iframe -> Shop SDK -> /v1/danmaku/messages
    ```
 
    Lower layers must never import the loader, React, or host code. The headless
    core does not touch the DOM.
 
-5. The production `createViceMe()` config accepts only `workKey`, `region`, and
-   `signal`. Test-only injection (transport, clock, request ids) lives in
-   `@viceme-ai/sdk/testing` and runs the same validation and lifecycle logic.
+5. The production `createViceMe()` config accepts only `workKey` and `region`.
+   It is purely local; test transports and SDK Sessions do not exist.
 6. Visible components mount inside an open Shadow Root; `destroy()` must remove
    listeners, observers, timers, and DOM nodes.
 
 ## Capability module template
 
-Every capability directory must provide:
+The released danmaku directory provides:
 
 ```text
 packages/sdk/src/<capability>/
 ├── index.ts      public entry, stable API only
-├── contract.ts   generated public types only
-├── client.ts     headless capability calls (no DOM)
 ├── mount.ts      optional UI mount/destroy
-├── element.ts    optional Web Component / Shadow DOM implementation
-├── errors.ts     capability error mapping
-├── lifecycle.ts  subscribe/unsubscribe and resource cleanup
-└── test/
+└── anchor.ts     opaque page-position anchor derivation
 ```
 
 ## PR checklist
@@ -87,7 +80,7 @@ packages/sdk/src/<capability>/
 - [ ] User scenario and explicit non-goals
 - [ ] Public API / subpath and release impact
 - [ ] Shop API contract version referenced
-- [ ] Identity, Origin, token, secret, and idempotency boundaries stated
+- [ ] Work identity, iframe Origin, and secret boundaries stated
 - [ ] Browser lifecycle and resource cleanup tested
 - [ ] Static HTML / React / Next.js usage examples updated
 - [ ] Bundle size delta justified (`pnpm --filter '@viceme-ai/sdk' build` then

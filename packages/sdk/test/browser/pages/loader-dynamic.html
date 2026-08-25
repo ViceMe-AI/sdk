@@ -5,6 +5,7 @@
     <title>loader dynamic (inserted after DOM ready)</title>
     <style>
       body {
+        min-height: 3200px;
         font-family: system-ui, sans-serif;
       }
       div[data-host] {
@@ -16,6 +17,7 @@
     <main>
       <h1>Host page</h1>
       <p id="status">untouched</p>
+      <button id="host-action" type="button">Host action</button>
       <div id="host-a"></div>
       <div id="host-b"></div>
       <div class="multi"></div>
@@ -33,6 +35,9 @@
           window.__events.push({ type, detail: event.detail });
         });
       }
+      document.querySelector('#host-action').addEventListener('click', () => {
+        document.querySelector('#status').textContent = 'clicked';
+      });
 
       const params = new URLSearchParams(location.search);
 

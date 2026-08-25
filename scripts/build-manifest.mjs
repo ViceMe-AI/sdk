@@ -81,13 +81,15 @@ for (const file of files.sort()) {
   };
 }
 
-// Sanity: the manifest must describe the core entry and the loader.
-for (const required of ['index.js', 'viceme.min.js', 'bootstrap.min.js']) {
+// Sanity: npm and hosted-loader runtime entries must all be present.
+for (const required of ['index.js', 'viceme.min.js', 'bootstrap.min.js', 'danmaku.js']) {
   if (!manifest.files[required]) {
     console.error(`manifest: missing required artifact ${required}`);
     process.exit(1);
   }
 }
+
+manifest.features.danmaku = 'danmaku.js';
 
 await writeFile(join(distDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`manifest: ${Object.keys(manifest.files).length} artifacts @ ${pkg.version}`);

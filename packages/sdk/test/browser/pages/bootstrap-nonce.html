@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'nonce-viceme-test' 'strict-dynamic'; connect-src http://127.0.0.1:4174; frame-src https://viceme.cn; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>bootstrap nonce</title>
+  </head>
+  <body>
+    <main><h1>Nonce host page</h1></main>
+    <script nonce="viceme-test">
+      window.__events = [];
+      for (const type of ['viceme:ready', 'viceme:capability-ready', 'viceme:error']) {
+        document.addEventListener(type, (event) => {
+          window.__events.push({ type, detail: event.detail });
+        });
+      }
+    </script>
+    <!-- prettier-ignore -->
+    <script
+      nonce="viceme-test" defer src="http://127.0.0.1:4174/viceme-sdk/v1/viceme.min.js"
+      data-viceme-work="wrk_test" data-viceme-region="cn"
+      data-viceme-features="danmaku" data-viceme-target="body"
+      data-viceme-theme="auto"></script>
+  </body>
+</html>

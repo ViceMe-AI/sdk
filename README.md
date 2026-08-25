@@ -1,143 +1,131 @@
 # ViceMe SDK
 
-Public, versioned SDK that lets any website — static HTML, browser-native ESM,
-React, Next.js, or Agent-generated projects — load ViceMe capabilities (danmaku,
-creator login, following, and hosted checkout) through one shared core.
+PUBLIC-only browser SDK for mounting ViceMe's Shop-hosted danmaku overlay on a
+third-party page.
 
-- **Package**: [`@viceme-ai/sdk`](./packages/sdk) — browser core, Work context,
-  public session, and capability subpaths.
-- **React**: `@viceme-ai/react` will be published as a thin binding on top of
-  the same core once the first real hooks/components exist. It is deliberately
-  **not** created empty in this repository.
-- **Status**: `0.x`. Creator access capabilities are backed by the committed
-  Shop public API contract.
+- **Package**: [`@viceme-ai/sdk`](./packages/sdk)
+- **Hosted feature**: `danmaku` only
+- **Status**: `0.x`; the normal `dev -> main` release workflow owns versioning
 
-## Install
+The external SDK has no Work Session, browser Bearer token, authentication,
+follow, access gate, purchase, or checkout API. Shop validates that each
+`workKey` belongs to an active SDK Work with an active `PUBLIC` danmaku feature.
+
+## Static HTML
+
+Use the complete snippet returned by ViceMe for the selected Shop region:
+
+```html
+<script
+  defer
+  src="https://viceme.cn/viceme-sdk/v1/viceme.min.js"
+  data-viceme-work="wrk_public_xxx"
+  data-viceme-region="cn"
+  data-viceme-features="danmaku"
+  data-viceme-target="body"
+  data-viceme-theme="auto"
+></script>
+```
+
+`data-viceme-features` is required and must be exactly `danmaku`. Unknown,
+combined, or omitted feature declarations fail closed without mounting.
+
+The loader reads its same-release `manifest.json`, loads `danmaku.js` and any
+manifest-referenced `chunks/*.js`, then mounts one isolated overlay. Repeating
+the same work, feature, and target reuses the existing client and mount.
+
+`https://viceme.cn/viceme-sdk/v1/*` is the Shop asset proxy, not the mutable S3
+alias directory. Shop configures that proxy to one exact release and directly
+serves the complete `viceme.min.js`, `manifest.json`, `danmaku.js`, and hashed
+chunk set under `/v1/*`; a missing sibling manifest is a deployment error and
+fails closed. Direct storage has a separate topology:
+
+```text
+https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js       fixed bootstrap
+https://s3.viceme.cn/viceme-sdk/-/aliases/v1           version pointer
+https://s3.viceme.cn/viceme-sdk/<version>/...           exact release
+```
+
+For a nonce-based CSP, preserve the host's existing directives and allow only
+the exact regional Shop origin used by the snippet: `script-src` for the entry
+and dynamically imported chunks, `connect-src` for `manifest.json`, and
+`frame-src` for `/embed/danmaku`. Keep `object-src 'none'`; do not add `*` or a
+ViceMe subdomain wildcard. A typical CN policy adds `https://viceme.cn` to all
+three allowlists (or uses the request nonce plus `'strict-dynamic'` for script
+loading). A page that intentionally uses the direct S3 alias instead must put
+the exact `https://s3.viceme.cn` origin in `script-src` and `connect-src`, while
+`frame-src` remains `https://viceme.cn`.
+
+## npm / Bundlers
 
 ```bash
 pnpm add @viceme-ai/sdk
 ```
 
-## Usage
-
-### Static HTML (CDN auto-loader)
-
-```html
-<div id="viceme-danmaku"></div>
-<script
-  defer
-  src="https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js"
-  integrity="sha384-..."
-  crossorigin="anonymous"
-  data-viceme-work="wrk_public_xxx"
-  data-viceme-region="cn"
-  data-viceme-features="danmaku"
-  data-viceme-target="#viceme-danmaku"
-  data-viceme-theme="auto"
-></script>
-```
-
-### Browser-native ESM
-
-```html
-<script type="module">
-  import { createViceMe } from 'https://s3.viceme.cn/viceme-sdk/1.0.0/index.js';
-
-  const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
-  await client.ready();
-
-  window.addEventListener('pagehide', () => client.destroy());
-</script>
-```
-
-### npm / bundler
-
 ```ts
 import { createViceMe } from '@viceme-ai/sdk';
+import { mountDanmaku } from '@viceme-ai/sdk/danmaku';
 
 const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
 await client.ready();
 
-const decisions = await client.access.checkMany(['dingdong', 'emperor']);
+const mounted = client.hasCapability('danmaku')
+  ? await mountDanmaku(client, { target: document.body, theme: 'auto' })
+  : null;
 
-// From a gated user gesture. A denied decision opens the ViceMe in-page Web
-// Component. Follow gates show the creator in the sign-in consent layer and
-// automatically follow after accepted authorization. Payment selection and confirmation
-// remain explicit inside the bottom sheet or modal.
-await client.access.require('emperor');
-
-client.destroy();
+function unmountViceMe() {
+  mounted?.destroy();
+  client.destroy();
+}
 ```
 
-### Testing your integration
+Call `unmountViceMe()` when the owning component unmounts or an explicit widget
+lifecycle ends. Do not bind cleanup to `pagehide`; that event also fires for
+pages entering the back/forward cache.
 
-```ts
-import { createTestViceMe, createMemoryTransport } from '@viceme-ai/sdk/testing';
+`createViceMe({ workKey, region })` validates configuration and initializes a
+local lifecycle only. It performs no network request.
 
-const transport = createMemoryTransport({
-  work: { key: 'wrk_test', capabilities: ['fixture'] },
-});
-
-const client = createTestViceMe({
-  workKey: 'wrk_test',
-  region: 'cn',
-  transport,
-});
-
-await client.ready();
-```
-
-## Public API surface (0.x)
+## Public Surface
 
 ```ts
 type ViceMeRegion = 'cn' | 'global';
+type ViceMeClientState = 'CREATED' | 'READY' | 'DEGRADED' | 'DESTROYED';
 
 interface ViceMeClient {
-  readonly version: string;
   readonly workKey: string;
   readonly region: ViceMeRegion;
-  readonly state: 'CREATED' | 'INITIALIZING' | 'READY' | 'DEGRADED' | 'FAILED' | 'DESTROYED';
+  readonly state: ViceMeClientState;
 
   ready(): Promise<void>;
-  readonly auth: AuthCapability;
-  readonly access: AccessCapability;
-  readonly checkout: CheckoutCapability;
-  hasCapability(name: string): boolean;
-  destroy(): void;
-}
-
-interface ViceMeMountedInstance {
-  readonly instanceKey: string;
-  readonly capability: string;
+  hasCapability(name: string): boolean; // true only for "danmaku" while alive
   destroy(): void;
 }
 ```
 
-Consumers branch on stable `ViceMeError.code` values only — never on error
-messages. Errors never contain provider payloads, tokens, cookies, or internal
-stacks.
+The released package exports exactly `@viceme-ai/sdk` and
+`@viceme-ai/sdk/danmaku`. There is no `@viceme-ai/sdk/testing` transport or
+Session adapter.
 
-## Repository layout
+## Runtime Boundary
 
-```text
-packages/sdk      @viceme-ai/sdk core, testing adapter, CDN auto-loader
-examples/         static-html, react-vite, nextjs fixtures
-scripts/          manifest, tarball audit, public-surface verification
-contracts/        public API contract snapshots (added in B0.2)
-```
+- The loader fetches only `manifest.json`, `danmaku.js`, and referenced
+  `chunks/*.js` beside `viceme.min.js`.
+- The external SDK derives an opaque page-position anchor, creates the stage,
+  responsive-width controls, and lazy modal iframes, validates bridge message
+  origin/source, and owns cleanup.
+- Shop Web owns `/embed/danmaku`, including rendering, keyboard behavior,
+  reduced-motion behavior, and interaction.
+- The Shop SDK inside that iframe calls anonymous `GET` and `POST`
+  `/v1/danmaku/messages`. The third-party host and external SDK do not call the
+  endpoint directly.
 
 ## Development
 
 ```bash
 pnpm install
-pnpm check   # format + lint + typecheck + contract drift + test + build + browser tests + tarball audit
+pnpm check
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full workflow and capability
-module template, and [docs/RELEASE.md](./docs/RELEASE.md) for the release and
-CDN promotion runbook.
-
-## Security
-
-See [SECURITY.md](./SECURITY.md). Please do not open issues containing secrets
-or payment data.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) and
+[docs/RELEASE.md](./docs/RELEASE.md).

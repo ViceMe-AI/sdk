@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.3.3, sha256 e9700c076c0c180c…)
+ * (contractVersion 0.4.0, sha256 3e487a33d9633e4d…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -13,148 +13,18 @@
  */
 
 export interface paths {
-    "/v1/public/v1/work-sessions": {
+    "/v1/danmaku/messages": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List public danmaku messages for one page-position anchor */
+        get: operations["listDanmakuMessages"];
         put?: never;
-        /**
-         * Establish a public visitor session for a Work
-         * @description Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS accepts any browser Origin with credentials disabled; no creator-managed Origin allowlist is required.
-         */
-        post: operations["createWorkSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/public/v1/auth/wechat/authorize": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["authorizeWechat"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/public/v1/auth/exchange": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["exchangeWechatCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/public/v1/auth/resume-codes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["createAuthResumeCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/public/v1/auth/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["resumeAuthenticatedSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/public/v1/follow": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getFollowState"];
-        put: operations["followWorkOwner"];
-        post?: never;
-        delete: operations["unfollowWorkOwner"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/public/v1/access/check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["checkFeatureAccess"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/public/v1/checkout/sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["createCheckoutSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/public/v1/checkout/bootstrap": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["bootstrapEmbeddedCheckout"];
+        /** Create a public danmaku message */
+        post: operations["createDanmakuMessage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -165,131 +35,40 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Public opaque work key. */
+        /** @description Public opaque SDK Work key. */
         WorkKey: string;
-        /** @description Enabled capability name for the work. */
-        CapabilityName: string;
-        CreateWorkSessionRequest: {
+        /** @description Opaque page-position anchor derived by the external SDK. */
+        DanmakuAnchorKey: string;
+        DanmakuCursor: string;
+        DanmakuMessage: {
+            /** Format: uuid */
+            id: string;
             workKey: components["schemas"]["WorkKey"];
-        };
-        WorkDescriptor: {
-            key: components["schemas"]["WorkKey"];
-            capabilities: components["schemas"]["CapabilityName"][];
-        } & {
-            [key: string]: unknown;
-        };
-        /** @description Unknown additional fields are allowed and ignored by the SDK (forward compatibility). */
-        WorkSession: {
-            work: components["schemas"]["WorkDescriptor"];
-            /** @description Short-lived capability token; memory-only in the SDK. */
-            token?: string;
-            /** @description Epoch milliseconds when the token expires. */
-            expiresAt?: number;
-        } & {
-            [key: string]: unknown;
-        };
-        WorkUser: {
-            subject: string;
-            nickname: string | null;
-            /** Format: uri */
-            avatarUrl: string | null;
-        };
-        AuthAuthorizeRequest: {
-            channel: string;
-            /** @enum {string} */
-            clientType?: "h5" | "pc";
-            /** @enum {string} */
-            locale: "zh-CN" | "en-US";
-        };
-        AuthAuthorizeResponse: {
-            /** Format: uri */
-            authorizationUrl: string;
-            /** Format: uri */
-            completionOrigin: string;
-        };
-        AuthExchangeRequest: {
-            code: string;
-            codeVerifier: string;
-        };
-        AuthExchangeResponse: {
-            token: string;
-            expiresAt: number;
-            user: components["schemas"]["WorkUser"];
-        };
-        AuthResumeCodeResponse: {
-            code: string;
-            expiresAt: number;
-        };
-        AuthResumeRequest: {
-            code: string;
-        };
-        FollowState: {
-            following: boolean;
+            content: string;
+            anchorKey: components["schemas"]["DanmakuAnchorKey"] | null;
             /** Format: date-time */
-            followedAt: string | null;
-            target: components["schemas"]["FollowTarget"];
+            createdAt: string;
         };
-        FollowTarget: {
-            /** @enum {string} */
-            kind: "CREATOR" | "USER";
-            displayName: string;
-            /** Format: uri */
-            avatarUrl: string | null;
-            description: string | null;
-            workCount: number;
-            coverUrls: string[];
+        DanmakuMessagesResponse: {
+            items: components["schemas"]["DanmakuMessage"][];
+            nextCursor: components["schemas"]["DanmakuCursor"] | null;
+            total: number;
         };
-        AccessCheckRequest: {
-            featureKeys: string[];
-        };
-        AccessDecision: {
-            allowed: boolean;
-            /** @enum {string} */
-            reason: "OWNER" | "FOLLOWING" | "PURCHASED" | "ENTITLED" | "AUTH_REQUIRED" | "FOLLOW_REQUIRED" | "PURCHASE_REQUIRED" | "FEATURE_NOT_FOUND" | "FEATURE_DISABLED" | "POLICY_UNSUPPORTED";
-            /** @enum {string|null} */
-            nextAction: "SIGN_IN" | "FOLLOW" | "CHECKOUT" | null;
-        };
-        AccessCheckResponse: {
-            decisions: {
-                [key: string]: components["schemas"]["AccessDecision"];
-            };
-        };
-        CheckoutRequest: {
-            featureKey: string;
-            /**
-             * @default zh-CN
-             * @enum {string}
-             */
-            locale: "zh-CN" | "en-US";
-            channel: string;
-        };
-        CheckoutResponse: {
-            /** Format: uri */
-            checkoutUrl: string;
-            alreadyOwned: boolean;
-            /** Format: uri */
-            completionOrigin: string;
-        };
-        CheckoutBootstrapRequest: {
-            code: string;
-        };
-        CheckoutBootstrapResponse: {
-            token: string;
-            /** Format: date-time */
-            expiresAt: string;
-            resumeCode: string;
+        CreateDanmakuMessageRequest: {
+            workKey: components["schemas"]["WorkKey"];
+            content: string;
+            anchorKey?: components["schemas"]["DanmakuAnchorKey"];
         };
         ErrorBody: {
             statusCode: number;
-            /** @enum {string} */
-            code: "CONFIG_INVALID" | "WORK_NOT_FOUND" | "CAPABILITY_DISABLED" | "SESSION_EXPIRED" | "AUTH_REQUIRED" | "SDK_AUTH_CODE_INVALID" | "RETURN_URL_NOT_ALLOWED" | "RATE_LIMITED" | "NETWORK_TIMEOUT" | "CHECKOUT_UNAVAILABLE" | "INTERNAL_ERROR";
-            message: string;
+            code: string;
+            message: string | string[];
             requestId: string;
         };
     };
     responses: {
-        /** @description Public request rejected. */
-        PublicError: {
+        /** @description Invalid query or body. */
+        BadRequest: {
             headers: {
                 [name: string]: unknown;
             };
@@ -297,16 +76,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorBody"];
             };
         };
-        /** @description Invalid configuration. */
-        ValidationError: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorBody"];
-            };
-        };
-        /** @description Unknown, private, or disabled work. */
+        /** @description Unknown, inactive, or non-PUBLIC danmaku work. */
         WorkNotFound: {
             headers: {
                 [name: string]: unknown;
@@ -315,7 +85,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorBody"];
             };
         };
-        /** @description Rate limit exceeded (retryable). */
+        /** @description Danmaku write rate limit exceeded. */
         RateLimited: {
             headers: {
                 [name: string]: unknown;
@@ -324,7 +94,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorBody"];
             };
         };
-        /** @description Server error (retryable). */
+        /** @description Unexpected Shop error. */
         InternalError: {
             headers: {
                 [name: string]: unknown;
@@ -341,7 +111,35 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    createWorkSession: {
+    listDanmakuMessages: {
+        parameters: {
+            query: {
+                workKey: components["schemas"]["WorkKey"];
+                anchorKey?: components["schemas"]["DanmakuAnchorKey"];
+                cursor?: components["schemas"]["DanmakuCursor"];
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Messages for the requested public work and anchor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DanmakuMessagesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["WorkNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createDanmakuMessage: {
         parameters: {
             query?: never;
             header?: never;
@@ -350,262 +148,23 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateWorkSessionRequest"];
+                "application/json": components["schemas"]["CreateDanmakuMessageRequest"];
             };
         };
         responses: {
-            /** @description Session established. */
+            /** @description Message created. */
             201: {
                 headers: {
-                    /** @description Server request id for support correlation. */
-                    "x-request-id"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkSession"];
+                    "application/json": components["schemas"]["DanmakuMessage"];
                 };
             };
-            400: components["responses"]["ValidationError"];
+            400: components["responses"]["BadRequest"];
             404: components["responses"]["WorkNotFound"];
             429: components["responses"]["RateLimited"];
-            "5xx": components["responses"]["InternalError"];
-        };
-    };
-    authorizeWechat: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AuthAuthorizeRequest"];
-            };
-        };
-        responses: {
-            /** @description Hosted WeChat authorization URL. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthAuthorizeResponse"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
-            "5xx": components["responses"]["InternalError"];
-        };
-    };
-    exchangeWechatCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AuthExchangeRequest"];
-            };
-        };
-        responses: {
-            /** @description Authenticated work session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthExchangeResponse"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
-            "5xx": components["responses"]["InternalError"];
-        };
-    };
-    createAuthResumeCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Compatibility endpoint for restoring an authenticated work session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthResumeCodeResponse"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
-        };
-    };
-    resumeAuthenticatedSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AuthResumeRequest"];
-            };
-        };
-        responses: {
-            /** @description Restored authenticated work session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthExchangeResponse"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
-        };
-    };
-    getFollowState: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current follow state. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FollowState"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
-        };
-    };
-    followWorkOwner: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Followed. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FollowState"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
-        };
-    };
-    unfollowWorkOwner: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Unfollowed. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FollowState"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
-        };
-    };
-    checkFeatureAccess: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AccessCheckRequest"];
-            };
-        };
-        responses: {
-            /** @description Access decisions. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessCheckResponse"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
-        };
-    };
-    createCheckoutSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CheckoutRequest"];
-            };
-        };
-        responses: {
-            /** @description Embedded checkout URL resolved from the bound product. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CheckoutResponse"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
-            "5xx": components["responses"]["InternalError"];
-        };
-    };
-    bootstrapEmbeddedCheckout: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CheckoutBootstrapRequest"];
-            };
-        };
-        responses: {
-            /** @description Memory-only bearer session for the embedded checkout. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CheckoutBootstrapResponse"];
-                };
-            };
-            "4xx": components["responses"]["PublicError"];
+            500: components["responses"]["InternalError"];
         };
     };
 }

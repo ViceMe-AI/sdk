@@ -20,29 +20,29 @@ describe('LoaderRegistry', () => {
     const el1 = document.createElement('div');
     const el2 = document.createElement('div');
 
-    const first = registry.registerInstance('v1+cn+wrk_a', 'fixture', el1, raw('fixture'));
-    const same = registry.registerInstance('v1+cn+wrk_a', 'fixture', el1, raw('fixture'));
-    const other = registry.registerInstance('v1+cn+wrk_a', 'fixture', el2, raw('fixture'));
+    const first = registry.registerInstance('v1+cn+wrk_a', 'danmaku', el1, raw('danmaku'));
+    const same = registry.registerInstance('v1+cn+wrk_a', 'danmaku', el1, raw('danmaku'));
+    const other = registry.registerInstance('v1+cn+wrk_a', 'danmaku', el2, raw('danmaku'));
 
     expect(same).toBe(first);
     expect(other).not.toBe(first);
     expect(other.instanceKey).not.toBe(first.instanceKey);
 
-    expect(registry.findInstance('v1+cn+wrk_a', 'fixture', el1)).toBe(first);
-    expect(registry.findInstance('v1+cn+wrk_b', 'fixture', el1)).toBeUndefined();
+    expect(registry.findInstance('v1+cn+wrk_a', 'danmaku', el1)).toBe(first);
+    expect(registry.findInstance('v1+cn+wrk_b', 'danmaku', el1)).toBeUndefined();
   });
 
   it('removes element mapping on removeInstance', () => {
     const registry = new LoaderRegistry();
     const el = document.createElement('div');
-    const instance = registry.registerInstance('v1+cn+wrk_a', 'fixture', el, raw('fixture'));
+    const instance = registry.registerInstance('v1+cn+wrk_a', 'danmaku', el, raw('danmaku'));
 
     registry.removeInstance(instance.instanceKey);
     expect(registry.getInstance(instance.instanceKey)).toBeUndefined();
-    expect(registry.findInstance('v1+cn+wrk_a', 'fixture', el)).toBeUndefined();
+    expect(registry.findInstance('v1+cn+wrk_a', 'danmaku', el)).toBeUndefined();
 
     // Re-mounting the same element creates a fresh instance key.
-    const next = registry.registerInstance('v1+cn+wrk_a', 'fixture', el, raw('fixture'));
+    const next = registry.registerInstance('v1+cn+wrk_a', 'danmaku', el, raw('danmaku'));
     expect(next.instanceKey).not.toBe(instance.instanceKey);
   });
 
@@ -50,9 +50,9 @@ describe('LoaderRegistry', () => {
     const registry = new LoaderRegistry();
     const a1 = document.createElement('div');
     const a2 = document.createElement('div');
-    registry.registerInstance('v1+cn+wrk_a', 'fixture', a1, raw('fixture'));
-    registry.registerInstance('v1+cn+wrk_a', 'other', a2, raw('other'));
-    registry.registerInstance('v1+cn+wrk_b', 'fixture', a1, raw('fixture'));
+    registry.registerInstance('v1+cn+wrk_a', 'danmaku', a1, raw('danmaku'));
+    registry.registerInstance('v1+cn+wrk_a', 'danmaku', a2, raw('danmaku'));
+    registry.registerInstance('v1+cn+wrk_b', 'danmaku', a1, raw('danmaku'));
 
     expect(registry.instancesForClient('v1+cn+wrk_a')).toHaveLength(2);
     expect(registry.instancesForClient('v1+cn+wrk_b')).toHaveLength(1);
