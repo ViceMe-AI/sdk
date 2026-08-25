@@ -6,7 +6,7 @@
  *   node scripts/generate-contracts.mjs            # regenerate types + manifest
  *   node scripts/generate-contracts.mjs check      # drift gate (CI)
  *
- * Source of truth: contracts/public-capabilities.openapi.json (Shop export).
+ * Source of truth: contracts/public-capabilities.openapi.json (Shop snapshot).
  * The generated file packages/sdk/src/generated/public-contract.ts is
  * committed so consumers build without codegen.
  *
@@ -86,7 +86,7 @@ try {
     const manifest = {
       contractVersion: snapshotJson.info.version,
       sha256,
-      generatedFrom: process.env.CONTRACT_SOURCE ?? 'sdk-baseline (pending first Shop export)',
+      generatedFrom: process.env.CONTRACT_SOURCE ?? 'ViceMe Shop public danmaku contract',
       generatedAt: new Date().toISOString(),
     };
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);

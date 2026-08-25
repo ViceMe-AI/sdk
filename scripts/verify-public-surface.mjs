@@ -2,12 +2,12 @@
 /**
  * Public surface verification for `@viceme-ai/sdk`.
  *
- * Locks the published surface to the intended B0 shape:
- * - exports map contains exactly `.` and `./testing`;
+ * Locks the published surface to the PUBLIC-only hosted danmaku shape:
+ * - exports map contains exactly `.` and `./danmaku`;
  * - declared dist artifacts exist (js + d.ts);
- * - no unreleased capability subpath sneaks in;
+ * - removed auth/session/access surfaces do not sneak back in;
  * - runtime version constant matches package.json;
- * - release manifest major/features are consistent.
+ * - loader requests stay inside the Shop runtime proxy allowlist.
  */
 import { access, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
@@ -28,8 +28,8 @@ const pkg = JSON.parse(await readFile(join(sdkDir, 'package.json'), 'utf8'));
 
 const exportKeys = Object.keys(pkg.exports ?? {}).sort();
 check(
-  JSON.stringify(exportKeys) === JSON.stringify(['.', './testing']),
-  `exports map must be exactly [".", "./testing"], got ${JSON.stringify(exportKeys)}`,
+  JSON.stringify(exportKeys) === JSON.stringify(['.', './danmaku']),
+  `exports map must be exactly [".", "./danmaku"], got ${JSON.stringify(exportKeys)}`,
 );
 
 for (const [subpath, def] of Object.entries(pkg.exports ?? {})) {
@@ -49,19 +49,30 @@ for (const [subpath, def] of Object.entries(pkg.exports ?? {})) {
   }
 }
 
-for (const unreleased of ['danmaku', 'payment']) {
+for (const removed of [
+  'access',
+  'auth',
+  'checkout',
+  'follow',
+  'payment',
+  'purchase',
+  'session',
+  'testing',
+]) {
   check(
-    !exportKeys.includes(`./${unreleased}`),
-    `unreleased capability subpath "./${unreleased}" must not be exported`,
+    !exportKeys.includes(`./${removed}`),
+    `removed subpath "./${removed}" must not be exported`,
   );
-  await access(join(distDir, `${unreleased}.js`), constants.R_OK)
-    .then(() => failures.push(`${unreleased}.js exists in dist but is not released`))
+  await access(join(distDir, `${removed}.js`), constants.R_OK)
+    .then(() => failures.push(`${removed}.js exists in dist but is not public`))
     .catch(() => {});
 }
 
-await access(join(distDir, 'viceme.min.js'), constants.R_OK).catch(() =>
-  failures.push('CDN loader dist/viceme.min.js missing'),
-);
+for (const required of ['viceme.min.js', 'danmaku.js', 'manifest.json']) {
+  await access(join(distDir, required), constants.R_OK).catch(() =>
+    failures.push(`hosted runtime dist/${required} missing`),
+  );
+}
 
 const versionSource = await readFile(join(sdkDir, 'src', 'version.ts'), 'utf8');
 check(
@@ -76,9 +87,44 @@ check(
   'manifest apiMajor must match src/version.ts API_MAJOR',
 );
 check(
-  Object.keys(manifest.features ?? {}).length === 0,
-  'production manifest must not declare unreleased features',
+  JSON.stringify(manifest.features ?? {}) === JSON.stringify({ danmaku: 'danmaku.js' }),
+  'production manifest must declare only danmaku.js',
 );
+
+const loaderSource = await readFile(join(distDir, 'viceme.min.js'), 'utf8');
+check(!loaderSource.includes('index.js'), 'loader must inline core instead of requesting index.js');
+
+const runtimeFiles = Object.keys(manifest.files ?? {}).filter(
+  (file) =>
+    file === 'index.js' ||
+    file === 'danmaku.js' ||
+    file === 'viceme.min.js' ||
+    file.startsWith('chunks/'),
+);
+for (const file of runtimeFiles) {
+  const source = await readFile(join(distDir, file), 'utf8');
+  for (const forbidden of ['/v1/public/v1/', 'work-sessions', 'Bearer ']) {
+    check(!source.includes(forbidden), `${file} contains removed runtime pattern ${forbidden}`);
+  }
+}
+
+const pending = ['danmaku.js'];
+const visited = new Set();
+while (pending.length > 0) {
+  const file = pending.pop();
+  if (visited.has(file)) continue;
+  visited.add(file);
+  const source = await readFile(join(distDir, file), 'utf8');
+  const references = [...source.matchAll(/["']\.\/(.+?\.js)["']/g)].map((match) => match[1]);
+  for (const reference of references) {
+    check(
+      /^chunks\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.js$/.test(reference),
+      `${file} references Shop-proxy-blocked asset ${reference}`,
+    );
+    check(manifest.files?.[reference], `manifest does not describe referenced asset ${reference}`);
+    if (!visited.has(reference)) pending.push(reference);
+  }
+}
 
 if (failures.length > 0) {
   console.error('public surface verification failed:');

@@ -1,7 +1,7 @@
 {
   "name": "@viceme-ai/sdk",
   "version": "0.1.6",
-  "description": "ViceMe browser SDK: headless core, public session, and capability subpaths for static HTML, ESM, React, and Agent-generated sites.",
+  "description": "ViceMe PUBLIC-only hosted danmaku SDK for static HTML, ESM, React, and Agent-generated sites.",
   "type": "module",
   "repository": {
     "type": "git",
@@ -15,9 +15,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./testing": {
-      "types": "./dist/testing.d.ts",
-      "import": "./dist/testing.js"
+    "./danmaku": {
+      "types": "./dist/danmaku/index.d.ts",
+      "import": "./dist/danmaku.js"
     }
   },
   "files": [
@@ -33,13 +33,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "clean": "node ../../scripts/rmrf.mjs dist test-fixtures-dist",
-    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:bootstrap && pnpm build:types && pnpm build:fixture && pnpm build:manifest && pnpm build:license",
+    "clean": "node ../../scripts/rmrf.mjs dist",
+    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:bootstrap && pnpm build:types && pnpm build:manifest && pnpm build:license",
     "build:esm": "vite build --config vite.config.esm.ts",
     "build:loader": "vite build --config vite.config.loader.ts",
     "build:bootstrap": "vite build --config vite.config.bootstrap.ts",
     "build:types": "tsc -p tsconfig.build.json",
-    "build:fixture": "vite build --config vite.config.fixture.ts",
     "build:manifest": "node ../../scripts/build-manifest.mjs",
     "build:license": "node ../../scripts/sync-package-license.mjs",
     "lint": "eslint .",

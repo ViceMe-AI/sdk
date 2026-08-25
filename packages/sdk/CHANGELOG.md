@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- 新增 PUBLIC-only 托管弹幕 loader 与 `@viceme-ai/sdk/danmaku`。
+- 移除 SDK Session、Bearer transport、auth、follow、access、purchase、checkout 与 testing adapter。
+
 ## [0.1.6] - 2026-08-15
 
 ### Fixes

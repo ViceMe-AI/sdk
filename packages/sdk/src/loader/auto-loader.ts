@@ -11,12 +11,12 @@
  *    and never creates phantom nodes.
  * 4. Read `manifest.json` from the loader's own directory (exact release
  *    version; URLs are never assembled from page parameters).
- * 5. Load the same-version core, then each declared feature chunk in order.
- * 6. Create the client, then mount; handles land in an internal registry.
+ * 5. Create the local client embedded in this loader, then load the
+ *    same-version danmaku chunk declared by the manifest.
+ * 6. Mount; handles land in an internal registry.
  * 7. Re-running the same instance key returns the original handle — no
- *    duplicate sessions, subscriptions, or DOM.
- * 8. A failing capability destroys only its own partial state; the rest of
- *    the page and other capabilities keep working.
+ *    duplicate clients, subscriptions, or DOM.
+ * 8. A failing mount keeps the host page working and degrades only its client.
  * 9. `pagehide` never auto-destroys (bfcache); cleanup happens on explicit
  *    `destroy()` only.
  *
@@ -29,7 +29,12 @@ import { LoaderRegistry, clientKeyOf, type RegisteredInstance } from './registry
 import type { CapabilityMountHandle, CapabilityMountFunction } from './mount-handle.ts';
 import { dispatchViceMeEvent, type VicemeErrorDetail } from './events.ts';
 import { configInvalid, ViceMeError } from '../core/errors.ts';
-import type { ViceMeClient, ViceMeMountedInstance } from '../core/client.ts';
+import {
+  markClientDegraded,
+  type ViceMeClient,
+  type ViceMeMountedInstance,
+} from '../core/client.ts';
+import { createViceMe } from '../index.ts';
 import { API_MAJOR } from '../version.ts';
 
 export interface ReleaseManifest {
@@ -37,15 +42,6 @@ export interface ReleaseManifest {
   apiMajor: number;
   loader: string;
   features: Record<string, string>;
-}
-
-interface CoreModule {
-  createViceMe: (config: unknown) => ViceMeClient;
-}
-
-/** Internal surface the core implementation provides to the loader. */
-interface InternalCoreClient extends ViceMeClient {
-  markDegraded(): void;
 }
 
 export interface ViceMeLoaderNamespaceV1 {
@@ -259,24 +255,10 @@ async function parseManifest(response: Response): Promise<ReleaseManifest> {
   return manifest;
 }
 
-async function loadCore(baseUrl: URL): Promise<CoreModule> {
-  const coreUrl = new URL('index.js', baseUrl);
-  const core = (await import(/* @vite-ignore */ coreUrl.href)) as Partial<CoreModule>;
-  if (typeof core.createViceMe !== 'function') {
-    throw configInvalid('SDK core chunk does not export createViceMe().');
-  }
-  return core as CoreModule;
-}
-
 const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set([
   'CONFIG_INVALID',
-  'WORK_NOT_FOUND',
   'CAPABILITY_DISABLED',
   'CLIENT_DESTROYED',
-  'SESSION_EXPIRED',
-  'RATE_LIMITED',
-  'NETWORK_TIMEOUT',
-  'CHECKOUT_UNAVAILABLE',
   'INTERNAL_ERROR',
 ]);
 
@@ -372,17 +354,15 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
   if (entry) {
     client = entry.client;
   } else {
-    let core: CoreModule;
     try {
-      core = await loadCore(releaseBase);
+      client = createViceMe({
+        workKey: attributes.workKey,
+        region: attributes.region,
+      });
     } catch (error) {
       emitError(host, error, { clientKey });
       return;
     }
-    client = core.createViceMe({
-      workKey: attributes.workKey,
-      region: attributes.region,
-    });
     const ready = client.ready();
     // Keep an unhandled-rejection-free copy on the registry entry; failures
     // are reported through this loader run and via whenReady().
@@ -408,7 +388,7 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
 
     const fileName = manifest.features[capability];
     if (typeof fileName !== 'string') {
-      (client as InternalCoreClient).markDegraded();
+      markClientDegraded(client);
       emitError(
         host,
         new ViceMeError({
@@ -446,7 +426,7 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
     } catch (error) {
       // Only this capability's partial state is discarded; everything else
       // (including the host page) keeps working.
-      (client as InternalCoreClient).markDegraded();
+      markClientDegraded(client);
       emitError(host, error, { clientKey, capability });
     }
   }
@@ -468,7 +448,7 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
 /**
  * Loader runs are serialized so identical scripts (duplicate tags, re-runs,
  * same work with different targets) observe registry state deterministically
- * and never create duplicate sessions or DOM.
+ * and never create duplicate clients or DOM.
  */
 function enqueueRun(script: HTMLScriptElement): Promise<void> {
   const { queue } = sharedState();

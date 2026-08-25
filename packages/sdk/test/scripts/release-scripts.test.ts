@@ -43,6 +43,7 @@ let server:
 beforeAll(async () => {
   const indexBody = Buffer.from('export const SDK_VERSION = "0.1.0";\n');
   const loaderBody = Buffer.from('(function(){/* loader */})();\n');
+  const danmakuBody = Buffer.from('export const mount = () => {};\n');
   const digest = (body: Buffer) => ({
     sha256: createHash('sha256').update(body).digest('hex'),
     sri: `sha384-${createHash('sha384').update(body).digest('base64')}`,
@@ -51,6 +52,7 @@ beforeAll(async () => {
   });
   writeFileSync(join(distDir, 'index.js'), indexBody);
   writeFileSync(join(distDir, 'viceme.min.js'), loaderBody);
+  writeFileSync(join(distDir, 'danmaku.js'), danmakuBody);
   writeFileSync(
     join(distDir, 'manifest.json'),
     `${JSON.stringify(
@@ -58,10 +60,11 @@ beforeAll(async () => {
         version: '0.1.0',
         apiMajor: 1,
         loader: 'viceme.min.js',
-        features: {},
+        features: { danmaku: 'danmaku.js' },
         files: {
           'index.js': digest(indexBody),
           'viceme.min.js': digest(loaderBody),
+          'danmaku.js': digest(danmakuBody),
         },
       },
       null,
@@ -110,6 +113,7 @@ describe('upload-plan.mjs', () => {
     // manifest.json is a first-class immutable object even though it is not
     // listed inside manifest.files: verify-cdn reads it from this path.
     expect(stdout.split('\n').filter(Boolean).sort()).toEqual([
+      'danmaku.js',
       'index.js',
       'manifest.json',
       'viceme.min.js',
@@ -128,7 +132,11 @@ describe('upload-plan.mjs', () => {
       '--base',
       `${server!.url}/viceme-sdk/0.1.0/`,
     );
-    expect(stdout.split('\n').filter(Boolean).sort()).toEqual(['manifest.json', 'viceme.min.js']);
+    expect(stdout.split('\n').filter(Boolean).sort()).toEqual([
+      'danmaku.js',
+      'manifest.json',
+      'viceme.min.js',
+    ]);
   });
 
   it('fails closed when the remote object has different bytes', async () => {

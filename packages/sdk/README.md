@@ -1,8 +1,6 @@
 # @viceme-ai/sdk
 
-Public ViceMe browser SDK: headless core, public session, and capability
-subpaths for static HTML, browser-native ESM, React/Next.js, and
-Agent-generated sites.
+PUBLIC-only ViceMe browser SDK for the Shop-hosted danmaku overlay.
 
 ## Install
 
@@ -10,51 +8,48 @@ Agent-generated sites.
 pnpm add @viceme-ai/sdk
 ```
 
-## Usage
+## Static HTML
+
+```html
+<script
+  defer
+  src="https://viceme.cn/viceme-sdk/v1/viceme.min.js"
+  data-viceme-work="wrk_public_xxx"
+  data-viceme-region="cn"
+  data-viceme-features="danmaku"
+  data-viceme-target="body"
+  data-viceme-theme="auto"
+></script>
+```
+
+The feature declaration must be exactly `danmaku`.
+
+## ESM
 
 ```ts
 import { createViceMe } from '@viceme-ai/sdk';
+import { mountDanmaku } from '@viceme-ai/sdk/danmaku';
 
 const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
 await client.ready();
 
-const access = await client.access.checkMany(['dingdong', 'emperor']);
-if (access.dingdong.allowed) enableDingdong();
-if (access.emperor.allowed) enableEmperor();
+const mounted = await mountDanmaku(client, {
+  target: document.body,
+  theme: 'auto',
+});
 
-// Call from a user gesture. A denied decision opens the ViceMe
-// bottom-sheet/in-page Web Component. Creator details and recent work covers appear
-// above one authorization action; accepted authorization automatically follows.
-const decision = await client.access.require('emperor');
-if (decision.allowed) enableEmperor();
-
+mounted.destroy();
 client.destroy();
 ```
 
-The SDK registers and mounts `<viceme-access-layer>` with isolated ViceMe-owned
-styles. Authorization and checkout remain inside its iframe area and complete through
-an origin- and channel-validated message; no browser popup, page navigation,
-`confirm`, or `alert` is used. Custom site presenters and style inference are
-not part of the current public contract. WeChat opens directly inside the frame,
-and the checkout frame keeps a stable height while its content loads.
+`createViceMe` is purely local and never contacts Shop. A live client reports
+only the `danmaku` capability. The hosted `/embed/danmaku` iframe uses Shop's
+internal SDK to read and create anonymous messages through
+`/v1/danmaku/messages`.
 
-Static HTML sites can use the CDN auto-loader instead — see the
-[repository README](https://github.com/ViceMe-AI/sdk).
+There is no public SDK Session, Bearer token, auth, follow, access, purchase,
+or checkout surface, and no `@viceme-ai/sdk/testing` subpath.
 
-## Testing your integration
-
-```ts
-import { createTestViceMe, createMemoryTransport } from '@viceme-ai/sdk/testing';
-
-const client = createTestViceMe({
-  workKey: 'wrk_test',
-  region: 'cn',
-  transport: createMemoryTransport({
-    work: { key: 'wrk_test', capabilities: ['fixture'] },
-  }),
-});
-await client.ready();
-```
-
-Consumers branch on stable `ViceMeError.code` values only — never on error
-messages. Work-session tokens and work-scoped users remain in memory only.
+The danmaku mount hashes the canonical page URL locally, combines it with a 10%
+scroll bucket, and sends only the opaque anchor to the hosted iframe. Destroying
+the mount removes its nodes, listeners, debounce timer, and location poll.

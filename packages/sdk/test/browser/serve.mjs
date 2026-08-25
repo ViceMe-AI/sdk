@@ -2,17 +2,8 @@
 /**
  * Local static server for Playwright loader tests.
  *
- * Reproduces the CDN layout (§14.3) against local build output:
- *
- *   /viceme-sdk/<version>/viceme.min.js -> dist/viceme.min.js
- *   /viceme-sdk/v1/...            -> same content (stable alias)
- *   any manifest.json             -> dist/manifest.json with the test-only
- *                                    fixture capability injected (the "local
- *                                    fixture manifest" — never shipped)
- *   any fixture.js                -> test-fixtures-dist/fixture.js
- *   /pages/...                    -> test pages
- *
- * The public API is never served here; Playwright route interception mocks it.
+ * `/viceme-sdk/v1/*` mirrors Shop's runtime proxy: it serves the immutable
+ * release manifest, loader, danmaku entry, and referenced chunks directly.
  */
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -22,23 +13,17 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sdkDir = join(here, '..', '..');
 const distDir = join(sdkDir, 'dist');
-const fixturesDist = join(sdkDir, 'test-fixtures-dist');
 const pagesDir = join(here, 'pages');
-
 const manifest = JSON.parse(await readFile(join(distDir, 'manifest.json'), 'utf8'));
-const manifestWithFixture = {
-  ...manifest,
-  features: { ...manifest.features, fixture: 'fixture.js' },
-};
+const SDK_CHUNK_PATH = /^chunks\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.js$/;
+const SDK_ENTRY_PATHS = new Set(['manifest.json', 'viceme.min.js', 'danmaku.js']);
 
 const MIME = new Map([
   ['.js', 'text/javascript; charset=utf-8'],
-  ['.mjs', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],
   ['.css', 'text/css; charset=utf-8'],
   ['.map', 'application/json; charset=utf-8'],
-  ['.svg', 'image/svg+xml'],
 ]);
 
 const port = Number(process.env.PORT || 4173);
@@ -54,10 +39,7 @@ createServer(async (req, res) => {
       return;
     }
 
-    let file = null;
     if (path === '/viceme-sdk/-/aliases/v1') {
-      // Stable-alias version pointer (the loader resolves it when the alias
-      // path carries no manifest).
       res.writeHead(200, {
         'content-type': 'text/plain; charset=utf-8',
         'access-control-allow-origin': '*',
@@ -66,28 +48,14 @@ createServer(async (req, res) => {
       res.end(manifest.version);
       return;
     }
+
+    let file = null;
     if (path.startsWith('/pages/')) {
       file = join(pagesDir, normalize(path.slice('/pages/'.length)));
     } else if (/^\/viceme-sdk\/(v1|\d+\.\d+\.\d+[^/]*)\//.test(path)) {
       const rest = path.split('/').slice(3).join('/');
-      if (rest === 'manifest.json') {
-        res.writeHead(200, {
-          'content-type': 'application/json; charset=utf-8',
-          'access-control-allow-origin': '*',
-          'cache-control': 'no-store',
-        });
-        res.end(JSON.stringify(manifestWithFixture));
-        return;
-      }
-      if (rest === 'fixture.js') {
-        file = join(fixturesDist, 'fixture.js');
-      } else if (rest === 'viceme.min.js' && path.startsWith('/viceme-sdk/v1/')) {
-        // Real topology: the alias path carries the FIXED bootstrap.
-        file = join(distDir, 'bootstrap.min.js');
-      } else {
-        // Loader, core, and manifest all live at the dist root — the same
-        // flat public layout the CDN serves.
-        file = join(distDir, rest);
+      if (SDK_ENTRY_PATHS.has(rest) || SDK_CHUNK_PATH.test(rest)) {
+        file = join(distDir, normalize(rest));
       }
     }
 
