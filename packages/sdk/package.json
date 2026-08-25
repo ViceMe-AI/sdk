@@ -1,6 +1,6 @@
 {
   "name": "@viceme-ai/sdk",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "ViceMe PUBLIC-only hosted danmaku SDK for static HTML, ESM, React, and Agent-generated sites.",
   "type": "module",
   "repository": {
