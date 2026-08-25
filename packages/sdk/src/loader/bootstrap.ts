@@ -34,9 +34,10 @@
       const loader = document.createElement('script');
       for (const name of script.getAttributeNames()) {
         // The loader gets its own src; integrity pins are not transferable.
-        if (name === 'src' || name === 'integrity') continue;
+        if (name === 'src' || name === 'integrity' || name === 'nonce') continue;
         loader.setAttribute(name, script.getAttribute(name) ?? '');
       }
+      loader.nonce = script.nonce;
       loader.src = new URL(`/viceme-sdk/${version}/viceme.min.js`, script.src).href;
       (document.head ?? document.documentElement).append(loader);
     })

@@ -34,6 +34,28 @@ The loader reads its same-release `manifest.json`, loads `danmaku.js` and any
 manifest-referenced `chunks/*.js`, then mounts one isolated overlay. Repeating
 the same work, feature, and target reuses the existing client and mount.
 
+`https://viceme.cn/viceme-sdk/v1/*` is the Shop asset proxy, not the mutable S3
+alias directory. Shop configures that proxy to one exact release and directly
+serves the complete `viceme.min.js`, `manifest.json`, `danmaku.js`, and hashed
+chunk set under `/v1/*`; a missing sibling manifest is a deployment error and
+fails closed. Direct storage has a separate topology:
+
+```text
+https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js       fixed bootstrap
+https://s3.viceme.cn/viceme-sdk/-/aliases/v1           version pointer
+https://s3.viceme.cn/viceme-sdk/<version>/...           exact release
+```
+
+For a nonce-based CSP, preserve the host's existing directives and allow only
+the exact regional Shop origin used by the snippet: `script-src` for the entry
+and dynamically imported chunks, `connect-src` for `manifest.json`, and
+`frame-src` for `/embed/danmaku`. Keep `object-src 'none'`; do not add `*` or a
+ViceMe subdomain wildcard. A typical CN policy adds `https://viceme.cn` to all
+three allowlists (or uses the request nonce plus `'strict-dynamic'` for script
+loading). A page that intentionally uses the direct S3 alias instead must put
+the exact `https://s3.viceme.cn` origin in `script-src` and `connect-src`, while
+`frame-src` remains `https://viceme.cn`.
+
 ## npm / Bundlers
 
 ```bash
@@ -51,11 +73,15 @@ const mounted = client.hasCapability('danmaku')
   ? await mountDanmaku(client, { target: document.body, theme: 'auto' })
   : null;
 
-window.addEventListener('pagehide', () => {
+function unmountViceMe() {
   mounted?.destroy();
   client.destroy();
-});
+}
 ```
+
+Call `unmountViceMe()` when the owning component unmounts or an explicit widget
+lifecycle ends. Do not bind cleanup to `pagehide`; that event also fires for
+pages entering the back/forward cache.
 
 `createViceMe({ workKey, region })` validates configuration and initializes a
 local lifecycle only. It performs no network request.
@@ -86,8 +112,8 @@ Session adapter.
 - The loader fetches only `manifest.json`, `danmaku.js`, and referenced
   `chunks/*.js` beside `viceme.min.js`.
 - The external SDK derives an opaque page-position anchor, creates the stage,
-  controls, and lazy modal iframes, validates bridge message origin/source, and
-  owns cleanup.
+  responsive-width controls, and lazy modal iframes, validates bridge message
+  origin/source, and owns cleanup.
 - Shop Web owns `/embed/danmaku`, including rendering, keyboard behavior,
   reduced-motion behavior, and interaction.
 - The Shop SDK inside that iframe calls anonymous `GET` and `POST`

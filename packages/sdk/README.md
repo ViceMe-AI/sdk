@@ -24,6 +24,16 @@ pnpm add @viceme-ai/sdk
 
 The feature declaration must be exactly `danmaku`.
 
+The `viceme.cn/viceme-sdk/v1/*` Shop proxy directly exposes one configured
+exact release, including the loader, manifest, danmaku entry, and hashed
+chunks. It is distinct from the direct S3 `v1/viceme.min.js` alias, whose fixed
+bootstrap reads `-/aliases/v1` before loading an exact-version directory.
+
+With CSP, allow the exact regional Shop origin in `script-src`, `connect-src`,
+and `frame-src`, and keep `object-src 'none'`. A nonce with `'strict-dynamic'`
+may authorize dynamic scripts, but `connect-src` and `frame-src` still need the
+exact origin. Do not use `*` or a ViceMe subdomain wildcard.
+
 ## ESM
 
 ```ts
@@ -41,6 +51,9 @@ const mounted = await mountDanmaku(client, {
 mounted.destroy();
 client.destroy();
 ```
+
+Run those cleanup calls from the owning component's unmount path or another
+explicit lifecycle boundary, not from `pagehide` (which also covers bfcache).
 
 `createViceMe` is purely local and never contacts Shop. A live client reports
 only the `danmaku` capability. The hosted `/embed/danmaku` iframe uses Shop's

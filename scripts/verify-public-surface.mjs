@@ -12,7 +12,7 @@
 import { access, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readApiMajor } from './lib/version-source.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -48,6 +48,32 @@ for (const [subpath, def] of Object.entries(pkg.exports ?? {})) {
     );
   }
 }
+
+const danmakuRuntimeSymbols = Object.keys(
+  await import(pathToFileURL(join(distDir, 'danmaku.js')).href),
+).sort();
+check(
+  JSON.stringify(danmakuRuntimeSymbols) === JSON.stringify(['mountDanmaku']),
+  `./danmaku runtime symbols must be exactly ["mountDanmaku"], got ${JSON.stringify(danmakuRuntimeSymbols)}`,
+);
+
+const danmakuDeclarations = await readFile(join(distDir, 'danmaku', 'index.d.ts'), 'utf8');
+const danmakuTypeSymbols = [
+  ...danmakuDeclarations.matchAll(
+    /^export (?:declare )?(?:function|class|const|let|var|interface|type|enum)\s+([A-Za-z_$][\w$]*)/gm,
+  ),
+]
+  .map((match) => match[1])
+  .sort();
+check(
+  !/^export\s*{/m.test(danmakuDeclarations),
+  './danmaku declarations must not re-export internal symbols',
+);
+check(
+  JSON.stringify(danmakuTypeSymbols) ===
+    JSON.stringify(['DanmakuMountHandle', 'DanmakuMountOptions', 'mountDanmaku']),
+  `./danmaku declaration symbols are unexpected: ${JSON.stringify(danmakuTypeSymbols)}`,
+);
 
 for (const removed of [
   'access',

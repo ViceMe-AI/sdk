@@ -1,5 +1,5 @@
 /**
- * The handle the danmaku `mount()` returns to the loader (no
+ * The handle the danmaku mount function returns to the loader (no
  * registry/identity concerns). The loader wraps it into the public
  * `ViceMeMountedInstance`, which carries the registry-assigned `instanceKey`
  * and owns idempotent destroy + event dispatch.
@@ -28,5 +28,5 @@ export type CapabilityMountFunction = (
 
 /** Convenience for ESM-direct capability entry points. */
 export interface ViceMeCapabilityModule {
-  mount: CapabilityMountFunction;
+  mountDanmaku: CapabilityMountFunction;
 }

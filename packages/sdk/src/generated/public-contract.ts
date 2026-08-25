@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.4.0, sha256 dd7e989b2d5c1ca0…)
+ * (contractVersion 0.4.0, sha256 3e487a33d9633e4d…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -23,7 +23,7 @@ export interface paths {
         /** List public danmaku messages for one page-position anchor */
         get: operations["listDanmakuMessages"];
         put?: never;
-        /** Create an anonymous public danmaku message */
+        /** Create a public danmaku message */
         post: operations["createDanmakuMessage"];
         delete?: never;
         options?: never;

@@ -149,6 +149,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build @viceme-ai/sdk
+        run: pnpm --filter '@viceme-ai/sdk' build
+
       - name: Pack @viceme-ai/sdk
         run: pnpm --filter '@viceme-ai/sdk' pack --pack-destination "${{ github.workspace }}"
 

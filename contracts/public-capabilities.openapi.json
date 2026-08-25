@@ -66,7 +66,7 @@
       "post": {
         "tags": ["danmaku"],
         "operationId": "createDanmakuMessage",
-        "summary": "Create an anonymous public danmaku message",
+        "summary": "Create a public danmaku message",
         "requestBody": {
           "required": true,
           "content": {

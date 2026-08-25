@@ -15,6 +15,26 @@
       main {
         padding: 32px;
       }
+      #host-bottom-action {
+        position: fixed;
+        bottom: 12px;
+        left: 16px;
+      }
+      #host-bottom-status {
+        position: fixed;
+        bottom: 16px;
+        left: 148px;
+      }
+      #host-through-action {
+        position: fixed;
+        bottom: 80px;
+        left: calc(50% + 40px);
+      }
+      #host-through-status {
+        position: fixed;
+        bottom: 84px;
+        left: calc(50% + 230px);
+      }
     </style>
   </head>
   <body>
@@ -22,6 +42,10 @@
       <h1>Host page</h1>
       <button id="host-action" type="button">Host action</button>
       <output id="host-status">idle</output>
+      <button id="host-bottom-action" type="button">Bottom host action</button>
+      <output id="host-bottom-status">idle</output>
+      <button id="host-through-action" type="button">Through-frame host action</button>
+      <output id="host-through-status">idle</output>
     </main>
     <script>
       window.__events = [];
@@ -37,6 +61,12 @@
       }
       document.querySelector('#host-action').addEventListener('click', () => {
         document.querySelector('#host-status').textContent = 'clicked';
+      });
+      document.querySelector('#host-bottom-action').addEventListener('click', () => {
+        document.querySelector('#host-bottom-status').textContent = 'clicked';
+      });
+      document.querySelector('#host-through-action').addEventListener('click', () => {
+        document.querySelector('#host-through-status').textContent = 'clicked';
       });
     </script>
     <!-- prettier-ignore -->

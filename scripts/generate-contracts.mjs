@@ -34,6 +34,14 @@ const check = process.argv[2] === 'check';
 const snapshot = readFileSync(snapshotPath);
 const snapshotJson = JSON.parse(snapshot.toString('utf8'));
 const sha256 = createHash('sha256').update(snapshot).digest('hex');
+const publicPath = snapshotJson.paths?.['/v1/danmaku/messages'];
+if (
+  JSON.stringify(Object.keys(snapshotJson.paths ?? {})) !==
+    JSON.stringify(['/v1/danmaku/messages']) ||
+  JSON.stringify(Object.keys(publicPath ?? {}).sort()) !== JSON.stringify(['get', 'post'])
+) {
+  throw new Error('public contract must contain only GET/POST /v1/danmaku/messages');
+}
 
 const BANNER = `/* eslint-disable */
 /**
