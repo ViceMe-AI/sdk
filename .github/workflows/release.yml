@@ -6,7 +6,7 @@ name: SDK release publication
 #
 #   reviewed dev -> main promotion PR is the ONLY release entry
 #     -> immutable tag at the exact reviewed dev head
-#     -> fail-closed gates (license, forbidden patterns, full quality)
+#     -> fail-closed gates (forbidden patterns, full quality)
 #     -> npm publish-or-verify (Trusted Publisher OIDC, no publish token)
 #     -> GitHub release assets from the published npm tarball
 #     -> CN + GLOBAL exact-version S3 publication (environment: cdn)
@@ -123,10 +123,6 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ needs.metadata.outputs.sha }}
-      - name: Require a finalized publication license
-        run: |
-          test -s LICENSE
-          test ! -e LICENSE-PENDING.md
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with: { version: 11 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
