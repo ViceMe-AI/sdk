@@ -15,6 +15,8 @@ import type { ViceMeClientState } from './core/lifecycle.ts';
 import type {
   AccessCapability,
   AccessDecision,
+  AccessFeaturePresentation,
+  AccessPolicyType,
   AccessReason,
   AuthCapability,
   AuthState,
@@ -35,6 +37,8 @@ export type {
   ViceMeErrorCode,
   AccessCapability,
   AccessDecision,
+  AccessFeaturePresentation,
+  AccessPolicyType,
   AccessReason,
   AuthCapability,
   AuthState,

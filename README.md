@@ -46,6 +46,9 @@ pnpm add @viceme-ai/sdk
   const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
   await client.ready();
 
+  // Render these values with the host site's existing components and tokens.
+  const features = await client.access.getFeatures();
+
   window.addEventListener('pagehide', () => client.destroy());
 </script>
 ```
@@ -57,6 +60,8 @@ import { createViceMe } from '@viceme-ai/sdk';
 
 const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
 await client.ready();
+
+const features = await client.access.getFeatures();
 
 const decisions = await client.access.checkMany(['dingdong', 'emperor']);
 

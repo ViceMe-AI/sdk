@@ -83,6 +83,27 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
           },
         };
       }
+      if (request.path === '/v1/public/v1/access/features') {
+        return {
+          status: 200,
+          body: {
+            features: [
+              {
+                featureKey: 'dingdong',
+                title: '叮咚鸡',
+                policy: { type: 'FOLLOW_OWNER' },
+                price: null,
+              },
+              {
+                featureKey: 'emperor',
+                title: '帝皇',
+                policy: { type: 'WORK_ENTITLEMENT' },
+                price: { amountCents: 1_000, currency: 'CNY' },
+              },
+            ],
+          },
+        };
+      }
       if (request.path === '/v1/public/v1/checkout/sessions') {
         return {
           status: 200,
@@ -122,6 +143,31 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
 }
 
 describe('creator access capabilities', () => {
+  it('reads authoritative feature presentation for host-native entry points', async () => {
+    const transport = capabilityTransport();
+    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });
+
+    await expect(client.access.getFeatures()).resolves.toEqual([
+      {
+        featureKey: 'dingdong',
+        title: '叮咚鸡',
+        policy: { type: 'FOLLOW_OWNER' },
+        price: null,
+      },
+      {
+        featureKey: 'emperor',
+        title: '帝皇',
+        policy: { type: 'WORK_ENTITLEMENT' },
+        price: { amountCents: 1_000, currency: 'CNY' },
+      },
+    ]);
+    expect(transport.requests.at(-1)).toMatchObject({
+      method: 'GET',
+      path: '/v1/public/v1/access/features',
+      authorization: 'anonymous-work-token',
+    });
+  });
+
   it('uses the in-memory work token for access calls', async () => {
     const transport = capabilityTransport();
     const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });

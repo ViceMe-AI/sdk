@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ViceMe Public Capabilities API",
-    "version": "0.3.3",
+    "version": "0.4.0",
     "summary": "Public, unauthenticated-visitor endpoints consumed by the ViceMe browser SDK.",
     "description": "Shop-owned public contract for creator work sessions, WeChat login, follows, access decisions, and hosted checkout."
   },
@@ -221,6 +221,26 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/AccessCheckResponse" }
+              }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
+        }
+      }
+    },
+    "/v1/public/v1/access/features": {
+      "get": {
+        "tags": ["access"],
+        "operationId": "listAccessFeatures",
+        "summary": "List active feature presentation",
+        "description": "Returns server-authoritative titles and current prices for host-native access entry points. It does not alter access, checkout, or payment state.",
+        "security": [{ "workSession": [] }],
+        "responses": {
+          "200": {
+            "description": "Active feature presentation.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccessFeaturesResponse" }
               }
             }
           },
@@ -474,6 +494,47 @@
           "decisions": {
             "type": "object",
             "additionalProperties": { "$ref": "#/components/schemas/AccessDecision" }
+          }
+        }
+      },
+      "AccessFeaturePrice": {
+        "type": "object",
+        "required": ["amountCents", "currency"],
+        "additionalProperties": false,
+        "properties": {
+          "amountCents": { "type": "integer", "minimum": 1 },
+          "currency": { "type": "string", "enum": ["CNY"] }
+        }
+      },
+      "AccessFeaturePresentation": {
+        "type": "object",
+        "required": ["featureKey", "title", "policy", "price"],
+        "additionalProperties": false,
+        "properties": {
+          "featureKey": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "policy": {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string", "enum": ["FOLLOW_OWNER", "WORK_ENTITLEMENT"] }
+            }
+          },
+          "price": {
+            "oneOf": [{ "$ref": "#/components/schemas/AccessFeaturePrice" }, { "type": "null" }]
+          }
+        }
+      },
+      "AccessFeaturesResponse": {
+        "type": "object",
+        "required": ["features"],
+        "additionalProperties": false,
+        "properties": {
+          "features": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "$ref": "#/components/schemas/AccessFeaturePresentation" }
           }
         }
       },

@@ -18,6 +18,11 @@ import { createViceMe } from '@viceme-ai/sdk';
 const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
 await client.ready();
 
+// Use server-authoritative titles and prices in the host site's existing
+// Button/Card components. This does not open or customize ViceMe checkout.
+const features = await client.access.getFeatures();
+const emperor = features.find((feature) => feature.featureKey === 'emperor');
+
 const access = await client.access.checkMany(['dingdong', 'emperor']);
 if (access.dingdong.allowed) enableDingdong();
 if (access.emperor.allowed) enableEmperor();
@@ -30,6 +35,13 @@ if (decision.allowed) enableEmperor();
 
 client.destroy();
 ```
+
+When adding a host-side locked state or purchase entry, preserve the site's
+existing component library, design tokens, responsive behavior, and feedback
+patterns. Keep the original business action unchanged and call it only after
+`access.require()` returns an allowed decision. Never hard-code a price from
+local configuration; `getFeatures()` returns the current display price. The
+ViceMe-owned authorization and checkout layer remains isolated and unchanged.
 
 The SDK registers and mounts `<viceme-access-layer>` with isolated ViceMe-owned
 styles. Authorization and checkout remain inside its iframe area and complete through

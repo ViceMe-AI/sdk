@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.3.3, sha256 e9700c076c0c180c…)
+ * (contractVersion 0.4.0, sha256 ad0532431cfe2301…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -123,6 +123,26 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["checkFeatureAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/v1/access/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List active feature presentation
+         * @description Returns server-authoritative titles and current prices for host-native access entry points. It does not alter access, checkout, or payment state.
+         */
+        get: operations["listAccessFeatures"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -253,6 +273,23 @@ export interface components {
             decisions: {
                 [key: string]: components["schemas"]["AccessDecision"];
             };
+        };
+        AccessFeaturePrice: {
+            amountCents: number;
+            /** @enum {string} */
+            currency: "CNY";
+        };
+        AccessFeaturePresentation: {
+            featureKey: string;
+            title: string;
+            policy: {
+                /** @enum {string} */
+                type: "FOLLOW_OWNER" | "WORK_ENTITLEMENT";
+            };
+            price: components["schemas"]["AccessFeaturePrice"] | null;
+        };
+        AccessFeaturesResponse: {
+            features: components["schemas"]["AccessFeaturePresentation"][];
         };
         CheckoutRequest: {
             featureKey: string;
@@ -552,6 +589,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessCheckResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    listAccessFeatures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active feature presentation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessFeaturesResponse"];
                 };
             };
             "4xx": components["responses"]["PublicError"];

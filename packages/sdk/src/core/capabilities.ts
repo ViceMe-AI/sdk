@@ -45,6 +45,15 @@ export interface AccessDecision {
   nextAction: 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT' | null;
 }
 
+export type AccessPolicyType = 'FOLLOW_OWNER' | 'WORK_ENTITLEMENT';
+
+export interface AccessFeaturePresentation {
+  featureKey: string;
+  title: string;
+  policy: { type: AccessPolicyType };
+  price: { amountCents: number; currency: 'CNY' } | null;
+}
+
 export interface CheckoutOptions {
   featureKey: string;
   locale?: 'zh-CN' | 'en-US';
@@ -68,6 +77,7 @@ export interface FollowCapability {
 }
 
 export interface AccessCapability {
+  getFeatures(): Promise<AccessFeaturePresentation[]>;
   check(featureKey: string): Promise<AccessDecision>;
   checkMany(featureKeys: string[]): Promise<Record<string, AccessDecision>>;
   require(featureKey: string): Promise<AccessDecision>;
@@ -177,6 +187,39 @@ function parseDecision(value: unknown): AccessDecision {
     allowed: body.allowed,
     reason: body.reason as AccessReason,
     nextAction: body.nextAction as AccessDecision['nextAction'],
+  };
+}
+
+function parseFeaturePresentation(value: unknown): AccessFeaturePresentation {
+  const body = objectBody(value);
+  const policy = objectBody(body.policy);
+  if (
+    typeof body.featureKey !== 'string' ||
+    !/^[a-z][a-z0-9_-]{1,63}$/.test(body.featureKey) ||
+    typeof body.title !== 'string' ||
+    body.title.trim().length === 0 ||
+    body.title.length > 120 ||
+    !(policy.type === 'FOLLOW_OWNER' || policy.type === 'WORK_ENTITLEMENT')
+  ) {
+    throw malformedResponse();
+  }
+  const price = body.price === null ? null : objectBody(body.price);
+  if (
+    price !== null &&
+    (!Number.isInteger(price.amountCents) ||
+      (price.amountCents as number) <= 0 ||
+      price.currency !== 'CNY')
+  ) {
+    throw malformedResponse();
+  }
+  if ((policy.type === 'WORK_ENTITLEMENT') !== (price !== null)) {
+    throw malformedResponse();
+  }
+  return {
+    featureKey: body.featureKey,
+    title: body.title,
+    policy: { type: policy.type },
+    price: price === null ? null : { amountCents: price.amountCents as number, currency: 'CNY' },
   };
 }
 
@@ -445,6 +488,16 @@ export function createCapabilities(deps: CapabilityDeps): {
   };
 
   const access: AccessCapability = {
+    async getFeatures() {
+      await deps.ready();
+      const response = objectBody(
+        (await deps.session.request({ method: 'GET', path: '/v1/public/v1/access/features' })).body,
+      );
+      if (!Array.isArray(response.features) || response.features.length > 100) {
+        throw malformedResponse();
+      }
+      return response.features.map(parseFeaturePresentation);
+    },
     async check(featureKey) {
       const decisions = await checkMany([featureKey]);
       const decision = decisions[featureKey];
