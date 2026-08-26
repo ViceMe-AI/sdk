@@ -1,7 +1,7 @@
 {
   "name": "@viceme-ai/sdk",
   "version": "0.2.0",
-  "description": "ViceMe PUBLIC-only hosted danmaku SDK for static HTML, ESM, React, and Agent-generated sites.",
+  "description": "ViceMe browser SDK for hosted capabilities and creator access flows.",
   "type": "module",
   "repository": {
     "type": "git",
@@ -14,6 +14,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
     },
     "./danmaku": {
       "types": "./dist/danmaku/index.d.ts",

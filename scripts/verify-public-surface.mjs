@@ -2,10 +2,9 @@
 /**
  * Public surface verification for `@viceme-ai/sdk`.
  *
- * Locks the published surface to the PUBLIC-only hosted danmaku shape:
- * - exports map contains exactly `.` and `./danmaku`;
+ * Locks the published surface to the intended creator access and danmaku shape:
+ * - exports map contains core, danmaku, and testing;
  * - declared dist artifacts exist (js + d.ts);
- * - removed auth/session/access surfaces do not sneak back in;
  * - runtime version constant matches package.json;
  * - loader requests stay inside the Shop runtime proxy allowlist.
  */
@@ -28,8 +27,8 @@ const pkg = JSON.parse(await readFile(join(sdkDir, 'package.json'), 'utf8'));
 
 const exportKeys = Object.keys(pkg.exports ?? {}).sort();
 check(
-  JSON.stringify(exportKeys) === JSON.stringify(['.', './danmaku']),
-  `exports map must be exactly [".", "./danmaku"], got ${JSON.stringify(exportKeys)}`,
+  JSON.stringify(exportKeys) === JSON.stringify(['.', './danmaku', './testing']),
+  `exports map must be exactly [".", "./danmaku", "./testing"], got ${JSON.stringify(exportKeys)}`,
 );
 
 for (const [subpath, def] of Object.entries(pkg.exports ?? {})) {
@@ -75,22 +74,13 @@ check(
   `./danmaku declaration symbols are unexpected: ${JSON.stringify(danmakuTypeSymbols)}`,
 );
 
-for (const removed of [
-  'access',
-  'auth',
-  'checkout',
-  'follow',
-  'payment',
-  'purchase',
-  'session',
-  'testing',
-]) {
+for (const unreleased of ['payment']) {
   check(
-    !exportKeys.includes(`./${removed}`),
-    `removed subpath "./${removed}" must not be exported`,
+    !exportKeys.includes(`./${unreleased}`),
+    `unreleased capability subpath "./${unreleased}" must not be exported`,
   );
-  await access(join(distDir, `${removed}.js`), constants.R_OK)
-    .then(() => failures.push(`${removed}.js exists in dist but is not public`))
+  await access(join(distDir, `${unreleased}.js`), constants.R_OK)
+    .then(() => failures.push(`${unreleased}.js exists in dist but is not released`))
     .catch(() => {});
 }
 
@@ -119,20 +109,6 @@ check(
 
 const loaderSource = await readFile(join(distDir, 'viceme.min.js'), 'utf8');
 check(!loaderSource.includes('index.js'), 'loader must inline core instead of requesting index.js');
-
-const runtimeFiles = Object.keys(manifest.files ?? {}).filter(
-  (file) =>
-    file === 'index.js' ||
-    file === 'danmaku.js' ||
-    file === 'viceme.min.js' ||
-    file.startsWith('chunks/'),
-);
-for (const file of runtimeFiles) {
-  const source = await readFile(join(distDir, file), 'utf8');
-  for (const forbidden of ['/v1/public/v1/', 'work-sessions', 'Bearer ']) {
-    check(!source.includes(forbidden), `${file} contains removed runtime pattern ${forbidden}`);
-  }
-}
 
 const pending = ['danmaku.js'];
 const visited = new Set();

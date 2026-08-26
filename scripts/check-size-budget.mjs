@@ -14,7 +14,8 @@ const distDir = join(here, '..', 'packages', 'sdk', 'dist');
 
 const BUDGETS = {
   'index.js': { gzip: 15 * 1024, label: 'core ESM' },
-  'viceme.min.js': { gzip: 8 * 1024, label: 'CDN loader' },
+  'viceme.min.js': { gzip: 12 * 1024, label: 'CDN loader with creator access' },
+  'testing.js': { gzip: 12 * 1024, label: 'testing adapter' },
   'danmaku.js': { gzip: 16 * 1024, label: 'hosted danmaku capability' },
 };
 

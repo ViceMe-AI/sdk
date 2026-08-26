@@ -3,7 +3,7 @@ import { defineConfig } from 'vite';
 import { buildEndpointDefinitions } from './vite.config.endpoints.ts';
 
 /**
- * ESM library build: `dist/index.js`, `dist/danmaku.js`, and any shared chunks.
+ * ESM library build: public, testing, and danmaku entries plus shared chunks.
  * Same source and version as the loader build; only `clean` may delete `dist`.
  */
 export default defineConfig({
@@ -16,6 +16,7 @@ export default defineConfig({
     lib: {
       entry: {
         index: resolve(__dirname, 'src/index.ts'),
+        testing: resolve(__dirname, 'src/testing.ts'),
         danmaku: resolve(__dirname, 'src/danmaku/index.ts'),
       },
       formats: ['es'],

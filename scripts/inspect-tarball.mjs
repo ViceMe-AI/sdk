@@ -93,26 +93,26 @@ try {
     const { mountDanmaku } = await import(
       new URL('./dist/danmaku.js', import.meta.url).href
     );
+    const { createTestViceMe, createMemoryTransport } = await import(
+      new URL('./dist/testing.js', import.meta.url).href
+    );
     if (typeof createViceMe !== 'function') throw new Error('createViceMe missing');
     if (typeof mountDanmaku !== 'function') throw new Error('mountDanmaku missing');
     if (typeof ViceMeError !== 'function' || !isViceMeError(new ViceMeError({ code: 'INTERNAL_ERROR', message: 'x' }))) {
       throw new Error('error model missing');
     }
-    let networkCalls = 0;
-    globalThis.fetch = async () => {
-      networkCalls += 1;
-      throw new Error('unexpected network request');
-    };
-    const client = createViceMe({ workKey: 'wrk_test', region: 'cn' });
+    const transport = createMemoryTransport({
+      work: { key: 'wrk_test', capabilities: ['danmaku', 'auth', 'follow', 'access', 'checkout'] },
+    });
+    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });
     if (client.state !== 'CREATED') throw new Error('unexpected initial state');
     await client.ready();
-    if (networkCalls !== 0) throw new Error('local initialization reached the network');
-    if (!client.hasCapability('danmaku') || client.hasCapability('checkout')) {
-      throw new Error('PUBLIC-only capability check broken');
+    for (const capability of ['danmaku', 'auth', 'follow', 'access', 'checkout']) {
+      if (!client.hasCapability(capability)) {
+        throw new Error('capability discovery broken: ' + capability);
+      }
     }
-    for (const removed of ['auth', 'access', 'checkout', 'follow', 'session']) {
-      if (removed in client) throw new Error('removed client surface restored: ' + removed);
-    }
+    if (client.version !== SDK_VERSION) throw new Error('version mismatch');
     client.destroy();
     console.log('smoke-ok ' + SDK_VERSION);
   `;

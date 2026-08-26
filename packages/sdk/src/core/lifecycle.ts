@@ -2,8 +2,10 @@
  * Client lifecycle state machine.
  *
  * ```text
- * CREATED -> READY -> DESTROYED
+ * CREATED -> INITIALIZING -> READY -> DESTROYED
+ * INITIALIZING -> FAILED (retryable: FAILED -> INITIALIZING)
  * READY -> DEGRADED (single capability unavailable; host page keeps working)
+ * DEGRADED -> READY (when all capabilities recover is a B1+ concern)
  * ```
  *
  * State is exposed read-only; consumers can never assign it directly.
@@ -11,12 +13,15 @@
 
 import { ViceMeError, clientDestroyed } from './errors.ts';
 
-export type ViceMeClientState = 'CREATED' | 'READY' | 'DEGRADED' | 'DESTROYED';
+export type ViceMeClientState =
+  'CREATED' | 'INITIALIZING' | 'READY' | 'DEGRADED' | 'FAILED' | 'DESTROYED';
 
 const ALLOWED_TRANSITIONS: Readonly<Record<ViceMeClientState, readonly ViceMeClientState[]>> = {
-  CREATED: ['READY', 'DESTROYED'],
+  CREATED: ['INITIALIZING', 'DESTROYED'],
+  INITIALIZING: ['READY', 'FAILED', 'DESTROYED'],
   READY: ['DEGRADED', 'DESTROYED'],
   DEGRADED: ['DESTROYED'],
+  FAILED: ['INITIALIZING', 'DESTROYED'],
   DESTROYED: [],
 };
 
