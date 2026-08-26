@@ -11,20 +11,28 @@ describe('Lifecycle', () => {
     expect(life.state).toBe('CREATED');
     expect(life.destroyed).toBe(false);
 
+    life.transition('INITIALIZING');
     life.transition('READY');
     life.transition('DESTROYED');
 
     expect(life.state).toBe('DESTROYED');
     expect(life.destroyed).toBe(true);
-    expect(seen).toEqual(['READY', 'DESTROYED']);
+    expect(seen).toEqual(['INITIALIZING', 'READY', 'DESTROYED']);
   });
 
   it('rejects illegal transitions', () => {
     const life = new Lifecycle();
-    life.transition('READY');
-    expect(() => life.transition('CREATED')).toThrow(ViceMeError);
-    life.transition('DEGRADED');
     expect(() => life.transition('READY')).toThrow(ViceMeError);
+    life.transition('INITIALIZING');
+    expect(() => life.transition('READY')).not.toThrow();
+    expect(() => life.transition('INITIALIZING')).toThrow(ViceMeError);
+  });
+
+  it('supports FAILED -> INITIALIZING retry', () => {
+    const life = new Lifecycle();
+    life.transition('INITIALIZING');
+    life.transition('FAILED');
+    expect(() => life.transition('INITIALIZING')).not.toThrow();
   });
 
   it('assertAlive throws CLIENT_DESTROYED once destroyed', () => {
@@ -38,7 +46,7 @@ describe('Lifecycle', () => {
     const fn = vi.fn();
     const off = life.subscribe(fn);
     off();
-    life.transition('READY');
+    life.transition('INITIALIZING');
     expect(fn).not.toHaveBeenCalled();
   });
 });
