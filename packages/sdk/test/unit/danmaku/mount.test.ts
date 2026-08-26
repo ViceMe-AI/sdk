@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createViceMe } from '../../../src/index.ts';
 import type { ViceMeClient } from '../../../src/core/client.ts';
 import { mountDanmaku } from '../../../src/danmaku/index.ts';
 import { FRAME_READY_TIMEOUT_MS, mount } from '../../../src/danmaku/mount.ts';
 
 function client(region: 'cn' | 'global' = 'cn'): ViceMeClient {
-  return createViceMe({ workKey: 'wrk_test', region });
+  return {
+    workKey: 'wrk_test',
+    region,
+    state: 'READY',
+    ready: vi.fn(async () => undefined),
+    hasCapability: (capability: string) => capability === 'danmaku',
+    destroy: vi.fn(),
+  } as unknown as ViceMeClient;
 }
 
 function setIframePageLoading(disabled: boolean): void {
@@ -103,14 +109,14 @@ describe('danmaku mount', () => {
 
   it('does not retain a failed ESM mount registration', async () => {
     let enabled = false;
-    const sdkClient: ViceMeClient = {
+    const sdkClient = {
       workKey: 'wrk_test',
       region: 'cn',
       state: 'READY',
       ready: vi.fn(async () => undefined),
       hasCapability: () => enabled,
       destroy: vi.fn(),
-    };
+    } as unknown as ViceMeClient;
 
     await expect(
       mountDanmaku(sdkClient, { target: document.body, theme: 'auto' }),
@@ -330,14 +336,14 @@ describe('danmaku mount', () => {
   });
 
   it('fails closed when a non-danmaku client is supplied', async () => {
-    const unsupported: ViceMeClient = {
+    const unsupported = {
       workKey: 'wrk_test',
       region: 'cn',
       state: 'READY',
       ready: vi.fn(async () => undefined),
       hasCapability: () => false,
       destroy: vi.fn(),
-    };
+    } as unknown as ViceMeClient;
 
     await expect(
       mount(unsupported, { target: document.body, theme: 'auto' }),
