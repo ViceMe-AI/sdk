@@ -36,8 +36,8 @@ export default function App() {
     <main style={{ fontFamily: 'system-ui, sans-serif', maxWidth: '40rem', margin: '2rem auto' }}>
       <h1>ViceMe hosted danmaku</h1>
       <p>
-        Client state: <code>{state}</code>. Initialization is local; the mounted Shop iframe owns
-        message API calls.
+        Client state: <code>{state}</code>. <code>ready()</code> establishes the public work
+        session; the mounted Shop iframe owns danmaku message API calls.
       </p>
       <button type="button">Host-page action</button>
       <div ref={hostRef} />

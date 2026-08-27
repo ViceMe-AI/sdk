@@ -38,7 +38,8 @@ export default function Page() {
     <main style={{ maxWidth: '40rem', margin: '2rem auto' }}>
       <h1>ViceMe hosted danmaku</h1>
       <p>
-        Client state: <code>{state}</code>. The external SDK has no Session or checkout surface.
+        Client state: <code>{state}</code>. <code>ready()</code> establishes the public work
+        session; the mounted Shop iframe owns danmaku message API calls.
       </p>
       <button type="button">Host-page action</button>
       <div ref={hostRef} />
