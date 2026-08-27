@@ -93,26 +93,30 @@ try {
     const { mountDanmaku } = await import(
       new URL('./dist/danmaku.js', import.meta.url).href
     );
-    const { createTestViceMe, createMemoryTransport } = await import(
-      new URL('./dist/testing.js', import.meta.url).href
+    const { mountTip } = await import(
+      new URL('./dist/tip.js', import.meta.url).href
     );
     if (typeof createViceMe !== 'function') throw new Error('createViceMe missing');
     if (typeof mountDanmaku !== 'function') throw new Error('mountDanmaku missing');
+    if (typeof mountTip !== 'function') throw new Error('mountTip missing');
     if (typeof ViceMeError !== 'function' || !isViceMeError(new ViceMeError({ code: 'INTERNAL_ERROR', message: 'x' }))) {
       throw new Error('error model missing');
     }
-    const transport = createMemoryTransport({
-      work: { key: 'wrk_test', capabilities: ['danmaku', 'auth', 'follow', 'access', 'checkout'] },
-    });
-    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });
+    let networkCalls = 0;
+    globalThis.fetch = async () => {
+      networkCalls += 1;
+      throw new Error('unexpected network request');
+    };
+    const client = createViceMe({ workKey: 'wrk_test', region: 'cn' });
     if (client.state !== 'CREATED') throw new Error('unexpected initial state');
     await client.ready();
-    for (const capability of ['danmaku', 'auth', 'follow', 'access', 'checkout']) {
-      if (!client.hasCapability(capability)) {
-        throw new Error('capability discovery broken: ' + capability);
-      }
+    if (networkCalls !== 0) throw new Error('local initialization reached the network');
+    if (!client.hasCapability('danmaku') || !client.hasCapability('tip') || client.hasCapability('checkout')) {
+      throw new Error('PUBLIC-only capability check broken');
     }
-    if (client.version !== SDK_VERSION) throw new Error('version mismatch');
+    for (const removed of ['auth', 'access', 'checkout', 'follow', 'session']) {
+      if (removed in client) throw new Error('removed client surface restored: ' + removed);
+    }
     client.destroy();
     console.log('smoke-ok ' + SDK_VERSION);
   `;
@@ -134,8 +138,9 @@ try {
   }
   if (!manifest.files['index.js']?.sha256) throw new Error('manifest missing index.js digest');
   if (!manifest.files['danmaku.js']?.sha256) throw new Error('manifest missing danmaku.js digest');
-  if (manifest.features?.danmaku !== 'danmaku.js')
-    throw new Error('manifest missing danmaku feature');
+  if (!manifest.files['tip.js']?.sha256) throw new Error('manifest missing tip.js digest');
+  if (manifest.features?.danmaku !== 'danmaku.js' || manifest.features?.tip !== 'tip.js')
+    throw new Error('manifest missing hosted features');
 
   console.log(`tarball audit passed (${entries.length} entries, ${output.trim()})`);
 } finally {

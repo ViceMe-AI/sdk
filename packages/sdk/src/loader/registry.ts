@@ -13,12 +13,13 @@
  */
 
 import type { ViceMeClient } from '../core/client.ts';
-import type { CapabilityMountHandle } from './mount-handle.ts';
+import type { CapabilityMountHandle } from '../capability-mount.ts';
 
 export interface RegisteredClient {
   clientKey: string;
   client: ViceMeClient;
   ready: Promise<void>;
+  pendingMounts: Set<AbortController>;
 }
 
 export interface RegisteredInstance {

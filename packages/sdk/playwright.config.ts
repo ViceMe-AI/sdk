@@ -1,5 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
+const port = Number(process.env.PORT ?? 4173);
+
 export default defineConfig({
   testDir: './test/browser',
   timeout: 30_000,
@@ -9,11 +11,11 @@ export default defineConfig({
   workers: process.env.CI ? 2 : undefined,
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: `http://127.0.0.1:${port}`,
   },
   webServer: {
     command: 'node test/browser/serve.mjs',
-    url: 'http://127.0.0.1:4173/healthz',
+    url: `http://127.0.0.1:${port}/healthz`,
     reuseExistingServer: true,
     timeout: 15_000,
   },

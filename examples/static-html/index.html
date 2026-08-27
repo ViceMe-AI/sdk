@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ViceMe hosted danmaku example</title>
+    <title>ViceMe hosted engagement example</title>
     <style>
       body {
         min-height: 180vh;
@@ -20,11 +20,12 @@
       <h1>Third-party host page</h1>
       <p>The host adds no SDK CSS or API calls. Replace the public work key below.</p>
       <button type="button">Host-page action</button>
+      <div id="viceme-engagement"></div>
     </main>
     <!-- prettier-ignore -->
     <script
       defer src="https://viceme.cn/viceme-sdk/v1/viceme.min.js" data-viceme-work="wrk_public_example" data-viceme-region="cn"
-      data-viceme-features="danmaku" data-viceme-target="body"
+      data-viceme-features="danmaku,tip" data-viceme-target="#viceme-engagement"
       data-viceme-theme="auto"></script>
   </body>
 </html>

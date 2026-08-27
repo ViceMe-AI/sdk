@@ -12,12 +12,13 @@ import type { ViceMeRegion } from '../core/config.ts';
 import { isValidRegion, isValidWorkKey } from '../core/config.ts';
 
 export type ViceMeTheme = 'light' | 'dark' | 'auto';
+export type LoaderFeature = 'danmaku' | 'tip';
 
 export interface LoaderAttributes {
   workKey: string;
   region: ViceMeRegion;
-  /** The only released public feature. */
-  features: string[];
+  /** Hosted capabilities mounted by this loader invocation. */
+  features: LoaderFeature[];
   /** CSS selector; required whenever features are declared. */
   target?: string;
   theme: ViceMeTheme;
@@ -34,6 +35,7 @@ const KNOWN_ATTRIBUTES: ReadonlySet<string> = new Set([
 ]);
 
 const THEMES: ReadonlySet<string> = new Set(['light', 'dark', 'auto']);
+const FEATURE_ORDER: readonly LoaderFeature[] = ['danmaku', 'tip'];
 
 export function parseLoaderAttributes(element: Element): LoaderAttributes {
   for (const name of element.getAttributeNames()) {
@@ -53,10 +55,21 @@ export function parseLoaderAttributes(element: Element): LoaderAttributes {
   }
 
   const rawFeatures = element.getAttribute('data-viceme-features');
-  if (rawFeatures !== 'danmaku') {
-    throw configInvalid('Loader attribute "data-viceme-features" must be exactly "danmaku".');
+  const declaredFeatures = rawFeatures?.split(',') ?? [];
+  const featureSet = new Set(declaredFeatures);
+  if (
+    !rawFeatures ||
+    /\s/.test(rawFeatures) ||
+    declaredFeatures.length !== featureSet.size ||
+    declaredFeatures.some(
+      (feature): feature is string => !FEATURE_ORDER.includes(feature as LoaderFeature),
+    )
+  ) {
+    throw configInvalid(
+      'Loader attribute "data-viceme-features" must contain each of "danmaku" and "tip" at most once.',
+    );
   }
-  const features = ['danmaku'];
+  const features = FEATURE_ORDER.filter((feature) => featureSet.has(feature));
 
   const target = element.getAttribute('data-viceme-target');
   if (target === '') {

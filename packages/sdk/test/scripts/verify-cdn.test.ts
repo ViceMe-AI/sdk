@@ -40,6 +40,7 @@ const indexBody = Buffer.from('export const SDK_VERSION = "0.1.0";\n');
 const loaderBody = Buffer.from('(function(){/* data-viceme loader */})();\n');
 const bootstrapBody = Buffer.from('(function(){/* fixed alias bootstrap */})();\n');
 const danmakuBody = Buffer.from('export const mount = () => {};\n');
+const tipBody = Buffer.from('export const mountTip = () => {};\n');
 
 let server:
   | {
@@ -51,10 +52,12 @@ let server:
 beforeAll(async () => {
   await writeFile(join(distDir, 'index.js'), indexBody);
   await writeFile(join(distDir, 'danmaku.js'), danmakuBody);
+  await writeFile(join(distDir, 'tip.js'), tipBody);
   await writeFile(join(distDir, 'viceme.min.js'), loaderBody);
 
   files.set('index.js', { body: indexBody, contentType: 'text/javascript; charset=utf-8' });
   files.set('danmaku.js', { body: danmakuBody, contentType: 'text/javascript; charset=utf-8' });
+  files.set('tip.js', { body: tipBody, contentType: 'text/javascript; charset=utf-8' });
   files.set('viceme.min.js', {
     body: loaderBody,
     contentType: 'text/javascript; charset=utf-8',
@@ -64,10 +67,11 @@ beforeAll(async () => {
     version: '0.1.0',
     apiMajor: 1,
     loader: 'viceme.min.js',
-    features: { danmaku: 'danmaku.js' },
+    features: { danmaku: 'danmaku.js', tip: 'tip.js' },
     files: {
       'index.js': await digestInfo(indexBody),
       'danmaku.js': await digestInfo(danmakuBody),
+      'tip.js': await digestInfo(tipBody),
       'viceme.min.js': await digestInfo(loaderBody),
     },
   };
@@ -172,6 +176,7 @@ describe('verify-cdn.mjs', () => {
       ['0.1.0/index.js', indexBody],
       ['0.1.0/viceme.min.js', loaderBody],
       ['0.1.0/danmaku.js', danmakuBody],
+      ['0.1.0/tip.js', tipBody],
     ]);
     const httpServer = createServer((req, res) => {
       const key = decodeURIComponent((req.url ?? '').replace(/^\/viceme-sdk\//, ''));

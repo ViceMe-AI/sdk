@@ -44,6 +44,7 @@ beforeAll(async () => {
   const indexBody = Buffer.from('export const SDK_VERSION = "0.1.0";\n');
   const loaderBody = Buffer.from('(function(){/* loader */})();\n');
   const danmakuBody = Buffer.from('export const mount = () => {};\n');
+  const tipBody = Buffer.from('export const mountTip = () => {};\n');
   const digest = (body: Buffer) => ({
     sha256: createHash('sha256').update(body).digest('hex'),
     sri: `sha384-${createHash('sha384').update(body).digest('base64')}`,
@@ -53,6 +54,7 @@ beforeAll(async () => {
   writeFileSync(join(distDir, 'index.js'), indexBody);
   writeFileSync(join(distDir, 'viceme.min.js'), loaderBody);
   writeFileSync(join(distDir, 'danmaku.js'), danmakuBody);
+  writeFileSync(join(distDir, 'tip.js'), tipBody);
   writeFileSync(
     join(distDir, 'manifest.json'),
     `${JSON.stringify(
@@ -60,11 +62,12 @@ beforeAll(async () => {
         version: '0.1.0',
         apiMajor: 1,
         loader: 'viceme.min.js',
-        features: { danmaku: 'danmaku.js' },
+        features: { danmaku: 'danmaku.js', tip: 'tip.js' },
         files: {
           'index.js': digest(indexBody),
           'viceme.min.js': digest(loaderBody),
           'danmaku.js': digest(danmakuBody),
+          'tip.js': digest(tipBody),
         },
       },
       null,
@@ -116,6 +119,7 @@ describe('upload-plan.mjs', () => {
       'danmaku.js',
       'index.js',
       'manifest.json',
+      'tip.js',
       'viceme.min.js',
     ]);
   });
@@ -135,6 +139,7 @@ describe('upload-plan.mjs', () => {
     expect(stdout.split('\n').filter(Boolean).sort()).toEqual([
       'danmaku.js',
       'manifest.json',
+      'tip.js',
       'viceme.min.js',
     ]);
   });

@@ -1,40 +1,22 @@
 /**
  * Public client configuration.
  *
- * Production `createViceMe()` accepts exactly `workKey`, `region`, and
- * `signal`. Anything else (transport, clock, request ids, base URLs) is a
- * testing-only concern and lives in `@viceme-ai/sdk/testing`, so Agents can
- * never bake temporary or internal endpoints into user projects.
+ * Production `createViceMe()` accepts exactly `workKey` and `region`.
+ * Endpoints, credentials, access policy, and provider state are not client
+ * configuration: the hosted Shop runtime owns those concerns.
  */
 
 import { configInvalid } from './errors.ts';
-import { BUILD_API_BASE_URLS } from './build-endpoints.ts';
 export type ViceMeRegion = 'cn' | 'global';
 
 export interface ViceMeConfig {
   /** Public opaque work key (`wrk_…`). Locates a Work; it is not a secret. */
   workKey: string;
-  /** Routes public API and CDN traffic. */
+  /** Selects the hosted Shop region. */
   region: ViceMeRegion;
-  /** Optional abort signal owned by the host page. */
-  signal?: AbortSignal;
 }
 
 const REGIONS: ReadonlySet<string> = new Set(['cn', 'global']);
-
-/**
- * Public API origins per region. These are the only production endpoints the
- * SDK may contact; B1 confirms final hostnames and any change happens here in
- * one place (never via a public `apiBaseUrl` option).
- */
-export const PUBLIC_API_BASE_URLS: Readonly<Record<ViceMeRegion, string>> = {
-  cn: BUILD_API_BASE_URLS.cn,
-  global: BUILD_API_BASE_URLS.global,
-};
-
-export function resolveApiBaseUrl(region: ViceMeRegion): string {
-  return PUBLIC_API_BASE_URLS[region];
-}
 
 export function isValidWorkKey(value: unknown): value is string {
   return typeof value === 'string' && /^wrk_[A-Za-z0-9_-]{4,124}$/.test(value);
@@ -54,7 +36,7 @@ export function validatePublicConfig(input: unknown): ViceMeConfig {
   }
   const raw = input as Record<string, unknown>;
 
-  const known = new Set(['workKey', 'region', 'signal']);
+  const known = new Set(['workKey', 'region']);
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) {
       throw configInvalid(`Unknown configuration field "${key}".`);
@@ -66,12 +48,8 @@ export function validatePublicConfig(input: unknown): ViceMeConfig {
   if (!isValidRegion(raw.region)) {
     throw configInvalid('Configuration field "region" must be "cn" or "global".');
   }
-  if (raw.signal !== undefined && !(raw.signal instanceof AbortSignal)) {
-    throw configInvalid('Configuration field "signal" must be an AbortSignal.');
-  }
   return {
     workKey: raw.workKey,
     region: raw.region,
-    signal: raw.signal,
   };
 }
