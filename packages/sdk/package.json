@@ -1,6 +1,6 @@
 {
   "name": "@viceme-ai/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ViceMe browser SDK for hosted capabilities and creator access flows.",
   "type": "module",
   "repository": {
