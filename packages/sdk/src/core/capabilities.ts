@@ -444,7 +444,9 @@ export function createCapabilities(deps: CapabilityDeps): {
     const channel = randomVerifier();
     const body = {
       featureKey,
-      locale: options.locale ?? 'zh-CN',
+      // Match the sign-in flow's locale resolution instead of always
+      // defaulting to zh-CN; callers can still pin an explicit locale.
+      locale: options.locale ?? resolveLocale(),
       channel,
     };
     const response = objectBody(

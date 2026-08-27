@@ -224,6 +224,30 @@ describe('creator access capabilities', () => {
     );
   });
 
+  it('defaults the checkout locale to the page language like sign-in', async () => {
+    const transport = capabilityTransport();
+    const presenter = vi.fn(async (interaction: { perform(): Promise<{ type: string }> }) => {
+      await interaction.perform();
+      return 'acted' as const;
+    });
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport,
+      presenter,
+    });
+    document.documentElement.lang = 'en-US';
+    try {
+      await client.checkout.open({ featureKey: 'emperor' });
+    } finally {
+      document.documentElement.removeAttribute('lang');
+    }
+    const checkout = transport.requests.find(
+      (request) => request.path === '/v1/public/v1/checkout/sessions',
+    );
+    expect(checkout?.body).toMatchObject({ featureKey: 'emperor', locale: 'en-US' });
+  });
+
   it('does not perform a required action when the interaction layer is dismissed', async () => {
     const transport = capabilityTransport(false);
     const presenter = vi.fn(async () => 'dismissed' as const);
