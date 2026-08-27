@@ -224,16 +224,31 @@ async function expectFrameSize(
     .toEqual([width, height]);
 }
 
-function expectNoRemovedApiRequests(requests: string[]): void {
+function expectNoUnexpectedAccessRequests(requests: string[]): void {
   expect(
-    requests.filter((url) =>
-      /work-sessions|\/v1\/public\/v1\/(auth|access|checkout|follow)/.test(url),
-    ),
+    requests.filter((url) => /\/v1\/public\/v1\/(auth|access|checkout|follow)/.test(url)),
   ).toEqual([]);
 }
 
-test.describe('PUBLIC-only hosted danmaku loader', () => {
-  test('static script mounts three isolated frames without an SDK Session', async ({ page }) => {
+test.beforeEach(async ({ page }) => {
+  await page.route('**/v1/public/v1/work-sessions', async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({
+        work: { key: 'wrk_test', capabilities: ['danmaku'] },
+        token: 'anonymous-work-token',
+        expiresAt: Date.now() + 60_000,
+      }),
+    });
+  });
+});
+
+test.describe('hosted danmaku loader with creator access', () => {
+  test('static script mounts three isolated frames after creating an SDK Session', async ({
+    page,
+  }) => {
     const requests = recordRequests(page);
     const hosted = await mockHostedDanmaku(page);
     await page.goto('/pages/loader-static.html#/chapter/1');
@@ -278,7 +293,8 @@ test.describe('PUBLIC-only hosted danmaku loader', () => {
     expect(shopPaths).toContain('/viceme-sdk/v1/manifest.json');
     expect(shopPaths).toContain('/viceme-sdk/v1/danmaku.js');
     expect(shopPaths).not.toContain('/viceme-sdk/-/aliases/v1');
-    expectNoRemovedApiRequests(requests);
+    expect(requests.some((url) => url.endsWith('/v1/public/v1/work-sessions'))).toBe(true);
+    expectNoUnexpectedAccessRequests(requests);
   });
 
   test('the real v1 bootstrap preserves its CSP nonce and loads the exact release', async ({
@@ -362,7 +378,8 @@ test.describe('PUBLIC-only hosted danmaku loader', () => {
       );
     }
     expect(requests.map((url) => new URL(url).pathname)).not.toContain('/viceme-sdk/-/aliases/v1');
-    expectNoRemovedApiRequests(requests);
+    expect(requests.some((url) => url.endsWith('/v1/public/v1/work-sessions'))).toBe(true);
+    expectNoUnexpectedAccessRequests(requests);
   });
 
   test('hosted iframe owns anonymous GET and POST without host credentials', async ({ page }) => {
