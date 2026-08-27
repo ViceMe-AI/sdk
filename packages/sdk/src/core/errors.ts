@@ -30,6 +30,29 @@ export interface ViceMeErrorInit {
   capability?: string;
 }
 
+/**
+ * Every stable error code, as one runtime set. Keyed by the union so adding a
+ * code without registering it here is a compile error; the transport body
+ * parser and the loader event mapping both reuse this set.
+ */
+const CODE_REGISTRY: Record<ViceMeErrorCode, true> = {
+  CONFIG_INVALID: true,
+  WORK_NOT_FOUND: true,
+  CAPABILITY_DISABLED: true,
+  CLIENT_DESTROYED: true,
+  SESSION_EXPIRED: true,
+  AUTH_REQUIRED: true,
+  AUTH_CANCELLED: true,
+  RETURN_URL_NOT_ALLOWED: true,
+  RATE_LIMITED: true,
+  NETWORK_TIMEOUT: true,
+  CHECKOUT_UNAVAILABLE: true,
+  INTERNAL_ERROR: true,
+};
+
+/** Known stable codes for structural (cross-build) error validation. */
+export const VICE_ME_ERROR_CODES: ReadonlySet<string> = new Set(Object.keys(CODE_REGISTRY));
+
 const RETRYABLE_BY_DEFAULT: ReadonlySet<ViceMeErrorCode> = new Set([
   'RATE_LIMITED',
   'NETWORK_TIMEOUT',

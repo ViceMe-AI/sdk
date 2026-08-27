@@ -25,13 +25,19 @@ const VALID_ATTRS: Record<string, string> = {
   'data-viceme-target': '#host-a',
 };
 
-async function waitForEvent(page: Page, type: string, count = 1): Promise<RecordedEvent[]> {
+async function waitForEvent(
+  page: Page,
+  type: string,
+  count = 1,
+  timeoutMs = 20_000,
+): Promise<RecordedEvent[]> {
   await page.waitForFunction(
     ({ eventType, eventCount }) => {
       const events = (window as { __events?: { type: string }[] }).__events ?? [];
       return events.filter((event) => event.type === eventType).length >= eventCount;
     },
     { eventType: type, eventCount: count },
+    { timeout: timeoutMs },
   );
   return page.evaluate(() => (window as unknown as { __events: RecordedEvent[] }).__events);
 }
@@ -382,6 +388,31 @@ test.describe('hosted danmaku loader with creator access', () => {
     expectNoUnexpectedAccessRequests(requests);
   });
 
+  test('a failed session surfaces its stable error code in viceme:error', async ({ page }) => {
+    // The host page must be able to branch on the real code (e.g. a
+    // permanent WORK_NOT_FOUND vs a transient NETWORK_TIMEOUT) instead of a
+    // blanket INTERNAL_ERROR.
+    await page.route('**/v1/public/v1/work-sessions', (route) =>
+      route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify({ error: { code: 'WORK_NOT_FOUND', message: 'no such work' } }),
+      }),
+    );
+    const requests = recordRequests(page);
+    await page.goto(cfgUrl(VALID_ATTRS));
+
+    const events = await waitForEvent(page, 'viceme:error');
+    expect(events.find((event) => event.type === 'viceme:error')?.detail).toMatchObject({
+      code: 'WORK_NOT_FOUND',
+      retryable: false,
+      clientKey: 'v1+cn+wrk_test',
+    });
+    expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
+    expect(requests.some((url) => url.endsWith('/embed/danmaku'))).toBe(false);
+  });
+
   test('hosted iframe owns anonymous GET and POST without host credentials', async ({ page }) => {
     await page.context().addCookies([
       {
@@ -477,6 +508,30 @@ test.describe('release manifest trust boundary', () => {
       expect(requests.slice(requestStart), featurePath).not.toContain(resolved.href);
       await page.unroute(manifestRoute, handler);
     }
+  });
+
+  test('fails closed when the manifest fetch hangs past the bounded timeout', async ({ page }) => {
+    // Hold the manifest response well past the loader's 8s bound: the fetch
+    // must be aborted, the run must fail closed, and the serialized queue
+    // must not stay blocked forever — including engines without
+    // AbortSignal.timeout.
+    await page.route('**/viceme-sdk/v1/manifest.json', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 20_000));
+      await route.abort('connectionfailed');
+    });
+    const startedAt = Date.now();
+    await page.goto(cfgUrl(VALID_ATTRS));
+
+    const events = await waitForEvent(page, 'viceme:error');
+    const elapsed = Date.now() - startedAt;
+    expect(events.find((event) => event.type === 'viceme:error')?.detail).toMatchObject({
+      code: 'CONFIG_INVALID',
+      retryable: false,
+      clientKey: 'v1+cn+wrk_test',
+    });
+    expect(elapsed).toBeGreaterThanOrEqual(7_000);
+    expect(elapsed).toBeLessThan(15_000);
+    expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
   });
 
   test('rejects every additional manifest feature key', async ({ page }) => {

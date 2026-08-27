@@ -7,7 +7,7 @@
  * through a Transport so tests can swap in `createMemoryTransport`.
  */
 
-import { ViceMeError, type ViceMeErrorCode } from '../core/errors.ts';
+import { ViceMeError, VICE_ME_ERROR_CODES, type ViceMeErrorCode } from '../core/errors.ts';
 
 export interface TransportRequest {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -54,20 +54,6 @@ const STATUS_CODE_MAP: ReadonlyMap<number, ViceMeErrorCode> = new Map([
   [429, 'RATE_LIMITED'],
 ]);
 
-const KNOWN_CODES: ReadonlySet<string> = new Set([
-  'CONFIG_INVALID',
-  'WORK_NOT_FOUND',
-  'CAPABILITY_DISABLED',
-  'SESSION_EXPIRED',
-  'AUTH_REQUIRED',
-  'AUTH_CANCELLED',
-  'RETURN_URL_NOT_ALLOWED',
-  'RATE_LIMITED',
-  'NETWORK_TIMEOUT',
-  'CHECKOUT_UNAVAILABLE',
-  'INTERNAL_ERROR',
-]);
-
 /** Extract a stable error payload from a JSON error body, if well-formed. */
 function parseErrorBody(body: unknown): {
   code?: ViceMeErrorCode;
@@ -87,7 +73,7 @@ function parseErrorBody(body: unknown): {
     retryable?: boolean;
     requestId?: string;
   } = {};
-  if (typeof candidate.code === 'string' && KNOWN_CODES.has(candidate.code)) {
+  if (typeof candidate.code === 'string' && VICE_ME_ERROR_CODES.has(candidate.code)) {
     result.code = candidate.code as ViceMeErrorCode;
   }
   if (typeof candidate.message === 'string') {

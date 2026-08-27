@@ -28,7 +28,7 @@ import { parseLoaderAttributes, type LoaderAttributes } from './attributes.ts';
 import { LoaderRegistry, clientKeyOf, type RegisteredInstance } from './registry.ts';
 import type { CapabilityMountHandle, CapabilityMountFunction } from './mount-handle.ts';
 import { dispatchViceMeEvent, type VicemeErrorDetail } from './events.ts';
-import { configInvalid, ViceMeError } from '../core/errors.ts';
+import { configInvalid, ViceMeError, VICE_ME_ERROR_CODES } from '../core/errors.ts';
 import {
   markClientDegraded,
   type ViceMeClient,
@@ -202,11 +202,14 @@ async function fetchReleaseManifest(
 }
 
 function fetchWithTimeout(url: URL): Promise<Response> {
-  const signal =
-    typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-      ? AbortSignal.timeout(MANIFEST_TIMEOUT_MS)
-      : undefined;
-  return fetch(url, { credentials: 'omit', signal });
+  // A manual controller + timer bounds the fetch on every engine, including
+  // browsers without `AbortSignal.timeout`, so a stalled manifest can never
+  // block the serialized loader queue forever.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS);
+  return fetch(url, { credentials: 'omit', signal: controller.signal }).finally(() => {
+    clearTimeout(timer);
+  });
 }
 
 async function parseManifest(response: Response): Promise<ReleaseManifest> {
@@ -242,24 +245,21 @@ async function parseManifest(response: Response): Promise<ReleaseManifest> {
   return manifest;
 }
 
-const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set([
-  'CONFIG_INVALID',
-  'CAPABILITY_DISABLED',
-  'CLIENT_DESTROYED',
-  'INTERNAL_ERROR',
-]);
-
 /**
  * Normalize any thrown value into an event detail. Uses structural checks,
  * not `instanceof`: the loader IIFE and the core ESM chunk are separate
  * builds, so their `ViceMeError` classes are distinct at runtime.
+ *
+ * Every stable public code passes through — a session failure (e.g.
+ * WORK_NOT_FOUND, RATE_LIMITED, NETWORK_TIMEOUT) must keep its code so CDN
+ * hosts can branch on it instead of seeing a blanket INTERNAL_ERROR.
  */
 function toErrorDetail(error: unknown): VicemeErrorDetail {
   if (typeof error === 'object' && error !== null) {
     const candidate = error as Record<string, unknown>;
     if (
       typeof candidate.code === 'string' &&
-      KNOWN_ERROR_CODES.has(candidate.code) &&
+      VICE_ME_ERROR_CODES.has(candidate.code) &&
       typeof candidate.retryable === 'boolean'
     ) {
       const detail: VicemeErrorDetail = {
