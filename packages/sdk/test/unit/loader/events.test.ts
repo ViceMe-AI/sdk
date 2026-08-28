@@ -56,4 +56,25 @@ describe('dispatchViceMeEvent', () => {
     expect(Object.keys(detail).sort()).toEqual(['code', 'retryable']);
     document.removeEventListener('viceme:error', listener);
   });
+
+  it('dispatches a sanitized tip payment result', () => {
+    const host = document.createElement('div');
+    const listener = vi.fn();
+    host.addEventListener('viceme:tip-paid', listener);
+
+    dispatchViceMeEvent(host, 'viceme:tip-paid', {
+      workId: '00000000-0000-4000-8000-000000000001',
+      orderNo: 'VT20260827010203abcdef123456',
+      status: 'PAID',
+      amountCents: 520,
+      accessToken: 'must-not-leak',
+    } as never);
+
+    expect((listener.mock.calls[0]![0] as CustomEvent).detail).toEqual({
+      workId: '00000000-0000-4000-8000-000000000001',
+      orderNo: 'VT20260827010203abcdef123456',
+      status: 'PAID',
+      amountCents: 520,
+    });
+  });
 });

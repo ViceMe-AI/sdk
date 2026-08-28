@@ -1,6 +1,6 @@
 {
-  "contractVersion": "0.4.0",
-  "sha256": "959598f82f106ea3d3878df7cae757d5560d62d6a785498755a85c74a016c48a",
-  "generatedFrom": "ViceMe Shop public capabilities contract",
-  "generatedAt": "2026-08-26T04:52:19.296Z"
+  "contractVersion": "1.0.0",
+  "sha256": "f2a9409d64395a3f624beb00a2bcb14b9d9c3ec7e8012e7436db551c6872b7c0",
+  "generatedFrom": "ViceMe Shop public danmaku contract",
+  "generatedAt": "2026-08-27T10:47:16.052Z"
 }

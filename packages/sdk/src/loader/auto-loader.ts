@@ -12,7 +12,7 @@
  * 4. Read `manifest.json` from the loader's own directory (exact release
  *    version; URLs are never assembled from page parameters).
  * 5. Create the local client embedded in this loader, then load the
- *    same-version danmaku chunk declared by the manifest.
+ *    requested same-version capability chunks declared by the manifest.
  * 6. Mount; handles land in an internal registry.
  * 7. Re-running the same instance key returns the original handle — no
  *    duplicate clients, subscriptions, or DOM.
@@ -24,11 +24,11 @@
  * than the fixed `window.ViceMe.versions.vN` namespace.
  */
 
-import { parseLoaderAttributes, type LoaderAttributes } from './attributes.ts';
+import { parseLoaderAttributes, type LoaderAttributes, type LoaderFeature } from './attributes.ts';
 import { LoaderRegistry, clientKeyOf, type RegisteredInstance } from './registry.ts';
-import type { CapabilityMountHandle, CapabilityMountFunction } from './mount-handle.ts';
-import { dispatchViceMeEvent, type VicemeErrorDetail } from './events.ts';
-import { configInvalid, ViceMeError } from '../core/errors.ts';
+import type { CapabilityMountHandle, CapabilityMountFunction } from '../capability-mount.ts';
+import { dispatchViceMeEvent, type VicemeErrorDetail } from '../browser-events.ts';
+import { clientDestroyed, configInvalid, ViceMeError } from '../core/errors.ts';
 import {
   markClientDegraded,
   type ViceMeClient,
@@ -60,7 +60,15 @@ export interface ViceMeBrowserGlobal {
 }
 
 const MANIFEST_TIMEOUT_MS = 8_000;
-const DANMAKU_FEATURE_PATH = 'danmaku.js';
+const CAPABILITY_MOUNT_TIMEOUT_MS = 8_000;
+const FEATURE_PATHS: Readonly<Record<LoaderFeature, string>> = {
+  danmaku: 'danmaku.js',
+  tip: 'tip.js',
+};
+const MOUNT_EXPORTS: Readonly<Record<LoaderFeature, 'mountDanmaku' | 'mountTip'>> = {
+  danmaku: 'mountDanmaku',
+  tip: 'mountTip',
+};
 
 interface LoaderSharedState {
   registry: LoaderRegistry;
@@ -170,6 +178,7 @@ export function ensureNamespace(version: string): ViceMeLoaderNamespaceV1 {
         destroyInstanceInternal(instance);
       }
       const entry = sharedState().registry.getClient(clientKey);
+      for (const controller of entry?.pendingMounts ?? []) controller.abort();
       sharedState().registry.unregisterClient(clientKey);
       entry?.client.destroy();
     },
@@ -231,13 +240,15 @@ async function parseManifest(response: Response): Promise<ReleaseManifest> {
   if (manifest.apiMajor !== API_MAJOR) {
     throw configInvalid('Release manifest major version does not match this loader.');
   }
-  const featureNames = Object.keys(manifest.features);
+  const featureNames = Object.keys(manifest.features).sort();
   if (
-    featureNames.length !== 1 ||
+    featureNames.length !== 2 ||
     featureNames[0] !== 'danmaku' ||
-    manifest.features.danmaku !== DANMAKU_FEATURE_PATH
+    featureNames[1] !== 'tip' ||
+    manifest.features.danmaku !== FEATURE_PATHS.danmaku ||
+    manifest.features.tip !== FEATURE_PATHS.tip
   ) {
-    throw configInvalid('Release manifest features must be exactly danmaku.js.');
+    throw configInvalid('Release manifest features must be exactly danmaku.js and tip.js.');
   }
   return manifest;
 }
@@ -280,6 +291,38 @@ function emitError(
   extra: Partial<Pick<VicemeErrorDetail, 'clientKey' | 'instanceKey' | 'capability'>> = {},
 ): void {
   dispatchViceMeEvent(target, 'viceme:error', { ...toErrorDetail(error), ...extra });
+}
+
+function withCapabilityDeadline<T>(
+  operation: Promise<T>,
+  controller: AbortController,
+  capability: LoaderFeature,
+): Promise<T> {
+  let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(clientDestroyed());
+    if (controller.signal.aborted) {
+      onAbort();
+      return;
+    }
+    controller.signal.addEventListener('abort', onAbort, { once: true });
+    timeout = globalThis.setTimeout(() => {
+      reject(
+        new ViceMeError({
+          code: 'INTERNAL_ERROR',
+          message: `Capability "${capability}" did not load and mount in time.`,
+          retryable: true,
+          capability,
+        }),
+      );
+      controller.abort();
+    }, CAPABILITY_MOUNT_TIMEOUT_MS);
+  });
+  return Promise.race([operation, cancellation]).finally(() => {
+    if (timeout !== undefined) globalThis.clearTimeout(timeout);
+    if (onAbort) controller.signal.removeEventListener('abort', onAbort);
+  });
 }
 
 export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
@@ -354,7 +397,7 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
     // Keep an unhandled-rejection-free copy on the registry entry; failures
     // are reported through this loader run and via whenReady().
     void ready.catch(() => {});
-    entry = { clientKey, client, ready };
+    entry = { clientKey, client, ready, pendingMounts: new Set() };
     sharedState().registry.registerClient(entry);
   }
 
@@ -368,11 +411,9 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
   }
   if (sharedState().registry.getClient(clientKey) !== entry) return;
 
-  let mountedAny = false;
-  const mounted: string[] = [];
-  for (const capability of attributes.features) {
+  const mountCapability = async (capability: LoaderFeature): Promise<LoaderFeature | undefined> => {
     // Same client + capability + element: reuse the original handle.
-    if (sharedState().registry.findInstance(clientKey, capability, host)) continue;
+    if (sharedState().registry.findInstance(clientKey, capability, host)) return undefined;
 
     const fileName = manifest.features[capability];
     if (typeof fileName !== 'string') {
@@ -387,45 +428,57 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
         }),
         { clientKey, capability },
       );
-      continue;
+      return undefined;
     }
 
+    const controller = new AbortController();
+    entry.pendingMounts.add(controller);
     try {
-      const chunkUrl = new URL(fileName, releaseBase);
-      const module = (await import(/* @vite-ignore */ chunkUrl.href)) as {
-        mountDanmaku?: unknown;
-      };
-      if (typeof module.mountDanmaku !== 'function') {
-        throw configInvalid(`Capability chunk "${capability}" does not export mountDanmaku().`);
-      }
-      if (sharedState().registry.getClient(clientKey) !== entry) return;
-      const raw = (await (module.mountDanmaku as CapabilityMountFunction)(client, {
-        target: host,
-        theme: attributes.theme,
-      })) as CapabilityMountHandle;
+      const operation = (async (): Promise<CapabilityMountHandle> => {
+        const chunkUrl = new URL(fileName, releaseBase);
+        const module = (await import(/* @vite-ignore */ chunkUrl.href)) as Record<string, unknown>;
+        const exportName = MOUNT_EXPORTS[capability];
+        const mount = module[exportName];
+        if (typeof mount !== 'function') {
+          throw configInvalid(`Capability chunk "${capability}" does not export ${exportName}().`);
+        }
+        if (sharedState().registry.getClient(clientKey) !== entry) throw clientDestroyed();
+        return (await (mount as CapabilityMountFunction)(client, {
+          target: host,
+          theme: attributes.theme,
+          signal: controller.signal,
+        })) as CapabilityMountHandle;
+      })();
+      const raw = await withCapabilityDeadline(operation, controller, capability);
       if (sharedState().registry.getClient(clientKey) !== entry) {
         raw.destroy();
-        return;
+        return undefined;
       }
       const instance = sharedState().registry.registerInstance(clientKey, capability, host, raw);
-      mountedAny = true;
-      mounted.push(capability);
       dispatchViceMeEvent(host, 'viceme:capability-ready', {
         clientKey,
         instanceKey: instance.instanceKey,
         capability,
         version: manifest.version,
       });
+      return capability;
     } catch (error) {
-      if (sharedState().registry.getClient(clientKey) !== entry) return;
+      if (sharedState().registry.getClient(clientKey) !== entry) return undefined;
       // Only this capability's partial state is discarded; everything else
       // (including the host page) keeps working.
       markClientDegraded(client);
       emitError(host, error, { clientKey, capability });
+      return undefined;
+    } finally {
+      entry.pendingMounts.delete(controller);
     }
-  }
+  };
 
-  if (mountedAny && sharedState().registry.getClient(clientKey) === entry) {
+  const mounted = (await Promise.all(attributes.features.map(mountCapability))).filter(
+    (capability): capability is LoaderFeature => capability !== undefined,
+  );
+
+  if (mounted.length > 0 && sharedState().registry.getClient(clientKey) === entry) {
     dispatchViceMeEvent(host, 'viceme:ready', {
       clientKey,
       workKey: attributes.workKey,

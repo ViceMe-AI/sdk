@@ -5,7 +5,7 @@ import { API_MAJOR, SDK_VERSION } from '../../src/version.ts';
 const DANMAKU_WIDGET_ORIGIN = (
   process.env.VICEME_BUILD_CN_WIDGET_ORIGIN ?? 'https://viceme.cn'
 ).replace(/\/+$/, '');
-const S3_ALIAS_ORIGIN = 'http://127.0.0.1:4174';
+const S3_ALIAS_ORIGIN = `http://127.0.0.1:${process.env.S3_PORT ?? 4174}`;
 
 interface RecordedEvent {
   type: string;
@@ -184,6 +184,65 @@ async function mockHostedDanmaku(page: Page, options: HostedDanmakuOptions = {})
   };
 }
 
+interface HostedTipOptions {
+  ready?: boolean;
+}
+
+async function mockHostedTip(page: Page, options: HostedTipOptions = {}) {
+  let hits = 0;
+  const referers: string[] = [];
+  await page.route(`${DANMAKU_WIDGET_ORIGIN}/widget/tip/wrk_test**`, async (route: Route) => {
+    hits += 1;
+    referers.push(route.request().headers().referer ?? '');
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: `<!doctype html>
+        <html><body>
+          <button id="open" type="button">open</button>
+          <section id="payment-surface" hidden>
+            <button id="paid" type="button">paid</button>
+            <button id="close" type="button">close</button>
+          </section>
+          <script>
+            const workId = '00000000-0000-4000-8000-000000000001';
+            const emit = (message) => parent.postMessage(message, '*');
+            const paymentSurface = document.querySelector('#payment-surface');
+            const closePaymentSurface = () => {
+              if (paymentSurface.hidden) return;
+              paymentSurface.hidden = true;
+              emit({ type: 'viceme:widget-close', workId, token: 'must-not-leak' });
+            };
+            if (${JSON.stringify(options.ready !== false)}) {
+              emit({ type: 'viceme:widget-resize', workId, height: 360 });
+            }
+            document.querySelector('#open').addEventListener('click', () => {
+              paymentSurface.hidden = false;
+            });
+            document.querySelector('#paid').addEventListener('click', () => emit({
+              type: 'viceme:tip-paid',
+              workId,
+              orderNo: 'VT20260827010203abcdef123456',
+              status: 'PAID',
+              amountCents: 520,
+              accessToken: 'must-not-leak',
+            }));
+            document.querySelector('#close').addEventListener('click', closePaymentSurface);
+            document.addEventListener('keydown', (event) => {
+              if (event.key === 'Escape') closePaymentSurface();
+            });
+          </script>
+        </body></html>`,
+    });
+  });
+  return {
+    get hits() {
+      return hits;
+    },
+    referers,
+  };
+}
+
 function releaseManifest(
   overrides: Partial<{ version: string; apiMajor: number; features: Record<string, string> }> = {},
 ): string {
@@ -191,7 +250,7 @@ function releaseManifest(
     version: SDK_VERSION,
     apiMajor: API_MAJOR,
     loader: 'viceme.min.js',
-    features: { danmaku: 'danmaku.js' },
+    features: { danmaku: 'danmaku.js', tip: 'tip.js' },
     ...overrides,
   });
 }
@@ -224,31 +283,16 @@ async function expectFrameSize(
     .toEqual([width, height]);
 }
 
-function expectNoUnexpectedAccessRequests(requests: string[]): void {
+function expectNoRemovedApiRequests(requests: string[]): void {
   expect(
-    requests.filter((url) => /\/v1\/public\/v1\/(auth|access|checkout|follow)/.test(url)),
+    requests.filter((url) =>
+      /work-sessions|\/v1\/public\/v1\/(auth|access|checkout|follow)/.test(url),
+    ),
   ).toEqual([]);
 }
 
-test.beforeEach(async ({ page }) => {
-  await page.route('**/v1/public/v1/work-sessions', async (route) => {
-    await route.fulfill({
-      status: 201,
-      contentType: 'application/json',
-      headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({
-        work: { key: 'wrk_test', capabilities: ['danmaku'] },
-        token: 'anonymous-work-token',
-        expiresAt: Date.now() + 60_000,
-      }),
-    });
-  });
-});
-
-test.describe('hosted danmaku loader with creator access', () => {
-  test('static script mounts three isolated frames after creating an SDK Session', async ({
-    page,
-  }) => {
+test.describe('PUBLIC-only hosted danmaku loader', () => {
+  test('static script mounts three isolated frames without an SDK Session', async ({ page }) => {
     const requests = recordRequests(page);
     const hosted = await mockHostedDanmaku(page);
     await page.goto('/pages/loader-static.html#/chapter/1');
@@ -293,8 +337,7 @@ test.describe('hosted danmaku loader with creator access', () => {
     expect(shopPaths).toContain('/viceme-sdk/v1/manifest.json');
     expect(shopPaths).toContain('/viceme-sdk/v1/danmaku.js');
     expect(shopPaths).not.toContain('/viceme-sdk/-/aliases/v1');
-    expect(requests.some((url) => url.endsWith('/v1/public/v1/work-sessions'))).toBe(true);
-    expectNoUnexpectedAccessRequests(requests);
+    expectNoRemovedApiRequests(requests);
   });
 
   test('the real v1 bootstrap preserves its CSP nonce and loads the exact release', async ({
@@ -374,12 +417,11 @@ test.describe('hosted danmaku loader with creator access', () => {
     expect(runtimePaths).not.toContain('/viceme-sdk/v1/index.js');
     for (const path of runtimePaths) {
       expect(path).toMatch(
-        /^\/viceme-sdk\/v1\/(?:viceme\.min\.js|manifest\.json|danmaku\.js|chunks\/[a-zA-Z0-9._-]+\.js)$/,
+        /^\/viceme-sdk\/v1\/(?:viceme\.min\.js|manifest\.json|danmaku\.js|tip\.js|chunks\/[a-zA-Z0-9._-]+\.js)$/,
       );
     }
     expect(requests.map((url) => new URL(url).pathname)).not.toContain('/viceme-sdk/-/aliases/v1');
-    expect(requests.some((url) => url.endsWith('/v1/public/v1/work-sessions'))).toBe(true);
-    expectNoUnexpectedAccessRequests(requests);
+    expectNoRemovedApiRequests(requests);
   });
 
   test('hosted iframe owns anonymous GET and POST without host credentials', async ({ page }) => {
@@ -408,6 +450,148 @@ test.describe('hosted danmaku loader with creator access', () => {
       workKey: 'wrk_test',
       content: 'hello',
     });
+  });
+});
+
+test.describe('hosted engagement loader', () => {
+  test('mounts danmaku and Tip independently from one normalized declaration', async ({ page }) => {
+    const requests = recordRequests(page);
+    const danmaku = await mockHostedDanmaku(page);
+    const tip = await mockHostedTip(page);
+    await page.goto(cfgUrl({ ...VALID_ATTRS, 'data-viceme-features': 'tip,danmaku' }));
+
+    const events = await waitForEvent(page, 'viceme:capability-ready', 2);
+    expect(events.find((event) => event.type === 'viceme:ready')?.detail).toMatchObject({
+      capabilities: ['danmaku', 'tip'],
+      workKey: 'wrk_test',
+    });
+    expect(
+      events
+        .filter((event) => event.type === 'viceme:capability-ready')
+        .map((event) => event.detail.capability)
+        .sort(),
+    ).toEqual(['danmaku', 'tip']);
+    expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(1);
+    expect(await page.locator('[data-viceme-tip="mounted"]').count()).toBe(1);
+    await expect.poll(() => danmaku.hits).toBe(2);
+    await expect.poll(() => tip.hits).toBe(1);
+    expect(tip.referers).toEqual([`${new URL(page.url()).origin}/`]);
+
+    const runtimePaths = requests.map((url) => new URL(url).pathname);
+    expect(runtimePaths).toContain('/viceme-sdk/v1/danmaku.js');
+    expect(runtimePaths).toContain('/viceme-sdk/v1/tip.js');
+
+    const tipFrame = page
+      .frames()
+      .find((frame) => new URL(frame.url(), page.url()).pathname.startsWith('/widget/tip/'));
+    if (!tipFrame) throw new TypeError('Tip frame missing');
+    await tipFrame.locator('#open').click();
+    await expect(tipFrame.locator('#payment-surface')).toBeVisible();
+    await tipFrame.locator('#paid').click();
+    await tipFrame.locator('body').press('Escape');
+    await expect(tipFrame.locator('#payment-surface')).toBeHidden();
+    await waitForEvent(page, 'viceme:tip-paid');
+    const paidEvents = await waitForEvent(page, 'viceme:widget-close');
+    expect(paidEvents.find((event) => event.type === 'viceme:tip-paid')?.detail).toEqual({
+      workId: '00000000-0000-4000-8000-000000000001',
+      orderNo: 'VT20260827010203abcdef123456',
+      status: 'PAID',
+      amountCents: 520,
+    });
+    expect(paidEvents.find((event) => event.type === 'viceme:widget-close')?.detail).toEqual({
+      workId: '00000000-0000-4000-8000-000000000001',
+    });
+
+    await page.evaluate(() => {
+      const namespace = (
+        window as unknown as {
+          ViceMe: { versions: { v1: { destroyClient(key: string): void } } };
+        }
+      ).ViceMe.versions.v1;
+      namespace.destroyClient('v1+cn+wrk_test');
+    });
+    await waitForEvent(page, 'viceme:destroyed', 2);
+    expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
+    expect(await page.locator('[data-viceme-tip="mounted"]').count()).toBe(0);
+  });
+
+  test('keeps danmaku mounted when the Tip chunk fails', async ({ page }) => {
+    await mockHostedDanmaku(page);
+    await page.route('**/viceme-sdk/*/tip.js', (route) => route.fulfill({ status: 404, body: '' }));
+    await page.goto(cfgUrl({ ...VALID_ATTRS, 'data-viceme-features': 'danmaku,tip' }));
+
+    const events = await waitForEvent(page, 'viceme:ready');
+    expect(events.find((event) => event.type === 'viceme:ready')?.detail).toMatchObject({
+      capabilities: ['danmaku'],
+    });
+    expect(events.find((event) => event.type === 'viceme:error')?.detail).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      capability: 'tip',
+    });
+    expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(1);
+    expect(await page.locator('[data-viceme-tip="mounted"]').count()).toBe(0);
+
+    const clientState = await page.evaluate(async () => {
+      const namespace = (
+        window as unknown as {
+          ViceMe: { versions: { v1: { whenReady(key: string): Promise<{ state: string }> } } };
+        }
+      ).ViceMe.versions.v1;
+      return (await namespace.whenReady('v1+cn+wrk_test')).state;
+    });
+    expect(clientState).toBe('DEGRADED');
+  });
+
+  test('keeps Tip mounted when the danmaku chunk fails', async ({ page }) => {
+    await mockHostedTip(page);
+    await page.route('**/viceme-sdk/*/danmaku.js', (route) =>
+      route.fulfill({ status: 404, body: '' }),
+    );
+    await page.goto(cfgUrl({ ...VALID_ATTRS, 'data-viceme-features': 'danmaku,tip' }));
+
+    const events = await waitForEvent(page, 'viceme:ready');
+    expect(events.find((event) => event.type === 'viceme:ready')?.detail).toMatchObject({
+      capabilities: ['tip'],
+    });
+    expect(events.find((event) => event.type === 'viceme:error')?.detail).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      capability: 'danmaku',
+    });
+    expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
+    expect(await page.locator('[data-viceme-tip="mounted"]').count()).toBe(1);
+  });
+
+  test('starts Tip while the danmaku chunk is pending and cancels the loader on destroy', async ({
+    page,
+  }) => {
+    await mockHostedTip(page);
+    let releaseDanmaku!: () => void;
+    const blockedDanmaku = new Promise<void>((resolve) => {
+      releaseDanmaku = resolve;
+    });
+    await page.route('**/viceme-sdk/*/danmaku.js', async (route) => {
+      await blockedDanmaku;
+      await route.abort();
+    });
+    await page.goto(cfgUrl({ ...VALID_ATTRS, 'data-viceme-features': 'danmaku,tip' }), {
+      waitUntil: 'domcontentloaded',
+    });
+
+    const events = await waitForEvent(page, 'viceme:capability-ready');
+    expect(events.find((event) => event.type === 'viceme:capability-ready')?.detail).toMatchObject({
+      capability: 'tip',
+    });
+    await expect(page.locator('[data-viceme-tip="mounted"]')).toHaveCount(1);
+
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          ViceMe: { versions: { v1: { destroyClient(key: string): void } } };
+        }
+      ).ViceMe.versions.v1.destroyClient('v1+cn+wrk_test');
+    });
+    await expect(page.locator('[data-viceme-tip="mounted"]')).toHaveCount(0, { timeout: 500 });
+    releaseDanmaku();
   });
 });
 
@@ -459,7 +643,7 @@ test.describe('release manifest trust boundary', () => {
         route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: releaseManifest({ features: { danmaku: featurePath } }),
+          body: releaseManifest({ features: { danmaku: featurePath, tip: 'tip.js' } }),
         });
       await page.route(manifestRoute, handler);
       const requestStart = requests.length;
@@ -472,7 +656,10 @@ test.describe('release manifest trust boundary', () => {
       ).toMatchObject({ code: 'CONFIG_INVALID', retryable: false });
       expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
 
-      const resolved = new URL(featurePath, 'http://127.0.0.1:4173/viceme-sdk/v1/manifest.json');
+      const resolved = new URL(
+        featurePath,
+        `${new URL(page.url()).origin}/viceme-sdk/v1/manifest.json`,
+      );
       resolved.hash = '';
       expect(requests.slice(requestStart), featurePath).not.toContain(resolved.href);
       await page.unroute(manifestRoute, handler);
@@ -485,7 +672,7 @@ test.describe('release manifest trust boundary', () => {
         status: 200,
         contentType: 'application/json',
         body: releaseManifest({
-          features: { danmaku: 'danmaku.js', checkout: 'checkout.js' },
+          features: { danmaku: 'danmaku.js', tip: 'tip.js', checkout: 'checkout.js' },
         }),
       }),
     );
@@ -697,8 +884,8 @@ test.describe('deduplication and namespace lifecycle', () => {
     await expect.poll(() => hosted.hits).toBe(4);
   });
 
-  test('destroy during frame readiness cannot register a late orphan mount', async ({ page }) => {
-    await mockHostedDanmaku(page, { readyDelayMs: 500 });
+  test('destroy during frame readiness immediately removes a partial mount', async ({ page }) => {
+    await mockHostedDanmaku(page, { behavior: 'no-ready' });
     await page.goto(cfgUrl(VALID_ATTRS));
     await expect(page.locator('[data-viceme-danmaku="mounted"]')).toHaveCount(1);
 
@@ -712,8 +899,32 @@ test.describe('deduplication and namespace lifecycle', () => {
     });
 
     await expect(page.locator('[data-viceme-danmaku="mounted"]')).toHaveCount(0, {
-      timeout: 3_000,
+      timeout: 500,
     });
+    expect(
+      await page.evaluate(
+        () =>
+          (window as unknown as { __events: RecordedEvent[] }).__events.filter(
+            (event) => event.type === 'viceme:ready' || event.type === 'viceme:capability-ready',
+          ).length,
+      ),
+    ).toBe(0);
+  });
+
+  test('destroy during Tip readiness immediately removes a partial mount', async ({ page }) => {
+    await mockHostedTip(page, { ready: false });
+    await page.goto(cfgUrl({ ...VALID_ATTRS, 'data-viceme-features': 'tip' }));
+    await expect(page.locator('[data-viceme-tip="mounted"]')).toHaveCount(1);
+
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          ViceMe: { versions: { v1: { destroyClient(key: string): void } } };
+        }
+      ).ViceMe.versions.v1.destroyClient('v1+cn+wrk_test');
+    });
+
+    await expect(page.locator('[data-viceme-tip="mounted"]')).toHaveCount(0, { timeout: 500 });
     expect(
       await page.evaluate(
         () =>

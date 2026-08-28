@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'nonce-viceme-test' 'strict-dynamic'; connect-src http://127.0.0.1:4174 https://api.viceme.cn; frame-src https://viceme.cn; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'nonce-viceme-test' 'strict-dynamic'; connect-src __VICEME_S3_ORIGIN__; frame-src https://viceme.cn; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <title>bootstrap nonce</title>
   </head>
@@ -21,7 +21,7 @@
     </script>
     <!-- prettier-ignore -->
     <script
-      nonce="viceme-test" defer src="http://127.0.0.1:4174/viceme-sdk/v1/viceme.min.js"
+      nonce="viceme-test" defer src="__VICEME_S3_ORIGIN__/viceme-sdk/v1/viceme.min.js"
       data-viceme-work="wrk_test" data-viceme-region="cn"
       data-viceme-features="danmaku" data-viceme-target="body"
       data-viceme-theme="auto"></script>

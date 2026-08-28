@@ -1,24 +1,32 @@
 import type { ViceMeClient } from '../core/client.ts';
 import { mount } from './mount.ts';
 
-export interface DanmakuMountOptions {
+export interface TipMountOptions {
   target: Element;
   theme: 'light' | 'dark' | 'auto';
   signal?: AbortSignal;
 }
 
-export interface DanmakuMountHandle {
-  readonly capability: 'danmaku';
+export interface TipMountHandle {
+  readonly capability: 'tip';
   destroy(): void;
 }
 
-const mounts = new WeakMap<ViceMeClient, WeakMap<Element, Promise<DanmakuMountHandle>>>();
+export interface TipWidgetCloseDetail {
+  workId: string;
+}
+
+export interface TipPaidDetail {
+  workId: string;
+  orderNo: string;
+  status: 'PAID';
+  amountCents: number;
+}
+
+const mounts = new WeakMap<ViceMeClient, WeakMap<Element, Promise<TipMountHandle>>>();
 
 /** Explicit ESM/npm entry point; the CDN loader calls the same mount function. */
-export function mountDanmaku(
-  client: ViceMeClient,
-  options: DanmakuMountOptions,
-): Promise<DanmakuMountHandle> {
+export function mountTip(client: ViceMeClient, options: TipMountOptions): Promise<TipMountHandle> {
   let byTarget = mounts.get(client);
   if (!byTarget) {
     byTarget = new WeakMap();
@@ -27,11 +35,11 @@ export function mountDanmaku(
   const existing = byTarget.get(options.target);
   if (existing) return existing;
 
-  const pending: Promise<DanmakuMountHandle> = mount(client, options)
+  const pending: Promise<TipMountHandle> = mount(client, options)
     .then((raw) => {
       let destroyed = false;
-      const handle: DanmakuMountHandle = {
-        capability: 'danmaku' as const,
+      const handle: TipMountHandle = {
+        capability: 'tip' as const,
         destroy(): void {
           if (destroyed) return;
           destroyed = true;

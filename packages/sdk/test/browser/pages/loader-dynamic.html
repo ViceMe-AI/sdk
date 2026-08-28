@@ -30,6 +30,8 @@
         'viceme:capability-ready',
         'viceme:error',
         'viceme:destroyed',
+        'viceme:widget-close',
+        'viceme:tip-paid',
       ]) {
         document.addEventListener(type, (event) => {
           window.__events.push({ type, detail: event.detail });

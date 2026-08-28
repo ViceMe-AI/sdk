@@ -17,7 +17,7 @@ const distDir = join(sdkDir, 'dist');
 const pagesDir = join(here, 'pages');
 const manifest = JSON.parse(await readFile(join(distDir, 'manifest.json'), 'utf8'));
 const SDK_CHUNK_PATH = /^chunks\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.js$/;
-const SDK_ENTRY_PATHS = new Set(['manifest.json', 'viceme.min.js', 'danmaku.js']);
+const SDK_ENTRY_PATHS = new Set(['manifest.json', 'viceme.min.js', 'danmaku.js', 'tip.js']);
 
 const MIME = new Map([
   ['.js', 'text/javascript; charset=utf-8'],
@@ -75,7 +75,12 @@ async function serve(req, res, topology) {
       return;
     }
 
-    const body = await readFile(file);
+    let body = await readFile(file);
+    if (topology === 'shop' && path === '/pages/bootstrap-nonce.html') {
+      body = Buffer.from(
+        body.toString('utf8').replaceAll('__VICEME_S3_ORIGIN__', `http://127.0.0.1:${s3Port}`),
+      );
+    }
     res.writeHead(200, {
       'content-type':
         MIME.get(/^.*(\.[a-z]+)$/.exec(file)?.[1] ?? '') ?? 'application/octet-stream',

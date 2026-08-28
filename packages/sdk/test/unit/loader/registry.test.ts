@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LoaderRegistry, clientKeyOf } from '../../../src/loader/registry.ts';
-import type { CapabilityMountHandle } from '../../../src/loader/mount-handle.ts';
+import type { CapabilityMountHandle } from '../../../src/capability-mount.ts';
 
 function raw(capability: string, destroyed: string[] = []): CapabilityMountHandle {
   return {
