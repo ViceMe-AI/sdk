@@ -414,10 +414,6 @@ function ensureAccessLayerElement(): void {
           const result = await this.interaction.perform();
           if (result.type === 'frame') {
             activeFrame = result;
-            if (this.interaction.action === 'SIGN_IN') {
-              const currentHeight = panel.getBoundingClientRect().height;
-              if (currentHeight > 0) panel.style.height = `${currentHeight}px`;
-            }
             panel.dataset.frame = 'true';
             frame.src = result.url;
             frame.focus();
