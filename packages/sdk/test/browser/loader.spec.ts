@@ -19,7 +19,7 @@ function cfgUrl(attrs: Record<string, string>, extra: Record<string, string> = {
 }
 
 const VALID_ATTRS: Record<string, string> = {
-  'data-viceme-work': 'wrk_test',
+  'data-viceme-work': 'wrk_test_demo',
   'data-viceme-region': 'cn',
   'data-viceme-features': 'danmaku',
   'data-viceme-target': '#host-a',
@@ -69,7 +69,7 @@ async function mockHostedDanmaku(page: Page, options: HostedDanmakuOptions = {})
       body: post
         ? JSON.stringify({
             id: '00000000-0000-4000-8000-000000000001',
-            workKey: 'wrk_test',
+            workKey: 'wrk_test_demo',
             content: 'hello',
             anchorKey: null,
             createdAt: '2026-08-25T00:00:00.000Z',
@@ -163,12 +163,12 @@ async function mockHostedDanmaku(page: Page, options: HostedDanmakuOptions = {})
             }
             if (mode === 'stage') {
               Promise.allSettled([
-                fetch('/v1/danmaku/messages?workKey=wrk_test&limit=1', { credentials: 'omit' }),
+                fetch('/v1/danmaku/messages?workKey=wrk_test_demo&limit=1', { credentials: 'omit' }),
                 fetch('/v1/danmaku/messages', {
                   method: 'POST',
                   credentials: 'omit',
                   headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ workKey: 'wrk_test', content: 'hello' }),
+                  body: JSON.stringify({ workKey: 'wrk_test_demo', content: 'hello' }),
                 }),
               ]).then(() => { document.body.dataset.apiComplete = 'true'; });
             }
@@ -191,7 +191,7 @@ interface HostedTipOptions {
 async function mockHostedTip(page: Page, options: HostedTipOptions = {}) {
   let hits = 0;
   const referers: string[] = [];
-  await page.route(`${DANMAKU_WIDGET_ORIGIN}/widget/tip/wrk_test**`, async (route: Route) => {
+  await page.route(`${DANMAKU_WIDGET_ORIGIN}/widget/tip/wrk_test_demo**`, async (route: Route) => {
     hits += 1;
     referers.push(route.request().headers().referer ?? '');
     await route.fulfill({
@@ -211,22 +211,27 @@ async function mockHostedTip(page: Page, options: HostedTipOptions = {}) {
             const closePaymentSurface = () => {
               if (paymentSurface.hidden) return;
               paymentSurface.hidden = true;
-              emit({ type: 'viceme:widget-close', workId, token: 'must-not-leak' });
+              emit({ type: 'viceme:widget-close', workId });
             };
             if (${JSON.stringify(options.ready !== false)}) {
-              emit({ type: 'viceme:widget-resize', workId, height: 360 });
+               emit({
+                 type: 'viceme:widget-resize',
+                 workId,
+                 work: { id: workId, title: 'Browser work' },
+                 height: 360,
+               });
             }
             document.querySelector('#open').addEventListener('click', () => {
               paymentSurface.hidden = false;
             });
-            document.querySelector('#paid').addEventListener('click', () => emit({
-              type: 'viceme:tip-paid',
-              workId,
-              orderNo: 'VT20260827010203abcdef123456',
-              status: 'PAID',
-              amountCents: 520,
-              accessToken: 'must-not-leak',
-            }));
+             document.querySelector('#paid').addEventListener('click', () => emit({
+                type: 'viceme:tip-paid',
+                workKey: 'wrk_test_demo',
+                work: { id: workId, title: 'Browser work' },
+                status: 'PAID',
+                amountCents: 520,
+                currency: 'CNY',
+             }));
             document.querySelector('#close').addEventListener('click', closePaymentSurface);
             document.addEventListener('keydown', (event) => {
               if (event.key === 'Escape') closePaymentSurface();
@@ -299,8 +304,8 @@ test.describe('PUBLIC-only hosted danmaku loader', () => {
 
     const events = await waitForEvent(page, 'viceme:ready');
     expect(events.find((event) => event.type === 'viceme:ready')?.detail).toMatchObject({
-      clientKey: 'v1+cn+wrk_test',
-      workKey: 'wrk_test',
+      clientKey: 'v1+cn+wrk_test_demo',
+      workKey: 'wrk_test_demo',
       capabilities: ['danmaku'],
       version: SDK_VERSION,
     });
@@ -447,7 +452,7 @@ test.describe('PUBLIC-only hosted danmaku loader', () => {
     }
     const post = hosted.apiRequests.find((request) => request.method === 'POST')!;
     expect(JSON.parse(post.postData ?? '{}')).toEqual({
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       content: 'hello',
     });
   });
@@ -463,7 +468,7 @@ test.describe('hosted engagement loader', () => {
     const events = await waitForEvent(page, 'viceme:capability-ready', 2);
     expect(events.find((event) => event.type === 'viceme:ready')?.detail).toMatchObject({
       capabilities: ['danmaku', 'tip'],
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
     });
     expect(
       events
@@ -485,6 +490,7 @@ test.describe('hosted engagement loader', () => {
       .frames()
       .find((frame) => new URL(frame.url(), page.url()).pathname.startsWith('/widget/tip/'));
     if (!tipFrame) throw new TypeError('Tip frame missing');
+    expect(new URL(tipFrame.url()).searchParams.get('protocol')).toBe('2');
     await tipFrame.locator('#open').click();
     await expect(tipFrame.locator('#payment-surface')).toBeVisible();
     await tipFrame.locator('#paid').click();
@@ -493,10 +499,13 @@ test.describe('hosted engagement loader', () => {
     await waitForEvent(page, 'viceme:tip-paid');
     const paidEvents = await waitForEvent(page, 'viceme:widget-close');
     expect(paidEvents.find((event) => event.type === 'viceme:tip-paid')?.detail).toEqual({
-      workId: '00000000-0000-4000-8000-000000000001',
-      orderNo: 'VT20260827010203abcdef123456',
       status: 'PAID',
+      work: {
+        id: '00000000-0000-4000-8000-000000000001',
+        title: 'Browser work',
+      },
       amountCents: 520,
+      currency: 'CNY',
     });
     expect(paidEvents.find((event) => event.type === 'viceme:widget-close')?.detail).toEqual({
       workId: '00000000-0000-4000-8000-000000000001',
@@ -508,7 +517,7 @@ test.describe('hosted engagement loader', () => {
           ViceMe: { versions: { v1: { destroyClient(key: string): void } } };
         }
       ).ViceMe.versions.v1;
-      namespace.destroyClient('v1+cn+wrk_test');
+      namespace.destroyClient('v1+cn+wrk_test_demo');
     });
     await waitForEvent(page, 'viceme:destroyed', 2);
     expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
@@ -537,7 +546,7 @@ test.describe('hosted engagement loader', () => {
           ViceMe: { versions: { v1: { whenReady(key: string): Promise<{ state: string }> } } };
         }
       ).ViceMe.versions.v1;
-      return (await namespace.whenReady('v1+cn+wrk_test')).state;
+      return (await namespace.whenReady('v1+cn+wrk_test_demo')).state;
     });
     expect(clientState).toBe('DEGRADED');
   });
@@ -588,7 +597,7 @@ test.describe('hosted engagement loader', () => {
         window as unknown as {
           ViceMe: { versions: { v1: { destroyClient(key: string): void } } };
         }
-      ).ViceMe.versions.v1.destroyClient('v1+cn+wrk_test');
+      ).ViceMe.versions.v1.destroyClient('v1+cn+wrk_test_demo');
     });
     await expect(page.locator('[data-viceme-tip="mounted"]')).toHaveCount(0, { timeout: 500 });
     releaseDanmaku();
@@ -715,7 +724,7 @@ test.describe('hosted frame readiness failures', () => {
       expect(errors).toHaveLength(1);
       expect(errors[0]?.detail).toMatchObject({
         capability: 'danmaku',
-        clientKey: 'v1+cn+wrk_test',
+        clientKey: 'v1+cn+wrk_test_demo',
         code: 'INTERNAL_ERROR',
         retryable: true,
       });
@@ -729,7 +738,7 @@ test.describe('hosted frame readiness failures', () => {
             ViceMe: { versions: { v1: { whenReady(key: string): Promise<{ state: string }> } } };
           }
         ).ViceMe.versions.v1;
-        return (await namespace.whenReady('v1+cn+wrk_test')).state;
+        return (await namespace.whenReady('v1+cn+wrk_test_demo')).state;
       });
       expect(clientState).toBe('DEGRADED');
     });
@@ -750,7 +759,7 @@ test.describe('attribute validation fails closed', () => {
     {
       name: 'missing target',
       attrs: {
-        'data-viceme-work': 'wrk_test',
+        'data-viceme-work': 'wrk_test_demo',
         'data-viceme-region': 'cn',
         'data-viceme-features': 'danmaku',
       },
@@ -849,7 +858,7 @@ test.describe('deduplication and namespace lifecycle', () => {
           ViceMe: { versions: { v1: { whenReady(key: string): Promise<{ state: string }> } } };
         }
       ).ViceMe.versions.v1;
-      return (await namespace.whenReady('v1+cn+wrk_test')).state;
+      return (await namespace.whenReady('v1+cn+wrk_test_demo')).state;
     });
     expect(clientState).toBe('DEGRADED');
   });
@@ -865,7 +874,7 @@ test.describe('deduplication and namespace lifecycle', () => {
           ViceMe: { versions: { v1: { destroyClient(key: string): void } } };
         }
       ).ViceMe.versions.v1;
-      namespace.destroyClient('v1+cn+wrk_test');
+      namespace.destroyClient('v1+cn+wrk_test_demo');
     });
     await waitForEvent(page, 'viceme:destroyed');
     expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
@@ -873,7 +882,7 @@ test.describe('deduplication and namespace lifecycle', () => {
     await page.evaluate(() => {
       const script = document.createElement('script');
       script.src = '/viceme-sdk/v1/viceme.min.js';
-      script.setAttribute('data-viceme-work', 'wrk_test');
+      script.setAttribute('data-viceme-work', 'wrk_test_demo');
       script.setAttribute('data-viceme-region', 'cn');
       script.setAttribute('data-viceme-features', 'danmaku');
       script.setAttribute('data-viceme-target', '#host-a');
@@ -895,7 +904,7 @@ test.describe('deduplication and namespace lifecycle', () => {
           ViceMe: { versions: { v1: { destroyClient(key: string): void } } };
         }
       ).ViceMe.versions.v1;
-      namespace.destroyClient('v1+cn+wrk_test');
+      namespace.destroyClient('v1+cn+wrk_test_demo');
     });
 
     await expect(page.locator('[data-viceme-danmaku="mounted"]')).toHaveCount(0, {
@@ -921,7 +930,7 @@ test.describe('deduplication and namespace lifecycle', () => {
         window as unknown as {
           ViceMe: { versions: { v1: { destroyClient(key: string): void } } };
         }
-      ).ViceMe.versions.v1.destroyClient('v1+cn+wrk_test');
+      ).ViceMe.versions.v1.destroyClient('v1+cn+wrk_test_demo');
     });
 
     await expect(page.locator('[data-viceme-tip="mounted"]')).toHaveCount(0, { timeout: 500 });

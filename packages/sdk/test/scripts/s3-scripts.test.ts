@@ -1,7 +1,15 @@
 // @vitest-environment node
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -72,12 +80,17 @@ const loaderBody = Buffer.from('(function(){/* data-viceme */})();\n');
 const bootstrapBody = Buffer.from('(function(){/* fixed alias bootstrap */})();\n');
 const danmakuBody = Buffer.from('export const mount = () => {};\n');
 const tipBody = Buffer.from('export const mountTip = () => {};\n');
+const tipTestingBody = Buffer.from('export const createTestTip = () => {};\n');
+const licenseBody = Buffer.from('Test-only approved license fixture.\n');
 mkdirSync(distDir, { recursive: true });
+writeFileSync(join(distDir, 'LICENSE'), licenseBody);
 writeFileSync(join(distDir, 'index.js'), indexBody);
 writeFileSync(join(distDir, 'viceme.min.js'), loaderBody);
 writeFileSync(join(distDir, 'bootstrap.min.js'), bootstrapBody);
 writeFileSync(join(distDir, 'danmaku.js'), danmakuBody);
 writeFileSync(join(distDir, 'tip.js'), tipBody);
+mkdirSync(join(distDir, 'tip'));
+writeFileSync(join(distDir, 'tip', 'testing.js'), tipTestingBody);
 writeFileSync(
   join(distDir, 'manifest.json'),
   `${JSON.stringify(
@@ -92,12 +105,24 @@ writeFileSync(
         'bootstrap.min.js': digest(bootstrapBody),
         'danmaku.js': digest(danmakuBody),
         'tip.js': digest(tipBody),
+        'tip/testing.js': digest(tipTestingBody),
       },
     },
     null,
     2,
   )}\n`,
 );
+
+function seedReleaseMetadata(version: string): void {
+  const releaseDir = join(storeRoot, version);
+  mkdirSync(releaseDir, { recursive: true });
+  writeFileSync(join(releaseDir, 'LICENSE'), licenseBody);
+  const manifest = JSON.parse(readFileSync(join(distDir, 'manifest.json'), 'utf8')) as {
+    version: string;
+  };
+  manifest.version = version;
+  writeFileSync(join(releaseDir, 'manifest.json'), `${JSON.stringify(manifest)}\n`);
+}
 
 let publicServer: { url: string; close: () => Promise<void> } | undefined;
 
@@ -157,6 +182,29 @@ const REGION_ENV = {
 };
 
 describe('publish-s3-region.mjs', () => {
+  it('refuses verified dist bytes without the npm tarball license', async () => {
+    const unlicensedDist = join(tmpRoot, 'unlicensed-dist');
+    cpSync(distDir, unlicensedDist, { recursive: true });
+    rmSync(join(unlicensedDist, 'LICENSE'));
+
+    await expect(
+      runS3(
+        'publish-s3-region.mjs',
+        [
+          '--dist',
+          unlicensedDist,
+          '--prefix',
+          '0.1.0/',
+          '--public-base',
+          `${publicServer!.url}/viceme-sdk/0.1.0/`,
+          '--label',
+          'CN',
+        ],
+        REGION_ENV,
+      ),
+    ).rejects.toMatchObject({ code: 1 });
+  });
+
   it('fails closed when any credential is missing', async () => {
     for (const key of ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY']) {
       const env = { ...REGION_ENV };
@@ -212,11 +260,11 @@ describe('publish-s3-region.mjs', () => {
     ];
     // Empty region: everything uploads and the public read-back passes.
     const first = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(first.stdout).toContain('CN: 6 uploaded, 0 already identical');
+    expect(first.stdout).toContain('CN: 8 uploaded, 0 already identical');
 
     // Re-run: byte-identical objects are skipped.
     const second = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(second.stdout).toContain('CN: 0 uploaded, 6 already identical');
+    expect(second.stdout).toContain('CN: 0 uploaded, 8 already identical');
 
     // Tamper one object: the immutable violation fails closed.
     writeFileSync(join(storeRoot, '0.1.0/index.js'), 'tampered\n');
@@ -282,11 +330,39 @@ describe('s3-alias-pointer.mjs', () => {
     ).rejects.toMatchObject({ code: 1 });
   });
 
+  it('refuses an exact version without a license before moving its alias', async () => {
+    const releaseDir = join(storeRoot, '0.1.1');
+    mkdirSync(releaseDir, { recursive: true });
+    const manifest = JSON.parse(readFileSync(join(distDir, 'manifest.json'), 'utf8')) as {
+      version: string;
+    };
+    manifest.version = '0.1.1';
+    writeFileSync(join(releaseDir, 'manifest.json'), `${JSON.stringify(manifest)}\n`);
+    writeFileSync(join(releaseDir, 'bootstrap.min.js'), bootstrapBody);
+
+    await expect(
+      runS3(
+        's3-alias-pointer.mjs',
+        [
+          '--version',
+          '0.1.1',
+          '--regions',
+          'cn',
+          '--public-base-cn',
+          publicServer!.url,
+          '--converge-timeout-ms',
+          '5000',
+        ],
+        ALIAS_ENV,
+      ),
+    ).rejects.toMatchObject({ code: 1 });
+  });
+
   it('a partial-success rerun converges remaining regions (same version = converged)', async () => {
     // CN fully at 0.2.0 (previous run wrote loader + pointer), GLOBAL unset
     // (previous run failed midway). The rerun must treat CN as converged
     // and finish GLOBAL.
-    mkdirSync(join(storeRoot, '0.2.0'), { recursive: true });
+    seedReleaseMetadata('0.2.0');
     writeFileSync(join(storeRoot, '0.2.0', 'viceme.min.js'), loaderBody);
     writeFileSync(join(storeRoot, '0.2.0', 'bootstrap.min.js'), bootstrapBody);
     mkdirSync(join(storeRoot, 'v1'), { recursive: true });
@@ -409,7 +485,7 @@ describe('s3-alias-pointer.mjs', () => {
     // Isolate the pointer for this scenario's lifecycle.
     rmSync(join(storeRoot, '-', 'aliases', 'v1'), { force: true });
     rmSync(join(storeRoot, 'v1', 'viceme.min.js'), { force: true });
-    mkdirSync(join(storeRoot, '0.2.0'), { recursive: true });
+    seedReleaseMetadata('0.2.0');
     writeFileSync(join(storeRoot, '0.2.0', 'viceme.min.js'), loaderBody);
 
     const promote = await runS3(

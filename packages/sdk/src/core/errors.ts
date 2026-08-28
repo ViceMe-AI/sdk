@@ -7,7 +7,13 @@
  */
 
 export type ViceMeErrorCode =
-  'CONFIG_INVALID' | 'CAPABILITY_DISABLED' | 'CLIENT_DESTROYED' | 'INTERNAL_ERROR';
+  | 'CONFIG_INVALID'
+  | 'CAPABILITY_DISABLED'
+  | 'CLIENT_DESTROYED'
+  | 'INTERNAL_ERROR'
+  | 'TIP_CONFIG_INVALID'
+  | 'TIP_OPEN_IN_PROGRESS'
+  | 'TIP_READY_TIMEOUT';
 
 export interface ViceMeErrorInit {
   code: ViceMeErrorCode;

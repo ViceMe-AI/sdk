@@ -22,6 +22,10 @@
     "./tip": {
       "types": "./dist/tip/index.d.ts",
       "import": "./dist/tip.js"
+    },
+    "./tip/testing": {
+      "types": "./dist/tip/testing.d.ts",
+      "import": "./dist/tip/testing.js"
     }
   },
   "files": [
@@ -46,6 +50,7 @@
     "build:manifest": "node ../../scripts/build-manifest.mjs",
     "build:license": "node ../../scripts/sync-package-license.mjs",
     "lint": "eslint .",
+    "prepublishOnly": "node ../../scripts/assert-release-license.mjs && node ../../scripts/sync-package-license.mjs && node ../../scripts/assert-package-license.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:browser": "playwright test",

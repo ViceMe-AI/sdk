@@ -14,7 +14,7 @@ describe('ViceMeClient', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const client = createViceMe({ workKey: 'wrk_test', region: 'cn' });
+    const client = createViceMe({ workKey: 'wrk_test_demo', region: 'cn' });
     expect(client.state).toBe('CREATED');
 
     const first = client.ready();
@@ -27,10 +27,10 @@ describe('ViceMeClient', () => {
   });
 
   it('exposes only lifecycle, version, work identity, region, and hosted capabilities', () => {
-    const client = createViceMe({ workKey: 'wrk_test', region: 'global' });
+    const client = createViceMe({ workKey: 'wrk_test_demo', region: 'global' });
 
     expect(typeof client.version).toBe('string');
-    expect(client.workKey).toBe('wrk_test');
+    expect(client.workKey).toBe('wrk_test_demo');
     expect(client.region).toBe('global');
     expect(client.hasCapability('danmaku')).toBe(true);
     expect(client.hasCapability('tip')).toBe(true);
@@ -51,7 +51,7 @@ describe('ViceMeClient', () => {
   });
 
   it('destroys idempotently and fails closed afterwards', async () => {
-    const client = createViceMe({ workKey: 'wrk_test', region: 'cn' });
+    const client = createViceMe({ workKey: 'wrk_test_demo', region: 'cn' });
     await client.ready();
 
     client.destroy();

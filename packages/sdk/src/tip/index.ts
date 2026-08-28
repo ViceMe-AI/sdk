@@ -1,5 +1,50 @@
 import type { ViceMeClient } from '../core/client.ts';
+import { createHeadlessTip } from './headless.ts';
 import { mount } from './mount.ts';
+
+export type TipProvider = 'WECHAT_PAY' | 'ALIPAY';
+
+export interface TipConfig {
+  work: {
+    id: string;
+    title: string;
+  };
+  workKey: string;
+  environment: 'SANDBOX' | 'PRODUCTION';
+  currency: 'CNY';
+  amount: {
+    minCents: 100;
+    maxCents: 20_000;
+    stepCents: 1;
+  };
+  providers: TipProvider[];
+}
+
+export interface TipOpenOptions {
+  amountCents: number;
+  provider?: TipProvider;
+  locale?: 'zh-CN' | 'en-US';
+  appearance?: 'light' | 'dark' | 'auto';
+}
+
+export type TipOpenResult =
+  | {
+      status: 'PAID';
+      work: {
+        id: string;
+        title: string;
+      };
+      amountCents: number;
+      currency: 'CNY';
+    }
+  | { status: 'CANCELLED' }
+  | { status: 'UNKNOWN' };
+
+export interface TipClient {
+  getConfig(): Promise<TipConfig>;
+  open(options: TipOpenOptions): Promise<TipOpenResult>;
+  destroy(): void;
+}
 
 export interface TipMountOptions {
   target: Element;
@@ -17,13 +62,21 @@ export interface TipWidgetCloseDetail {
 }
 
 export interface TipPaidDetail {
-  workId: string;
-  orderNo: string;
   status: 'PAID';
+  work: {
+    id: string;
+    title: string;
+  };
   amountCents: number;
+  currency: 'CNY';
 }
 
 const mounts = new WeakMap<ViceMeClient, WeakMap<Element, Promise<TipMountHandle>>>();
+
+/** Create a framework-independent controller for a host-rendered Tip flow. */
+export function createTip(client: ViceMeClient): TipClient {
+  return createHeadlessTip(client);
+}
 
 /** Explicit ESM/npm entry point; the CDN loader calls the same mount function. */
 export function mountTip(client: ViceMeClient, options: TipMountOptions): Promise<TipMountHandle> {

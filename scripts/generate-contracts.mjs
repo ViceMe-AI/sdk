@@ -34,13 +34,15 @@ const check = process.argv[2] === 'check';
 const snapshot = readFileSync(snapshotPath);
 const snapshotJson = JSON.parse(snapshot.toString('utf8'));
 const sha256 = createHash('sha256').update(snapshot).digest('hex');
-const publicPath = snapshotJson.paths?.['/v1/danmaku/messages'];
+const danmakuPath = snapshotJson.paths?.['/v1/danmaku/messages'];
+const tipConfigPath = snapshotJson.paths?.['/v1/work-sdk/{workKey}/tip-config'];
 if (
   JSON.stringify(Object.keys(snapshotJson.paths ?? {})) !==
-    JSON.stringify(['/v1/danmaku/messages']) ||
-  JSON.stringify(Object.keys(publicPath ?? {}).sort()) !== JSON.stringify(['get', 'post'])
+    JSON.stringify(['/v1/danmaku/messages', '/v1/work-sdk/{workKey}/tip-config']) ||
+  JSON.stringify(Object.keys(danmakuPath ?? {}).sort()) !== JSON.stringify(['get', 'post']) ||
+  JSON.stringify(Object.keys(tipConfigPath ?? {}).sort()) !== JSON.stringify(['get'])
 ) {
-  throw new Error('public contract must contain only GET/POST /v1/danmaku/messages');
+  throw new Error('public contract paths do not match the capability allowlist');
 }
 
 const BANNER = `/* eslint-disable */
@@ -94,7 +96,7 @@ try {
     const manifest = {
       contractVersion: snapshotJson.info.version,
       sha256,
-      generatedFrom: process.env.CONTRACT_SOURCE ?? 'ViceMe Shop public danmaku contract',
+      generatedFrom: process.env.CONTRACT_SOURCE ?? 'ViceMe Shop public capability contract',
       generatedAt: new Date().toISOString(),
     };
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);

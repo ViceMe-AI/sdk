@@ -3,18 +3,25 @@ import { BUILD_WIDGET_ORIGINS } from '../core/build-endpoints.ts';
 import { clientDestroyed, ViceMeError } from '../core/errors.ts';
 import { dispatchViceMeEvent } from '../browser-events.ts';
 import type { CapabilityMountHandle, CapabilityMountOptions } from '../capability-mount.ts';
+import { isValidTipWorkKey } from '../core/config.ts';
+import { isValidTipWorkTitle } from './validation.ts';
 
 type WidgetAppearance = 'light' | 'dark';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const TIP_ORDER_NO_PATTERN = /^VT\d{14}[0-9a-f]{12}$/;
 const TIP_AMOUNT_MIN = 100;
 const TIP_AMOUNT_MAX = 20_000;
 const WIDGET_HEIGHT_MAX = 2_048;
 export const FRAME_READY_TIMEOUT_MS = 8_000;
+const RESIZE_MESSAGE_KEYS = ['type', 'workId', 'work', 'height'];
+const CLOSE_MESSAGE_KEYS = ['type', 'workId'];
+const PAID_MESSAGE_KEYS = ['type', 'workKey', 'status', 'work', 'amountCents', 'currency'];
+const WORK_KEYS = ['id', 'title'];
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+function isStrictRecord(value: unknown, keys: string[]): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const actualKeys = Object.keys(value);
+  return actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key));
 }
 
 export async function mount(
@@ -28,6 +35,22 @@ export async function mount(
     throw new ViceMeError({
       code: 'CAPABILITY_DISABLED',
       message: 'Tip is not available in this SDK build.',
+      retryable: false,
+      capability: 'tip',
+    });
+  }
+  if (client.region !== 'cn') {
+    throw new ViceMeError({
+      code: 'CAPABILITY_DISABLED',
+      message: 'Tip is not available in this region.',
+      retryable: false,
+      capability: 'tip',
+    });
+  }
+  if (!isValidTipWorkKey(client.workKey)) {
+    throw new ViceMeError({
+      code: 'CAPABILITY_DISABLED',
+      message: 'Tip is not available for this Work key.',
       retryable: false,
       capability: 'tip',
     });
@@ -51,7 +74,7 @@ export async function mount(
     options.theme === 'auto' ? (mediaQuery?.matches ? 'dark' : 'light') : options.theme;
   let destroyed = false;
   let readyTimer: number | undefined;
-  let boundWorkId: string | undefined;
+  let boundWork: { id: string; title: string } | undefined;
 
   const portal = documentObject.createElement('div');
   portal.dataset.vicemeTip = 'mounted';
@@ -64,6 +87,7 @@ export async function mount(
   const shadow = portal.attachShadow({ mode: 'open' });
   const frame = documentObject.createElement('iframe');
   const frameUrl = new URL(`/widget/tip/${encodeURIComponent(client.workKey)}`, widgetOrigin);
+  frameUrl.searchParams.set('protocol', '2');
   frameUrl.searchParams.set('appearance', appearance);
   frame.title = 'ViceMe Tip';
   frame.src = frameUrl.toString();
@@ -105,23 +129,27 @@ export async function mount(
   const onMessage = (event: MessageEvent<unknown>): void => {
     if (event.origin !== widgetOrigin || event.source !== frame.contentWindow) return;
     const message = event.data;
-    if (!isRecord(message) || typeof message.type !== 'string') return;
+    if (typeof message !== 'object' || message === null || Array.isArray(message)) return;
 
-    if (message.type === 'viceme:widget-resize') {
+    if (isStrictRecord(message, RESIZE_MESSAGE_KEYS) && message.type === 'viceme:widget-resize') {
       if (
         typeof message.workId !== 'string' ||
         !UUID_PATTERN.test(message.workId) ||
+        !isStrictRecord(message.work, WORK_KEYS) ||
+        message.work.id !== message.workId ||
+        !isValidTipWorkTitle(message.work.title) ||
         typeof message.height !== 'number' ||
         !Number.isInteger(message.height) ||
         message.height < 1 ||
         message.height > WIDGET_HEIGHT_MAX ||
-        (boundWorkId !== undefined && message.workId !== boundWorkId)
+        (boundWork !== undefined &&
+          (message.work.id !== boundWork.id || message.work.title !== boundWork.title))
       ) {
         return;
       }
       frame.style.height = `${message.height}px`;
-      if (boundWorkId === undefined) {
-        boundWorkId = message.workId;
+      if (boundWork === undefined) {
+        boundWork = { id: message.workId, title: message.work.title };
         frame.style.pointerEvents = 'auto';
         if (readyTimer !== undefined) {
           windowObject.clearTimeout(readyTimer);
@@ -132,26 +160,33 @@ export async function mount(
       return;
     }
 
-    if (typeof message.workId !== 'string' || message.workId !== boundWorkId) return;
-    if (message.type === 'viceme:widget-close') {
+    if (isStrictRecord(message, CLOSE_MESSAGE_KEYS) && message.type === 'viceme:widget-close') {
+      if (typeof message.workId !== 'string' || message.workId !== boundWork?.id) return;
       dispatchViceMeEvent(options.target, 'viceme:widget-close', { workId: message.workId });
       return;
     }
     if (
+      isStrictRecord(message, PAID_MESSAGE_KEYS) &&
       message.type === 'viceme:tip-paid' &&
-      typeof message.orderNo === 'string' &&
-      TIP_ORDER_NO_PATTERN.test(message.orderNo) &&
+      message.workKey === client.workKey &&
+      isStrictRecord(message.work, WORK_KEYS) &&
+      boundWork !== undefined &&
+      typeof message.work.id === 'string' &&
+      message.work.id === boundWork.id &&
+      isValidTipWorkTitle(message.work.title) &&
+      message.work.title === boundWork.title &&
       message.status === 'PAID' &&
       typeof message.amountCents === 'number' &&
       Number.isInteger(message.amountCents) &&
       message.amountCents >= TIP_AMOUNT_MIN &&
-      message.amountCents <= TIP_AMOUNT_MAX
+      message.amountCents <= TIP_AMOUNT_MAX &&
+      message.currency === 'CNY'
     ) {
       dispatchViceMeEvent(options.target, 'viceme:tip-paid', {
-        workId: message.workId,
-        orderNo: message.orderNo,
         status: 'PAID',
+        work: { id: message.work.id, title: message.work.title },
         amountCents: message.amountCents,
+        currency: 'CNY',
       });
     }
   };

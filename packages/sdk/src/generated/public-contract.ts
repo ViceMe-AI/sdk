@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 1.0.0, sha256 f2a9409d64395a3f…)
+ * (contractVersion 1.1.0, sha256 d77fb0d08c05f522…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -31,12 +31,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/work-sdk/{workKey}/tip-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read public Tip configuration for one Work */
+        get: operations["getTipConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @description Public opaque key issued by WorkSdkAccess. */
         WorkKey: string;
+        /** @description Public opaque test or live key issued for Tip. */
+        TipWorkKey: string;
+        /** @enum {string} */
+        TipEnvironment: "SANDBOX" | "PRODUCTION";
+        /** @enum {string} */
+        TipCurrency: "CNY";
+        /** @enum {string} */
+        TipProvider: "WECHAT_PAY" | "ALIPAY";
+        TipWork: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+        };
+        TipAmount: {
+            /** @enum {integer} */
+            minCents: 100;
+            /** @enum {integer} */
+            maxCents: 20000;
+            /** @enum {integer} */
+            stepCents: 1;
+        };
+        TipConfig: {
+            work: components["schemas"]["TipWork"];
+            workKey: components["schemas"]["TipWorkKey"];
+            environment: components["schemas"]["TipEnvironment"];
+            currency: components["schemas"]["TipCurrency"];
+            amount: components["schemas"]["TipAmount"];
+            providers: components["schemas"]["TipProvider"][];
+        };
         /** @description Opaque page-position anchor derived by the external SDK. */
         DanmakuAnchorKey: string;
         DanmakuCursor: string;
@@ -87,6 +133,15 @@ export interface components {
         };
         /** @description Danmaku write rate limit exceeded. */
         RateLimited: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorBody"];
+            };
+        };
+        /** @description Unknown Work or Tip is unavailable for this Work or region. */
+        TipUnavailable: {
             headers: {
                 [name: string]: unknown;
             };
@@ -164,6 +219,30 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             404: components["responses"]["WorkNotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTipConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workKey: components["schemas"]["TipWorkKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sanitized public Tip configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TipConfig"];
+                };
+            };
+            404: components["responses"]["TipUnavailable"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -1,17 +1,20 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "ViceMe Public Danmaku API",
-    "version": "1.0.0",
-    "summary": "Public danmaku messages consumed inside the Shop-hosted iframe.",
-    "description": "Shop owns the only public Work engagement data API. It accepts anonymous reads and writes only for published Works whose active WorkSdkAccess includes danmaku. The external ViceMe SDK does not call this API directly."
+    "title": "ViceMe Public Capability API",
+    "version": "1.1.0",
+    "summary": "Public configuration and hosted engagement APIs exposed by Shop.",
+    "description": "Shop owns the public Work capability APIs. The external SDK reads only Tip configuration; the Shop SDK inside the hosted danmaku iframe owns anonymous message reads and writes."
   },
   "servers": [
     { "url": "https://viceme.cn", "description": "CN Shop gateway" },
     { "url": "https://viceme.ai", "description": "GLOBAL Shop gateway" }
   ],
   "security": [],
-  "tags": [{ "name": "danmaku", "description": "Public hosted danmaku messages" }],
+  "tags": [
+    { "name": "danmaku", "description": "Public hosted danmaku messages" },
+    { "name": "tip", "description": "Public Tip capability configuration" }
+  ],
   "paths": {
     "/v1/danmaku/messages": {
       "get": {
@@ -90,6 +93,33 @@
           "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
+    },
+    "/v1/work-sdk/{workKey}/tip-config": {
+      "get": {
+        "tags": ["tip"],
+        "operationId": "getTipConfig",
+        "summary": "Read public Tip configuration for one Work",
+        "parameters": [
+          {
+            "name": "workKey",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/TipWorkKey" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sanitized public Tip configuration.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TipConfig" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/TipUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
     }
   },
   "components": {
@@ -98,6 +128,61 @@
         "type": "string",
         "pattern": "^wrk_[A-Za-z0-9_-]{4,124}$",
         "description": "Public opaque key issued by WorkSdkAccess."
+      },
+      "TipWorkKey": {
+        "type": "string",
+        "pattern": "^wrk_(?:test|live)_[A-Za-z0-9_-]{4,119}$",
+        "description": "Public opaque test or live key issued for Tip."
+      },
+      "TipEnvironment": {
+        "type": "string",
+        "enum": ["SANDBOX", "PRODUCTION"]
+      },
+      "TipCurrency": {
+        "type": "string",
+        "enum": ["CNY"]
+      },
+      "TipProvider": {
+        "type": "string",
+        "enum": ["WECHAT_PAY", "ALIPAY"]
+      },
+      "TipWork": {
+        "type": "object",
+        "required": ["id", "title"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      },
+      "TipAmount": {
+        "type": "object",
+        "required": ["minCents", "maxCents", "stepCents"],
+        "additionalProperties": false,
+        "properties": {
+          "minCents": { "type": "integer", "enum": [100] },
+          "maxCents": { "type": "integer", "enum": [20000] },
+          "stepCents": { "type": "integer", "enum": [1] }
+        }
+      },
+      "TipConfig": {
+        "type": "object",
+        "required": ["work", "workKey", "environment", "currency", "amount", "providers"],
+        "additionalProperties": false,
+        "properties": {
+          "work": { "$ref": "#/components/schemas/TipWork" },
+          "workKey": { "$ref": "#/components/schemas/TipWorkKey" },
+          "environment": { "$ref": "#/components/schemas/TipEnvironment" },
+          "currency": { "$ref": "#/components/schemas/TipCurrency" },
+          "amount": { "$ref": "#/components/schemas/TipAmount" },
+          "providers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": { "$ref": "#/components/schemas/TipProvider" }
+          }
+        }
       },
       "DanmakuAnchorKey": {
         "type": "string",
@@ -188,6 +273,14 @@
       },
       "RateLimited": {
         "description": "Danmaku write rate limit exceeded.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorBody" }
+          }
+        }
+      },
+      "TipUnavailable": {
+        "description": "Unknown Work or Tip is unavailable for this Work or region.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorBody" }

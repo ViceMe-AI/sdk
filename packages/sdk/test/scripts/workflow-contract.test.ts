@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const workflowsDir = join(here, '..', '..', '..', '..', '.github', 'workflows');
+const root = join(here, '..', '..', '..', '..');
+const workflowsDir = join(root, '.github', 'workflows');
 
 /**
  * Workflow contract tests: these invariants are cheap to assert on the YAML
@@ -117,7 +118,23 @@ describe('workflow contracts', () => {
     expect(publication).toContain('PR_TITLE: ${{ steps.context.outputs.release_pr_title }}');
     expect(publication).not.toContain('skip: ${{ steps.context.outputs.skip }}');
     expect(publication).not.toContain('release:gate');
-    expect(publication).not.toContain('License gate');
+    expect(jobBlock(publication, 'quality')).toContain('node scripts/assert-release-license.mjs');
+    expect(jobBlock(publication, 'npm-publish')).toContain('node scripts/publish-or-verify.mjs');
+    expect(workflow('promote-cdn.yml')).toContain('node scripts/assert-release-license.mjs');
+    expect(workflow('release-assets.yml')).toContain('node scripts/assert-release-license.mjs');
+  });
+
+  it('binds npm and downstream publication to a shipped LICENSE', () => {
+    const packageDocument = JSON.parse(
+      readFileSync(join(root, 'packages', 'sdk', 'package.json'), 'utf8'),
+    ) as { scripts?: Record<string, string> };
+    expect(packageDocument.scripts?.prepublishOnly).toContain('assert-package-license.mjs');
+    expect(readFileSync(join(root, 'scripts', 'fetch-npm-dist.mjs'), 'utf8')).toContain(
+      'published npm tarball is missing LICENSE',
+    );
+    expect(readFileSync(join(root, 'scripts', 'publish-s3-region.mjs'), 'utf8')).toContain(
+      "new URL('LICENSE', args.publicBase)",
+    );
   });
 
   it('uses the same token-free npm Trusted Publisher flow as the CLI', () => {

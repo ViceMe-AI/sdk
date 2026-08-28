@@ -18,6 +18,7 @@ export default defineConfig({
         index: resolve(__dirname, 'src/index.ts'),
         danmaku: resolve(__dirname, 'src/danmaku/index.ts'),
         tip: resolve(__dirname, 'src/tip/index.ts'),
+        'tip/testing': resolve(__dirname, 'src/tip/testing.ts'),
       },
       formats: ['es'],
     },

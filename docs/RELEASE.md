@@ -38,12 +38,11 @@ https://s3.viceme.ai/viceme-sdk/<version>/...   (region global)
 
 On the direct S3 hosts, `/viceme-sdk/v1` is an alias, NOT a copy of a version:
 its fixed bootstrap reads the single version pointer at
-`viceme-sdk/-/aliases/v1`, then injects the exact-version full loader. The
-public Shop route `https://viceme.cn/viceme-sdk/v1/*` is different: it proxies
-the complete artifact set from one configured exact release and never follows
-the S3 pointer at request time. If a CDN edge
-(`cdn.viceme.cn` / `cdn.viceme.ai`) is introduced later, keep these exact
-paths and add edge caching in front — the URL contract must not change.
+`viceme-sdk/-/aliases/v1`, then injects the exact-version full loader. The Shop
+`/viceme-sdk/v1/*` route is a separately configured exact-release proxy and
+never follows that pointer at request time. If a CDN edge (`cdn.viceme.cn` /
+`cdn.viceme.ai`) is introduced later, keep these exact paths and add edge
+caching in front — the URL contract must not change.
 
 ## Releasing a stable npm version
 
@@ -53,11 +52,13 @@ The release flow follows the same two-workflow state machine as the CLI:
 branches intentionally leave it unchanged; the release preparation workflow
 must atomically advance the package, runtime, and changelog to `0.4.0` before
 the `dev -> main` promotion. `0.4.0` intentionally removes the pre-1.0 Session,
-auth, follow, access, checkout, and testing surfaces; normal `^0.3.x` ranges do
-not select it. Loader API major `v1` remains valid because existing danmaku HTML
-attributes and namespace behavior stay compatible while Tip is additive. The
-public HTTP snapshot uses its own `1.0.0` contract version. The release check
-fails closed if a normal publication attempts to reuse `0.3.0`.
+auth, follow, access, checkout, and generic testing surfaces; its scoped
+`tip/testing` fake has no production transport. Normal `^0.3.x` ranges do not
+select it. Loader API major `v1` remains compatible because published npm
+`0.3.0` had no Tip export or Tip event; the order-bearing message found on an
+unreleased branch is not a public contract and is not preserved. The public
+HTTP snapshot uses its own `1.1.0` contract version. The release check fails
+closed if a normal publication attempts to reuse `0.3.0`.
 
 1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
    `release-pr.yml` workflow uses the same stable-version algorithm as the CLI:

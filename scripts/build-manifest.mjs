@@ -82,7 +82,14 @@ for (const file of files.sort()) {
 }
 
 // Sanity: npm and hosted-loader runtime entries must all be present.
-for (const required of ['index.js', 'viceme.min.js', 'bootstrap.min.js', 'danmaku.js', 'tip.js']) {
+for (const required of [
+  'index.js',
+  'viceme.min.js',
+  'bootstrap.min.js',
+  'danmaku.js',
+  'tip.js',
+  'tip/testing.js',
+]) {
   if (!manifest.files[required]) {
     console.error(`manifest: missing required artifact ${required}`);
     process.exit(1);

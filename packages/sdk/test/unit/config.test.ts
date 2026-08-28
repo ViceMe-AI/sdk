@@ -4,12 +4,12 @@ import { validatePublicConfig } from '../../src/core/config.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('validatePublicConfig', () => {
-  it('accepts exactly workKey and region', () => {
-    expect(validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn' })).toEqual({
-      workKey: 'wrk_public_xxx',
-      region: 'cn',
-    });
-  });
+  it.each(['wrk_test_demo', 'wrk_live_demo', 'wrk_public_demo'])(
+    'accepts public Work key %s',
+    (workKey) => {
+      expect(validatePublicConfig({ workKey, region: 'cn' })).toEqual({ workKey, region: 'cn' });
+    },
+  );
 
   it('rejects non-object input', () => {
     expect(() => validatePublicConfig('nope')).toThrow(ViceMeError);
@@ -20,7 +20,7 @@ describe('validatePublicConfig', () => {
     'rejects removed or internal field %s',
     (field) => {
       expect(() =>
-        validatePublicConfig({ workKey: 'wrk_test', region: 'cn', [field]: 'nope' }),
+        validatePublicConfig({ workKey: 'wrk_test_demo', region: 'cn', [field]: 'nope' }),
       ).toThrow(`Unknown configuration field "${field}"`);
     },
   );
@@ -32,7 +32,7 @@ describe('validatePublicConfig', () => {
   });
 
   it('rejects invalid regions', () => {
-    expect(() => validatePublicConfig({ workKey: 'wrk_test', region: 'eu' })).toThrow();
-    expect(() => validatePublicConfig({ workKey: 'wrk_test' })).toThrow();
+    expect(() => validatePublicConfig({ workKey: 'wrk_test_demo', region: 'eu' })).toThrow();
+    expect(() => validatePublicConfig({ workKey: 'wrk_test_demo' })).toThrow();
   });
 });

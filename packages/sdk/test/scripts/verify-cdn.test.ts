@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync as writeFile } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync as writeFile } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -41,6 +41,7 @@ const loaderBody = Buffer.from('(function(){/* data-viceme loader */})();\n');
 const bootstrapBody = Buffer.from('(function(){/* fixed alias bootstrap */})();\n');
 const danmakuBody = Buffer.from('export const mount = () => {};\n');
 const tipBody = Buffer.from('export const mountTip = () => {};\n');
+const tipTestingBody = Buffer.from('export const createTestTip = () => {};\n');
 
 let server:
   | {
@@ -53,11 +54,17 @@ beforeAll(async () => {
   await writeFile(join(distDir, 'index.js'), indexBody);
   await writeFile(join(distDir, 'danmaku.js'), danmakuBody);
   await writeFile(join(distDir, 'tip.js'), tipBody);
+  mkdirSync(join(distDir, 'tip'));
+  await writeFile(join(distDir, 'tip', 'testing.js'), tipTestingBody);
   await writeFile(join(distDir, 'viceme.min.js'), loaderBody);
 
   files.set('index.js', { body: indexBody, contentType: 'text/javascript; charset=utf-8' });
   files.set('danmaku.js', { body: danmakuBody, contentType: 'text/javascript; charset=utf-8' });
   files.set('tip.js', { body: tipBody, contentType: 'text/javascript; charset=utf-8' });
+  files.set('tip/testing.js', {
+    body: tipTestingBody,
+    contentType: 'text/javascript; charset=utf-8',
+  });
   files.set('viceme.min.js', {
     body: loaderBody,
     contentType: 'text/javascript; charset=utf-8',
@@ -72,6 +79,7 @@ beforeAll(async () => {
       'index.js': await digestInfo(indexBody),
       'danmaku.js': await digestInfo(danmakuBody),
       'tip.js': await digestInfo(tipBody),
+      'tip/testing.js': await digestInfo(tipTestingBody),
       'viceme.min.js': await digestInfo(loaderBody),
     },
   };
@@ -177,6 +185,7 @@ describe('verify-cdn.mjs', () => {
       ['0.1.0/viceme.min.js', loaderBody],
       ['0.1.0/danmaku.js', danmakuBody],
       ['0.1.0/tip.js', tipBody],
+      ['0.1.0/tip/testing.js', tipTestingBody],
     ]);
     const httpServer = createServer((req, res) => {
       const key = decodeURIComponent((req.url ?? '').replace(/^\/viceme-sdk\//, ''));

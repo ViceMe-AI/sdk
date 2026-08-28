@@ -80,15 +80,8 @@ function gitOptional(args) {
   }
 }
 
-function latestReachableReleaseTag() {
-  const tags = gitOptional([
-    'tag',
-    '--merged',
-    'HEAD',
-    '--list',
-    `${releaseTagPrefix}[0-9]*`,
-    '--sort=-v:refname',
-  ])
+function latestReleaseTag() {
+  const tags = gitOptional(['tag', '--list', `${releaseTagPrefix}[0-9]*`, '--sort=-v:refname'])
     .split('\n')
     .map((tag) => tag.trim())
     .filter(Boolean);
@@ -121,7 +114,7 @@ function writeJSON(filename, value) {
 }
 
 export function prepareRelease({ fallbackRef = 'origin/main' } = {}) {
-  const releaseTag = latestReachableReleaseTag();
+  const releaseTag = latestReleaseTag();
   const baseRef = releaseTag || fallbackRef;
   if (!gitOptional(['rev-parse', '--verify', baseRef])) {
     throw new Error(`release base ref does not exist: ${baseRef}`);
