@@ -199,14 +199,26 @@ async function mockHostedTip(page: Page, options: HostedTipOptions = {}) {
       contentType: 'text/html; charset=utf-8',
       body: `<!doctype html>
         <html><body>
-          <button id="paid" type="button">paid</button>
-          <button id="close" type="button">close</button>
+          <button id="open" type="button">open</button>
+          <section id="payment-surface" hidden>
+            <button id="paid" type="button">paid</button>
+            <button id="close" type="button">close</button>
+          </section>
           <script>
             const workId = '00000000-0000-4000-8000-000000000001';
             const emit = (message) => parent.postMessage(message, '*');
+            const paymentSurface = document.querySelector('#payment-surface');
+            const closePaymentSurface = () => {
+              if (paymentSurface.hidden) return;
+              paymentSurface.hidden = true;
+              emit({ type: 'viceme:widget-close', workId, token: 'must-not-leak' });
+            };
             if (${JSON.stringify(options.ready !== false)}) {
               emit({ type: 'viceme:widget-resize', workId, height: 360 });
             }
+            document.querySelector('#open').addEventListener('click', () => {
+              paymentSurface.hidden = false;
+            });
             document.querySelector('#paid').addEventListener('click', () => emit({
               type: 'viceme:tip-paid',
               workId,
@@ -215,11 +227,10 @@ async function mockHostedTip(page: Page, options: HostedTipOptions = {}) {
               amountCents: 520,
               accessToken: 'must-not-leak',
             }));
-            document.querySelector('#close').addEventListener('click', () => emit({
-              type: 'viceme:widget-close',
-              workId,
-              token: 'must-not-leak',
-            }));
+            document.querySelector('#close').addEventListener('click', closePaymentSurface);
+            document.addEventListener('keydown', (event) => {
+              if (event.key === 'Escape') closePaymentSurface();
+            });
           </script>
         </body></html>`,
     });
@@ -474,8 +485,11 @@ test.describe('hosted engagement loader', () => {
       .frames()
       .find((frame) => new URL(frame.url(), page.url()).pathname.startsWith('/widget/tip/'));
     if (!tipFrame) throw new TypeError('Tip frame missing');
+    await tipFrame.locator('#open').click();
+    await expect(tipFrame.locator('#payment-surface')).toBeVisible();
     await tipFrame.locator('#paid').click();
-    await tipFrame.locator('#close').click();
+    await tipFrame.locator('body').press('Escape');
+    await expect(tipFrame.locator('#payment-surface')).toBeHidden();
     await waitForEvent(page, 'viceme:tip-paid');
     const paidEvents = await waitForEvent(page, 'viceme:widget-close');
     expect(paidEvents.find((event) => event.type === 'viceme:tip-paid')?.detail).toEqual({

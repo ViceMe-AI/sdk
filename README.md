@@ -139,7 +139,10 @@ The released package exports exactly `@viceme-ai/sdk`,
   endpoint directly.
 - The Tip mount uses `strict-origin` referrer policy and stays non-interactive
   until `/widget/tip/<workKey>` proves a registered parent Origin through a
-  trusted resize message. Shop owns payment, login, provider, and amount state.
+  trusted resize message. Shop owns payment, login, provider, amount, and Escape
+  close state; it resets the hosted payment surface before emitting close. The
+  SDK validates and redispatches that close notification but does not require a
+  host-page listener for the default close behavior.
 
 ## Development
 

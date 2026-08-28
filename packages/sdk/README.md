@@ -80,6 +80,7 @@ scroll bucket, and sends only the opaque anchor to the hosted iframe. Destroying
 the mount removes its nodes, listeners, debounce timer, and location poll.
 
 The Tip mount sends no amount, provider, token, or application ID. It enables
-interaction only after a trusted resize handshake, forwards sanitized close
-and paid events, and removes its iframe, timer, media listener, and message
-listener on destroy.
+interaction only after a trusted resize handshake. Shop resets its hosted
+payment surface on Escape before sending close; the SDK forwards sanitized
+close and paid notifications, and removes its iframe, timer, media listener,
+and message listener on destroy.
