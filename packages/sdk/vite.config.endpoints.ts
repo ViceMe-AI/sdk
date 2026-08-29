@@ -21,10 +21,10 @@ function buildOrigin(name: string, fallback: string): string {
 export function buildEndpointDefinitions(): Record<string, string> {
   return {
     __VICEME_BUILD_CN_WIDGET_ORIGIN__: JSON.stringify(
-      buildOrigin('VICEME_BUILD_CN_WIDGET_ORIGIN', 'https://viceme.cn'),
+      buildOrigin('VICEME_BUILD_CN_WIDGET_ORIGIN', 'https://poc.viceme.cn'),
     ),
     __VICEME_BUILD_GLOBAL_WIDGET_ORIGIN__: JSON.stringify(
-      buildOrigin('VICEME_BUILD_GLOBAL_WIDGET_ORIGIN', 'https://viceme.ai'),
+      buildOrigin('VICEME_BUILD_GLOBAL_WIDGET_ORIGIN', 'https://poc.viceme.cn'),
     ),
   };
 }

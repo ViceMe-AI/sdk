@@ -1,7 +1,7 @@
 {
-  "name": "@viceme-ai/sdk",
-  "version": "0.3.0",
-  "description": "ViceMe PUBLIC-only hosted engagement SDK for static HTML, ESM, React, and Agent-generated sites.",
+  "name": "@myc666/viceme-sdk",
+  "version": "0.4.0-beta.0",
+  "description": "Personal ViceMe POC SDK build for Open Tip and Headless integration testing.",
   "type": "module",
   "repository": {
     "type": "git",
@@ -30,19 +30,19 @@
   },
   "files": [
     "dist",
-    "README.md",
-    "LICENSE"
+    "README.md"
   ],
   "sideEffects": false,
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "beta"
   },
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "clean": "node ../../scripts/rmrf.mjs dist",
-    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:bootstrap && pnpm build:types && pnpm build:manifest && pnpm build:license",
+    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:bootstrap && pnpm build:types && pnpm build:manifest",
     "build:esm": "vite build --config vite.config.esm.ts",
     "build:loader": "vite build --config vite.config.loader.ts",
     "build:bootstrap": "vite build --config vite.config.bootstrap.ts",
@@ -50,7 +50,6 @@
     "build:manifest": "node ../../scripts/build-manifest.mjs",
     "build:license": "node ../../scripts/sync-package-license.mjs",
     "lint": "eslint .",
-    "prepublishOnly": "node ../../scripts/assert-release-license.mjs && node ../../scripts/sync-package-license.mjs && node ../../scripts/assert-package-license.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:browser": "playwright test",

@@ -1,46 +1,20 @@
-# @viceme-ai/sdk
+# @myc666/viceme-sdk
 
-PUBLIC-only ViceMe browser SDK for Shop-hosted danmaku and Tip capabilities.
+Personal POC build of the ViceMe browser SDK for Open Tip and Headless testing.
+This beta is fixed to `https://poc.viceme.cn` and is not a production release.
 
 ## Install
 
 ```bash
-pnpm add @viceme-ai/sdk
+pnpm add @myc666/viceme-sdk@beta
 ```
-
-## Static HTML
-
-```html
-<div id="viceme-engagement"></div>
-<script
-  defer
-  src="https://viceme.cn/viceme-sdk/v1/viceme.min.js"
-  data-viceme-work="wrk_live_demo"
-  data-viceme-region="cn"
-  data-viceme-features="danmaku,tip"
-  data-viceme-target="#viceme-engagement"
-  data-viceme-theme="auto"
-></script>
-```
-
-The feature declaration accepts `danmaku`, `tip`, or both without whitespace or
-duplicates.
-
-The Shop `/viceme-sdk/v1/*` proxy serves one configured exact release. It is
-distinct from the direct S3 `v1/viceme.min.js` fixed bootstrap, which reads
-`-/aliases/v1` before loading an immutable exact-version directory.
-
-With CSP, allow the exact regional Shop origin in `script-src`, `connect-src`,
-and `frame-src`, and keep `object-src 'none'`. A nonce with `'strict-dynamic'`
-may authorize dynamic scripts, but the other directives still need exact
-origins. Do not use `*` or a ViceMe subdomain wildcard.
 
 ## ESM
 
 ```ts
-import { createViceMe } from '@viceme-ai/sdk';
-import { mountDanmaku } from '@viceme-ai/sdk/danmaku';
-import { mountTip } from '@viceme-ai/sdk/tip';
+import { createViceMe } from '@myc666/viceme-sdk';
+import { mountDanmaku } from '@myc666/viceme-sdk/danmaku';
+import { mountTip } from '@myc666/viceme-sdk/tip';
 
 const client = createViceMe({ workKey: 'wrk_live_demo', region: 'cn' });
 await client.ready();
@@ -94,8 +68,8 @@ and message listener on destroy.
 ## Headless Tip
 
 ```ts
-import { createViceMe } from '@viceme-ai/sdk';
-import { createTip } from '@viceme-ai/sdk/tip';
+import { createViceMe } from '@myc666/viceme-sdk';
+import { createTip } from '@myc666/viceme-sdk/tip';
 
 const client = createViceMe({ workKey: 'wrk_live_demo', region: 'cn' });
 const tip = createTip(client);
@@ -149,7 +123,7 @@ global.
 Use the scoped fake in components and Storybook:
 
 ```ts
-import { createTestTip } from '@viceme-ai/sdk/tip/testing';
+import { createTestTip } from '@myc666/viceme-sdk/tip/testing';
 
 const paid = createTestTip({ config, outcome: 'PAID' });
 const failed = createTestTip({ config, outcome: new Error('fixture failure') });
