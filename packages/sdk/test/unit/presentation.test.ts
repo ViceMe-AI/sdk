@@ -107,7 +107,9 @@ describe('default access presenter', () => {
       perform,
     });
     const layer = document.querySelector('viceme-access-layer');
+    const panel = layer?.shadowRoot?.querySelector("[data-viceme='panel']") as HTMLElement;
     const action = layer?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement;
+    expect(panel.dataset.frame).toBe('false');
     expect(action.textContent).toBe('打开支付');
     expect(perform).not.toHaveBeenCalled();
     action.click();

@@ -326,7 +326,7 @@ function ensureAccessLayerElement(): void {
       `;
       const panel = shadow.querySelector<HTMLElement>("[data-viceme='panel']")!;
       panel.dataset.action = this.interaction.action;
-      panel.dataset.frame = String(this.interaction.action === 'CHECKOUT');
+      panel.dataset.frame = 'false';
       const description = shadow.querySelector<HTMLElement>("[data-viceme='description']")!;
       description.textContent = copy.description;
       const action = shadow.querySelector<HTMLButtonElement>("[data-viceme='action']")!;
