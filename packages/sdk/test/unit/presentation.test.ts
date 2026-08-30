@@ -90,45 +90,29 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('dismissed');
   });
 
-  it('opens checkout directly inside the access layer frame', async () => {
+  it('opens checkout only after an explicit action and waits for the external window', async () => {
     let complete!: () => void;
     const completion = new Promise<void>((resolve) => {
       complete = resolve;
     });
+    const perform = vi.fn(async () => ({
+      type: 'external' as const,
+      completion,
+      cancel: vi.fn(),
+    }));
     const presented = defaultAccessPresenter({
       featureKey: 'emperor',
       reason: 'PURCHASE_REQUIRED',
       action: 'CHECKOUT',
-      perform: vi.fn(async () => ({
-        type: 'frame' as const,
-        url: 'about:blank#checkout',
-        completion,
-        cancel: vi.fn(),
-      })),
+      perform,
     });
     const layer = document.querySelector('viceme-access-layer');
-    expect(
-      layer?.shadowRoot?.querySelector("[data-viceme='panel']")?.getAttribute('data-frame'),
-    ).toBe('true');
-
-    await vi.waitFor(() => {
-      expect(layer?.shadowRoot?.querySelector('iframe')?.getAttribute('src')).toBe(
-        'about:blank#checkout',
-      );
-    });
-    const frame = layer?.shadowRoot?.querySelector('iframe') as HTMLIFrameElement;
-    expect(layer?.shadowRoot?.querySelector('style')?.textContent).toContain(
-      'height: min(92dvh, 46rem);',
-    );
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: { type: 'viceme:frame:resize', height: 360 },
-        origin: 'null',
-        source: frame.contentWindow,
-      }),
-    );
-    expect(frame.style.height).toBe('');
-    expect(layer?.shadowRoot?.querySelector("[data-viceme='close']")).not.toBeNull();
+    const action = layer?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement;
+    expect(action.textContent).toBe('打开支付');
+    expect(perform).not.toHaveBeenCalled();
+    action.click();
+    await vi.waitFor(() => expect(perform).toHaveBeenCalledOnce());
+    expect(layer?.shadowRoot?.querySelector('iframe')?.hasAttribute('src')).toBe(false);
     complete();
 
     await expect(presented).resolves.toBe('acted');
@@ -174,26 +158,22 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('dismissed');
   });
 
-  it('cancels an active checkout frame from the backdrop', async () => {
+  it('cancels an active checkout window from the backdrop', async () => {
     const cancel = vi.fn();
+    const perform = vi.fn(async () => ({
+      type: 'external' as const,
+      completion: new Promise<void>(() => undefined),
+      cancel,
+    }));
     const presented = defaultAccessPresenter({
       featureKey: 'emperor',
       reason: 'PURCHASE_REQUIRED',
       action: 'CHECKOUT',
-      perform: vi.fn(async () => ({
-        type: 'frame' as const,
-        url: 'about:blank#checkout-cancel',
-        completion: new Promise<void>(() => undefined),
-        cancel,
-      })),
+      perform,
     });
     const layer = document.querySelector('viceme-access-layer');
-
-    await vi.waitFor(() => {
-      expect(layer?.shadowRoot?.querySelector('iframe')?.getAttribute('src')).toBe(
-        'about:blank#checkout-cancel',
-      );
-    });
+    (layer?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(perform).toHaveBeenCalledOnce());
     (layer?.shadowRoot?.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
 
     await expect(presented).resolves.toBe('dismissed');

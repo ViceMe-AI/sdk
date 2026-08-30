@@ -22,7 +22,13 @@ export interface AccessFrameAction {
   cancel(): void;
 }
 
-export type AccessActionResult = AccessCompletedAction | AccessFrameAction;
+export interface AccessExternalAction {
+  type: 'external';
+  completion: Promise<void>;
+  cancel(): void;
+}
+
+export type AccessActionResult = AccessCompletedAction | AccessFrameAction | AccessExternalAction;
 
 export type AccessPresentationResult = 'acted' | 'dismissed';
 
@@ -54,7 +60,7 @@ function actionCopy(action: AccessInteractionAction): {
     case 'CHECKOUT':
       return {
         description: '',
-        label: '重新打开',
+        label: '打开支付',
       };
   }
 }
@@ -339,7 +345,7 @@ function ensureAccessLayerElement(): void {
       const profileStats = shadow.querySelector<HTMLElement>("[data-viceme='profile-stats']")!;
       const profileCovers = shadow.querySelector<HTMLElement>("[data-viceme='profile-covers']")!;
       action.textContent = copy.label;
-      action.hidden = this.interaction.action === 'CHECKOUT';
+      action.hidden = false;
       mainActions.dataset.single = 'true';
       const idleActionLabel = copy.label;
       frame.title = this.interaction.action === 'SIGN_IN' ? '登录授权' : '支付';
@@ -384,12 +390,12 @@ function ensureAccessLayerElement(): void {
         }
       }
 
-      let activeFrame: AccessFrameAction | null = null;
+      let activeAction: AccessFrameAction | AccessExternalAction | null = null;
       const close = (result: AccessPresentationResult) => {
         this.dispatchEvent(new CustomEvent('viceme:access-layer-close', { detail: result }));
       };
       const dismissLayer = () => {
-        activeFrame?.cancel();
+        activeAction?.cancel();
         close('dismissed');
       };
       backdrop.addEventListener('click', dismissLayer);
@@ -398,7 +404,7 @@ function ensureAccessLayerElement(): void {
         if (event.key === 'Escape') dismissLayer();
         if (event.key === 'Tab') {
           event.preventDefault();
-          if (activeFrame) {
+          if (activeAction?.type === 'frame') {
             frame.focus();
             return;
           }
@@ -418,7 +424,7 @@ function ensureAccessLayerElement(): void {
         try {
           const result = await this.interaction.perform();
           if (result.type === 'frame') {
-            activeFrame = result;
+            activeAction = result;
             if (this.interaction.action === 'SIGN_IN') {
               const currentHeight = panel.getBoundingClientRect().height;
               if (currentHeight > 0) panel.style.height = `${currentHeight}px`;
@@ -427,11 +433,14 @@ function ensureAccessLayerElement(): void {
             frame.src = result.url;
             frame.focus();
             await result.completion;
+          } else if (result.type === 'external') {
+            activeAction = result;
+            await result.completion;
           }
           close('acted');
         } catch (caught) {
-          activeFrame?.cancel();
-          activeFrame = null;
+          activeAction?.cancel();
+          activeAction = null;
           panel.dataset.frame = 'false';
           frame.removeAttribute('src');
           error.textContent = actionErrorCopy(caught);
@@ -443,11 +452,7 @@ function ensureAccessLayerElement(): void {
         }
       };
       action.addEventListener('click', performAction);
-      if (this.interaction.action === 'CHECKOUT') {
-        queueMicrotask(() => void performAction());
-      } else {
-        queueMicrotask(() => action.focus());
-      }
+      queueMicrotask(() => action.focus());
     }
   }
 

@@ -153,6 +153,35 @@ describe('website access capabilities', () => {
     });
   });
 
+  it('opens unpaid hosted checkout in a separate window instead of an iframe', async () => {
+    const checkoutWindow = { closed: false, close: vi.fn() };
+    const open = vi.spyOn(window, 'open').mockReturnValue(checkoutWindow as unknown as Window);
+    const presenter: AccessPresenter = async (interaction) => {
+      const action = await interaction.perform();
+      expect(action.type).toBe('external');
+      if (action.type !== 'external') throw new Error('expected external checkout');
+      action.cancel();
+      await action.completion;
+      return 'acted';
+    };
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport: capabilityTransport(false),
+      presenter,
+    });
+
+    await expect(client.checkout.open({ featureKey: 'paid' })).resolves.toMatchObject({
+      alreadyOwned: false,
+    });
+    expect(open).toHaveBeenCalledWith(
+      'https://viceme.cn/hosted-checkout/session-id',
+      '_blank',
+      'popup,width=520,height=760',
+    );
+    expect(checkoutWindow.close).toHaveBeenCalledOnce();
+  });
+
   it('accepts the platform-origin login completion for this Work and channel', async () => {
     const presenter: AccessPresenter = async (interaction) => {
       const action = await interaction.perform();

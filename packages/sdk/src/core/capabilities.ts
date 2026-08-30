@@ -418,10 +418,10 @@ export function createCapabilities(deps: CapabilityDeps): {
     );
   };
 
-  const startCheckout = async (
+  const createCheckout = async (
     featureKey: string,
     options: Omit<CheckoutOptions, 'featureKey'> = {},
-  ): Promise<{ result: CheckoutResult; action: AccessActionResult }> => {
+  ): Promise<CheckoutResult> => {
     await deps.ready();
     const body = {
       featureKey,
@@ -444,11 +444,29 @@ export function createCapabilities(deps: CapabilityDeps): {
     } catch {
       throw malformedResponse();
     }
-    const result = {
+    return {
       checkoutUrl: response.checkoutUrl,
       alreadyOwned: response.alreadyOwned,
     };
-    if (result.alreadyOwned) return { result, action: { type: 'completed' } };
+  };
+
+  const openCheckout = (result: CheckoutResult, featureKey: string): AccessActionResult => {
+    if (result.alreadyOwned) return { type: 'completed' };
+    if (typeof window === 'undefined') {
+      throw new ViceMeError({
+        code: 'CONFIG_INVALID',
+        message: 'Hosted checkout requires a browser window.',
+        retryable: false,
+      });
+    }
+    const checkoutWindow = window.open(result.checkoutUrl, '_blank', 'popup,width=520,height=760');
+    if (!checkoutWindow) {
+      throw new ViceMeError({
+        code: 'AUTH_CANCELLED',
+        message: 'The hosted checkout window was blocked.',
+        retryable: false,
+      });
+    }
 
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -465,7 +483,13 @@ export function createCapabilities(deps: CapabilityDeps): {
         if (!decision) throw malformedResponse();
         if (decision.allowed) {
           active = false;
+          checkoutWindow.close();
           settle();
+          return;
+        }
+        if (checkoutWindow.closed) {
+          active = false;
+          fail(cancelled());
           return;
         }
         timer = setTimeout(() => void poll(), 1_500);
@@ -476,36 +500,30 @@ export function createCapabilities(deps: CapabilityDeps): {
     };
     timer = setTimeout(() => void poll(), 1_500);
     return {
-      result,
-      action: {
-        type: 'frame',
-        url: result.checkoutUrl,
-        completion,
-        cancel() {
-          if (!active) return;
-          active = false;
-          if (timer) clearTimeout(timer);
-          settle();
-        },
+      type: 'external',
+      completion,
+      cancel() {
+        if (!active) return;
+        active = false;
+        if (timer) clearTimeout(timer);
+        checkoutWindow.close();
+        settle();
       },
     };
   };
 
   const checkout: CheckoutCapability = {
     async open(options) {
+      const checkoutResult = await createCheckout(options.featureKey, options);
+      if (checkoutResult.alreadyOwned) return checkoutResult;
       const presenter = deps.presenter ?? defaultAccessPresenter;
-      let checkoutResult: CheckoutResult | undefined;
       const presented = await presenter({
         featureKey: options.featureKey,
         reason: 'PURCHASE_REQUIRED',
         action: 'CHECKOUT',
-        perform: async () => {
-          const prepared = await startCheckout(options.featureKey, options);
-          checkoutResult = prepared.result;
-          return prepared.action;
-        },
+        perform: async () => openCheckout(checkoutResult, options.featureKey),
       });
-      if (presented === 'dismissed' || !checkoutResult) throw cancelled();
+      if (presented === 'dismissed') throw cancelled();
       return checkoutResult;
     },
   };
@@ -543,6 +561,12 @@ export function createCapabilities(deps: CapabilityDeps): {
       ) {
         const nextAction = decision.nextAction;
         const followTarget = nextAction === 'FOLLOW' ? (await follow.getState()).target : undefined;
+        const checkoutResult =
+          nextAction === 'CHECKOUT' ? await createCheckout(featureKey) : undefined;
+        if (checkoutResult?.alreadyOwned) {
+          decision = await this.check(featureKey);
+          continue;
+        }
         const result = await presenter({
           featureKey,
           reason: decision.reason,
@@ -555,7 +579,7 @@ export function createCapabilities(deps: CapabilityDeps): {
               await follow.follow();
               return { type: 'completed' };
             } else {
-              return (await startCheckout(featureKey)).action;
+              return openCheckout(checkoutResult!, featureKey);
             }
           },
         });
