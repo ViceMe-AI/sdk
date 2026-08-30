@@ -73,8 +73,10 @@ payment only after its exact parent Origin is registered.
 Access operations establish a short-lived, memory-only Work session on first
 use. They expose `client.auth`, `client.access`, and `client.checkout`; login,
 explicit follow, and hosted checkout remain ViceMe-owned UI. The host never
-receives a general ViceMe session or payment credential. There is no public
-`@viceme-ai/sdk/testing` subpath.
+receives a general ViceMe session or payment credential. Deterministic test
+injection lives behind the `@viceme-ai/sdk/testing` subpath (mock transport
+plus a test client running the same validation as production); it is excluded
+from CDN bundles.
 
 ```ts
 const decisions = await client.access.checkMany(['members', 'pro-tools']);

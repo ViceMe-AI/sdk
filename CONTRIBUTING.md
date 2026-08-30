@@ -59,8 +59,11 @@ These decisions are already made; PRs must not reopen them:
    Lower layers must never import the loader, React, or host code. The headless
    core does not touch the DOM.
 
-5. The production `createViceMe()` config accepts only `workKey` and `region`.
-   It is purely local; test transports and SDK Sessions do not exist.
+5. The production `createViceMe()` config accepts only `workKey`, `region`,
+   and `signal`. Initialization is purely local; Website access establishes a
+   short-lived, memory-only Work session lazily on first use. Test transports
+   and interaction overrides exist only behind the `@viceme-ai/sdk/testing`
+   subpath.
 6. Visible components mount inside an open Shadow Root; `destroy()` must remove
    listeners, observers, timers, and DOM nodes.
 

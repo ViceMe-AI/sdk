@@ -45,7 +45,8 @@ export default function Page() {
     <main style={{ maxWidth: '40rem', margin: '2rem auto' }}>
       <h1>ViceMe hosted engagement</h1>
       <p>
-        Client state: <code>{state}</code>. The external SDK has no Session or checkout surface.
+        Client state: <code>{state}</code>. Initialization is local; the mounted Shop iframe owns
+        message API calls.
       </p>
       <button type="button">Host-page action</button>
       <div ref={hostRef} />

@@ -259,4 +259,29 @@ describe('default access presenter', () => {
     (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
   });
+
+  it('reports checkout failures with payment copy instead of sign-in copy', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'members',
+      reason: 'PURCHASE_REQUIRED',
+      action: 'CHECKOUT',
+      perform: vi.fn(async () => {
+        throw new ViceMeError({
+          code: 'AUTH_CANCELLED',
+          message: 'The hosted checkout window was blocked.',
+        });
+      }),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
+
+    (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
+        '支付未完成，请重试。',
+      );
+    });
+    (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+  });
 });

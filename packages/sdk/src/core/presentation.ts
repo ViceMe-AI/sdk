@@ -65,22 +65,37 @@ function actionCopy(action: AccessInteractionAction): {
   }
 }
 
-function actionErrorCopy(error: unknown): string {
+function actionErrorCopy(error: unknown, action: AccessInteractionAction): string {
   if (!isViceMeError(error)) return '操作未完成，请重试。';
-  switch (error.code) {
-    case 'CONFIG_INVALID':
-      return '微信授权配置无效，请稍后重试。';
-    case 'AUTH_CANCELLED':
-      return '微信授权已取消，请重试。';
-    case 'SESSION_EXPIRED':
-      return '授权会话已过期，请重试。';
-    case 'NETWORK_TIMEOUT':
-      return '网络连接超时，请重试。';
-    default:
-      return error.requestId
-        ? `操作未完成，请重试。请求 ID：${error.requestId}`
-        : '操作未完成，请重试。';
+  // Copy is action-scoped: the same error code means different things to the
+  // user under a payment button than under a WeChat sign-in button.
+  if (action === 'CHECKOUT') {
+    switch (error.code) {
+      case 'AUTH_CANCELLED':
+        return '支付未完成，请重试。';
+      case 'CHECKOUT_UNAVAILABLE':
+        return '支付暂不可用，请稍后重试。';
+      case 'SESSION_EXPIRED':
+        return '会话已过期，请重试。';
+      default:
+        break;
+    }
+  } else {
+    switch (error.code) {
+      case 'CONFIG_INVALID':
+        return '微信授权配置无效，请稍后重试。';
+      case 'AUTH_CANCELLED':
+        return '微信授权已取消，请重试。';
+      case 'SESSION_EXPIRED':
+        return '授权会话已过期，请重试。';
+      default:
+        break;
+    }
   }
+  if (error.code === 'NETWORK_TIMEOUT') return '网络连接超时，请重试。';
+  return error.requestId
+    ? `操作未完成，请重试。请求 ID：${error.requestId}`
+    : '操作未完成，请重试。';
 }
 
 function ensureAccessLayerElement(): void {
@@ -443,7 +458,7 @@ function ensureAccessLayerElement(): void {
           activeAction = null;
           panel.dataset.frame = 'false';
           frame.removeAttribute('src');
-          error.textContent = actionErrorCopy(caught);
+          error.textContent = actionErrorCopy(caught, this.interaction.action);
           action.hidden = false;
           action.disabled = false;
           action.removeAttribute('aria-busy');

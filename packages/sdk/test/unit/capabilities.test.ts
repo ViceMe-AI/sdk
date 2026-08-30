@@ -153,6 +153,22 @@ describe('website access capabilities', () => {
     });
   });
 
+  it('defaults the checkout locale to the page language like sign-in', async () => {
+    const transport = capabilityTransport(true);
+    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });
+    const previousLang = document.documentElement.lang;
+    document.documentElement.lang = 'en-US';
+    try {
+      await client.checkout.open({ featureKey: 'paid' });
+    } finally {
+      document.documentElement.lang = previousLang;
+    }
+    const checkoutRequest = transport.requests.find(
+      (request) => request.path === '/v1/public/work-sdk/checkout',
+    );
+    expect(checkoutRequest?.body).toMatchObject({ featureKey: 'paid', locale: 'en-US' });
+  });
+
   it('opens unpaid hosted checkout in a separate window instead of an iframe', async () => {
     const checkoutWindow = { closed: false, close: vi.fn() };
     const open = vi.spyOn(window, 'open').mockReturnValue(checkoutWindow as unknown as Window);

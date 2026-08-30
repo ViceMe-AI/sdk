@@ -2,12 +2,12 @@
  * ViceMe client for hosted capabilities and optional website access.
  *
  * `ready()` and access checks remain headless. Interactive authentication and
- * checkout touch `window` only when the caller explicitly invokes them. `ready()` is
+ * checkout touch `window` only when the caller explicitly invokes them.
  * Hosted capability initialization stays local and synchronous. Website
  * access establishes its Work session lazily on the first access operation.
- * `ready()` is idempotent per instance (shares one promise), `destroy()` is idempotent and
- * synchronously cancels requests and subscriptions; every business method on a
- * destroyed client fails with `CLIENT_DESTROYED`.
+ * `ready()` is idempotent per instance (shares one promise), `destroy()` is
+ * idempotent and synchronously cancels requests and subscriptions; every
+ * business method on a destroyed client fails with `CLIENT_DESTROYED`.
  */
 
 import { clientDestroyed } from './errors.ts';

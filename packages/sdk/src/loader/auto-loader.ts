@@ -211,11 +211,14 @@ async function fetchReleaseManifest(
 }
 
 function fetchWithTimeout(url: URL): Promise<Response> {
-  const signal =
-    typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-      ? AbortSignal.timeout(MANIFEST_TIMEOUT_MS)
-      : undefined;
-  return fetch(url, { credentials: 'omit', signal });
+  // A manual controller + timer bounds the fetch on every engine, including
+  // browsers without `AbortSignal.timeout`, so a stalled manifest can never
+  // block the serialized loader queue forever.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS);
+  return fetch(url, { credentials: 'omit', signal: controller.signal }).finally(() => {
+    clearTimeout(timer);
+  });
 }
 
 async function parseManifest(response: Response): Promise<ReleaseManifest> {

@@ -1,14 +1,16 @@
 # ViceMe SDK
 
-PUBLIC-only browser SDK for mounting ViceMe's Shop-hosted danmaku and Tip
-capabilities on a third-party page.
+ViceMe browser SDK for mounting Shop-hosted danmaku and Tip capabilities on a
+third-party page, plus origin-bound Website Work access.
 
 - **Package**: [`@viceme-ai/sdk`](./packages/sdk)
 - **Hosted features**: `danmaku` and `tip`
 - **Status**: `0.x`; the normal `dev -> main` release workflow owns versioning
 
-The external SDK has no Work Session, browser Bearer token, authentication,
-follow, access gate, purchase, or checkout API. Shop resolves `workKey` through
+Website access (`client.auth`, `client.access`, `client.checkout`) establishes
+a short-lived, memory-only Work session on first use; login, explicit follow,
+and hosted checkout remain ViceMe-owned UI, and the host never receives a
+general ViceMe session or payment credential. Shop resolves `workKey` through
 `WorkSdkAccess`; the Work and each requested feature must be active. Tip also
 requires an active production `WEBSITE_WIDGET` application whose registered
 Origin exactly matches the embedding page.
@@ -110,16 +112,21 @@ interface ViceMeClient {
   readonly workKey: string;
   readonly region: ViceMeRegion;
   readonly state: ViceMeClientState;
+  readonly auth: AuthCapability;
+  readonly access: AccessCapability;
+  readonly checkout: CheckoutCapability;
 
   ready(): Promise<void>;
-  hasCapability(name: string): boolean; // build support: "danmaku" or "tip"
+  hasCapability(name: string): boolean; // "danmaku"/"tip" build support; other names need a Work session
   destroy(): void;
 }
 ```
 
-The released package exports exactly `@viceme-ai/sdk`,
-`@viceme-ai/sdk/danmaku`, and `@viceme-ai/sdk/tip`. There is no
-`@viceme-ai/sdk/testing` transport or Session adapter.
+The released package exports `@viceme-ai/sdk`, `@viceme-ai/sdk/danmaku`,
+`@viceme-ai/sdk/tip`, and the deterministic `@viceme-ai/sdk/testing` adapter
+(mock transport plus test client). The testing entry ships for consumer tests
+only; it is excluded from CDN bundles and must not be imported from production
+code.
 
 `@viceme-ai/sdk/tip` also exports `TipPaidDetail` and
 `TipWidgetCloseDetail` for the sanitized `viceme:tip-paid` and
@@ -143,6 +150,10 @@ The released package exports exactly `@viceme-ai/sdk`,
   close state; it resets the hosted payment surface before emitting close. The
   SDK validates and redispatches that close notification but does not require a
   host-page listener for the default close behavior.
+- Website access calls only the public `/v1/public/work-sdk/*` API with the
+  memory-only Work session token; interactive sign-in runs in the Shop-hosted
+  `/sdk/login` frame and hosted checkout in a separate Shop window. Tokens
+  never reach `localStorage` or cookies.
 
 ## Development
 

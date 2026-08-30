@@ -425,7 +425,8 @@ export function createCapabilities(deps: CapabilityDeps): {
     await deps.ready();
     const body = {
       featureKey,
-      locale: options.locale ?? 'zh-CN',
+      // Match the sign-in flow's locale resolution; callers can pin a locale.
+      locale: options.locale ?? resolveLocale(),
     };
     const response = objectBody(
       (
