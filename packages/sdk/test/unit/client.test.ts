@@ -26,7 +26,7 @@ describe('ViceMeClient', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('exposes only lifecycle, version, work identity, region, and hosted capabilities', () => {
+  it('adds lazy website access without changing hosted capability support', () => {
     const client = createViceMe({ workKey: 'wrk_test', region: 'global' });
 
     expect(typeof client.version).toBe('string');
@@ -35,15 +35,20 @@ describe('ViceMeClient', () => {
     expect(client.hasCapability('danmaku')).toBe(true);
     expect(client.hasCapability('tip')).toBe(true);
     expect(client.hasCapability('checkout')).toBe(false);
-    for (const removed of ['auth', 'access', 'checkout', 'follow', 'session']) {
-      expect(client).not.toHaveProperty(removed);
-    }
+    expect(client.auth).toBeDefined();
+    expect(client.access).toBeDefined();
+    expect(client.checkout).toBeDefined();
+    expect(client).not.toHaveProperty('session');
     expect(Object.getOwnPropertyNames(Object.getPrototypeOf(client)).sort()).toEqual([
+      'apiMajor',
+      'capabilities',
       'constructor',
       'destroy',
       'hasCapability',
+      'markDegraded',
       'ready',
       'region',
+      'sessionSnapshot',
       'state',
       'version',
       'workKey',

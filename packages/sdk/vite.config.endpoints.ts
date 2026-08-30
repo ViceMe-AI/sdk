@@ -20,6 +20,12 @@ function buildOrigin(name: string, fallback: string): string {
 
 export function buildEndpointDefinitions(): Record<string, string> {
   return {
+    __VICEME_BUILD_CN_API_BASE_URL__: JSON.stringify(
+      buildOrigin('VICEME_BUILD_CN_API_BASE_URL', 'https://api.viceme.cn'),
+    ),
+    __VICEME_BUILD_GLOBAL_API_BASE_URL__: JSON.stringify(
+      buildOrigin('VICEME_BUILD_GLOBAL_API_BASE_URL', 'https://api.viceme.ai'),
+    ),
     __VICEME_BUILD_CN_WIDGET_ORIGIN__: JSON.stringify(
       buildOrigin('VICEME_BUILD_CN_WIDGET_ORIGIN', 'https://viceme.cn'),
     ),
