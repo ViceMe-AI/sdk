@@ -1,25 +1,25 @@
 # Public API Contract Snapshots
 
-This directory holds the machine-readable snapshot of the Shop public danmaku
-API (`/v1/danmaku/messages`).
+This directory holds the machine-readable snapshot of the Shop public SDK APIs
+for hosted danmaku and Website Work access.
 
 ## Authority
 
-- The **Shop API** is the single authority for the HTTP contract. Session,
-  authentication, follow, access, checkout, payment-provider, Admin, and ops
-  endpoints are not part of this snapshot.
+- The **Shop API** is the single authority for the HTTP contract. The snapshot
+  contains only anonymous danmaku and origin-bound Website Work access calls;
+  payment-provider, Admin, and ops endpoints are not public SDK contracts.
 - TypeScript reference types are generated from the snapshot by
   `scripts/generate-contracts.mjs` into
   `packages/sdk/src/generated/public-contract.ts` (committed), and CI fails if
   regeneration drifts.
-- The external SDK does not call this endpoint. It mounts Shop's hosted
-  `/embed/danmaku` iframe; the Shop SDK inside that frame calls the API.
+- Danmaku remains hosted in Shop's `/embed/danmaku` iframe. Access calls use a
+  short-lived Work token bound to the published Work and its verified Origin.
 
 ## Current state
 
-`public-capabilities.openapi.json` contains only anonymous message reads and
-writes for published Works whose active `WorkSdkAccess` includes `danmaku`.
-There is no SDK Work Session or generic browser Bearer token.
+`public-capabilities.openapi.json` contains anonymous message reads/writes plus
+Work-session, follow, access-decision, feature-presentation, and hosted-checkout
+entry points. The Work token is memory-only and is not a general user session.
 
 The manifest records snapshot provenance:
 
@@ -27,7 +27,7 @@ The manifest records snapshot provenance:
 {
   "contractVersion": "1.0.0",
   "sha256": "…",
-  "generatedFrom": "ViceMe Shop public danmaku contract",
+  "generatedFrom": "ViceMe Shop public SDK contract",
   "generatedAt": "…"
 }
 ```
@@ -35,11 +35,11 @@ The manifest records snapshot provenance:
 ## Update flow
 
 ```text
-Shop changes the public danmaku API
+Shop changes a public SDK API
   -> Shop updates the public contract artifact
   -> SDK "Contract Sync" PR replaces the snapshot + manifest
   -> pnpm contracts:generate && pnpm contracts:check
-  -> SDK validates its hosted-runtime boundary
+  -> SDK validates its hosted and origin-bound runtime boundaries
   -> stable SDK release
   -> Shop enables the capability
 ```

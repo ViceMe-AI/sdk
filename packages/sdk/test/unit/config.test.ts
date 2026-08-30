@@ -4,10 +4,17 @@ import { validatePublicConfig } from '../../src/core/config.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('validatePublicConfig', () => {
-  it('accepts exactly workKey and region', () => {
+  it('accepts workKey, region, and an optional abort signal', () => {
     expect(validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn' })).toEqual({
       workKey: 'wrk_public_xxx',
       region: 'cn',
+      signal: undefined,
+    });
+    const signal = new AbortController().signal;
+    expect(validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn', signal })).toEqual({
+      workKey: 'wrk_public_xxx',
+      region: 'cn',
+      signal,
     });
   });
 
@@ -16,7 +23,7 @@ describe('validatePublicConfig', () => {
     expect(() => validatePublicConfig(null)).toThrow(ViceMeError);
   });
 
-  it.each(['apiBaseUrl', 'signal', 'transport', 'token', 'presenter'])(
+  it.each(['apiBaseUrl', 'transport', 'token', 'presenter'])(
     'rejects removed or internal field %s',
     (field) => {
       expect(() =>

@@ -1,26 +1,38 @@
 /**
- * Local ViceMe client for public hosted capabilities.
+ * ViceMe client for hosted capabilities and optional website access.
  *
- * Initialization performs no network request. The static loader owns release
- * manifest/chunk loading, while the hosted iframe owns Shop API calls.
+ * `ready()` and access checks remain headless. Interactive authentication and
+ * checkout touch `window` only when the caller explicitly invokes them. `ready()` is
+ * Hosted capability initialization stays local and synchronous. Website
+ * access establishes its Work session lazily on the first access operation.
+ * `ready()` is idempotent per instance (shares one promise), `destroy()` is idempotent and
+ * synchronously cancels requests and subscriptions; every business method on a
+ * destroyed client fails with `CLIENT_DESTROYED`.
  */
 
 import { clientDestroyed } from './errors.ts';
 import { Lifecycle, type ViceMeClientState } from './lifecycle.ts';
 import type { ViceMeConfig, ViceMeRegion } from './config.ts';
-import { SDK_VERSION } from '../version.ts';
-
-const MARK_DEGRADED = Symbol('ViceMeClient.markDegraded');
-
-interface DegradableViceMeClient {
-  [MARK_DEGRADED](): void;
-}
+import { SessionManager } from '../session/session.ts';
+import type { Transport } from '../transport/transport.ts';
+import { API_MAJOR, SDK_VERSION } from '../version.ts';
+import {
+  createCapabilities,
+  type AccessCapability,
+  type AuthCapability,
+  type CheckoutCapability,
+} from './capabilities.ts';
+import type { AccessPresenter } from './presentation.ts';
+import { BUILD_WIDGET_ORIGINS } from './build-endpoints.ts';
 
 export interface ViceMeClient {
   readonly version: string;
   readonly workKey: string;
   readonly region: ViceMeRegion;
   readonly state: ViceMeClientState;
+  readonly auth: AuthCapability;
+  readonly access: AccessCapability;
+  readonly checkout: CheckoutCapability;
   ready(): Promise<void>;
   hasCapability(name: string): boolean;
   destroy(): void;
@@ -32,20 +44,78 @@ export interface ViceMeMountedInstance {
   destroy(): void;
 }
 
-/** Internal loader hook; not part of the client object's string-keyed surface. */
+/** Internal loader hook; keeps degradation outside the public client contract. */
 export function markClientDegraded(client: ViceMeClient): void {
-  if (MARK_DEGRADED in client) {
-    (client as ViceMeClient & DegradableViceMeClient)[MARK_DEGRADED]();
+  if (client instanceof ViceMeClientImpl) client.markDegraded();
+}
+
+/** Marker so in-flight requests cancelled by `destroy()` map to CLIENT_DESTROYED. */
+class DestroySignalReason extends DOMException {
+  constructor() {
+    super('ViceMe client destroyed.', 'AbortError');
   }
+}
+
+export interface ViceMeClientDeps {
+  config: ViceMeConfig;
+  transport: Transport;
+  /** Interaction override for the testing entry only. */
+  presenter?: AccessPresenter;
+  /** Injectable clock (testing only). */
+  now?: () => number;
 }
 
 export class ViceMeClientImpl implements ViceMeClient {
   readonly #lifecycle = new Lifecycle();
+  readonly #session: SessionManager;
   readonly #config: ViceMeConfig;
+  readonly #internalSignal = new AbortController();
   #readyPromise: Promise<void> | undefined;
+  readonly auth: AuthCapability;
+  readonly access: AccessCapability;
+  readonly checkout: CheckoutCapability;
+  /** Detaches the caller-signal listener; undefined when none was attached. */
+  #detachCallerAbort: (() => void) | undefined;
 
-  constructor(config: ViceMeConfig) {
-    this.#config = config;
+  constructor(deps: ViceMeClientDeps) {
+    this.#config = deps.config;
+    this.#session = new SessionManager({
+      workKey: deps.config.workKey,
+      transport: deps.transport,
+      signal: this.#internalSignal.signal,
+      ...(deps.now !== undefined ? { now: deps.now } : {}),
+    });
+    const capabilities = createCapabilities({
+      session: this.#session,
+      workKey: deps.config.workKey,
+      widgetOrigin: BUILD_WIDGET_ORIGINS[deps.config.region],
+      presenter: deps.presenter,
+      ready: () => this.#readyAccess(),
+    });
+    this.auth = capabilities.auth;
+    this.access = capabilities.access;
+    this.checkout = capabilities.checkout;
+    const callerSignal = deps.config.signal;
+    if (callerSignal) {
+      // Propagate the caller's own abort reason when one was set.
+      const abortInternal = () => {
+        this.#internalSignal.abort(
+          callerSignal.reason instanceof Error
+            ? callerSignal.reason
+            : new DOMException('Caller signal aborted.', 'AbortError'),
+        );
+      };
+      // An already-aborted signal never fires the listener; check
+      // synchronously so a pre-cancelled caller cannot issue session
+      // requests or reach the network at all.
+      if (callerSignal.aborted) abortInternal();
+      else {
+        callerSignal.addEventListener('abort', abortInternal, { once: true });
+        this.#detachCallerAbort = () => {
+          callerSignal.removeEventListener('abort', abortInternal);
+        };
+      }
+    }
   }
 
   get version(): string {
@@ -64,6 +134,11 @@ export class ViceMeClientImpl implements ViceMeClient {
     return this.#lifecycle.state;
   }
 
+  /** Internal: public API major, used by the loader registry namespace. */
+  get apiMajor(): number {
+    return API_MAJOR;
+  }
+
   ready(): Promise<void> {
     if (this.#lifecycle.destroyed) return Promise.reject(clientDestroyed());
     if (!this.#readyPromise) {
@@ -73,22 +148,53 @@ export class ViceMeClientImpl implements ViceMeClient {
     return this.#readyPromise;
   }
 
+  async #readyAccess(): Promise<void> {
+    if (this.#lifecycle.destroyed) throw clientDestroyed();
+    await this.ready();
+    try {
+      await this.#session.establish();
+      if (this.#lifecycle.destroyed) throw clientDestroyed();
+    } catch (error) {
+      if (this.#lifecycle.destroyed) throw clientDestroyed();
+      this.#session.invalidate();
+      throw error;
+    }
+  }
+
   hasCapability(name: string): boolean {
-    return !this.#lifecycle.destroyed && (name === 'danmaku' || name === 'tip');
+    if (this.#lifecycle.destroyed) return false;
+    const capabilities = this.#session.snapshot?.work.capabilities;
+    return name === 'danmaku' || name === 'tip' || capabilities?.includes(name) === true;
+  }
+
+  /** Names of capabilities enabled for this work (empty before `ready()`). */
+  get capabilities(): readonly string[] {
+    return this.#session.snapshot?.work.capabilities ?? [];
   }
 
   /**
    * Internal: mark one capability unavailable without taking down the client
    * (loader uses this when a feature chunk fails after the core is READY).
    */
-  [MARK_DEGRADED](): void {
+  markDegraded(): void {
     if (this.#lifecycle.state === 'READY') this.#lifecycle.transition('DEGRADED');
+  }
+
+  /** Internal: session snapshot access for capability modules. */
+  get sessionSnapshot() {
+    return this.#session.snapshot;
   }
 
   destroy(): void {
     if (this.#lifecycle.destroyed) return;
     this.#lifecycle.transition('DESTROYED');
+    this.#internalSignal.abort(new DestroySignalReason());
+    this.#session.destroy();
     this.#lifecycle.clearListeners();
     this.#readyPromise = undefined;
+    // A destroyed client must not stay reachable through the caller's own
+    // (possibly long-lived, never-aborting) signal.
+    this.#detachCallerAbort?.();
+    this.#detachCallerAbort = undefined;
   }
 }

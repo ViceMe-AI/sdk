@@ -293,7 +293,7 @@ describe('tip mount', () => {
     expect(frame.src).toContain('https://viceme.ai/widget/tip/wrk_test');
     globalHandle.destroy();
 
-    const unsupported: ViceMeClient = {
+    const unsupported = {
       version: '0.3.0',
       workKey: 'wrk_test',
       region: 'cn',
@@ -301,7 +301,7 @@ describe('tip mount', () => {
       ready: vi.fn(async () => undefined),
       hasCapability: () => false,
       destroy: vi.fn(),
-    };
+    } as unknown as ViceMeClient;
     await expect(
       mount(unsupported, { target: document.body, theme: 'auto' }),
     ).rejects.toMatchObject({ code: 'CAPABILITY_DISABLED', capability: 'tip' });

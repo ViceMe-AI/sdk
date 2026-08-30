@@ -114,7 +114,10 @@ try {
     if (!client.hasCapability('danmaku') || !client.hasCapability('tip') || client.hasCapability('checkout')) {
       throw new Error('PUBLIC-only capability check broken');
     }
-    for (const removed of ['auth', 'access', 'checkout', 'follow', 'session']) {
+    if (typeof client.auth?.getState !== 'function') throw new Error('auth capability missing');
+    if (typeof client.access?.check !== 'function') throw new Error('access capability missing');
+    if (typeof client.checkout?.open !== 'function') throw new Error('checkout capability missing');
+    for (const removed of ['follow', 'session']) {
       if (removed in client) throw new Error('removed client surface restored: ' + removed);
     }
     client.destroy();
@@ -139,6 +142,7 @@ try {
   if (!manifest.files['index.js']?.sha256) throw new Error('manifest missing index.js digest');
   if (!manifest.files['danmaku.js']?.sha256) throw new Error('manifest missing danmaku.js digest');
   if (!manifest.files['tip.js']?.sha256) throw new Error('manifest missing tip.js digest');
+  if (!manifest.files['testing.js']?.sha256) throw new Error('manifest missing testing.js digest');
   if (manifest.features?.danmaku !== 'danmaku.js' || manifest.features?.tip !== 'tip.js')
     throw new Error('manifest missing hosted features');
 

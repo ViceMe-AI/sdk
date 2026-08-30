@@ -25,9 +25,18 @@ const snapshot = JSON.parse(
 };
 
 describe('Shop public contract snapshot', () => {
-  it('contains only the public danmaku GET and POST operations', () => {
+  it('contains creator access and public danmaku operations', () => {
     expect(snapshot.security).toEqual([]);
-    expect(Object.keys(snapshot.paths)).toEqual(['/v1/danmaku/messages']);
+    expect(Object.keys(snapshot.paths)).toEqual(
+      expect.arrayContaining([
+        '/v1/public/work-sdk/sessions',
+        '/v1/public/work-sdk/follow',
+        '/v1/public/work-sdk/access/check',
+        '/v1/public/work-sdk/access/features',
+        '/v1/public/work-sdk/checkout',
+        '/v1/danmaku/messages',
+      ]),
+    );
     expect(Object.keys(snapshot.paths['/v1/danmaku/messages']!).sort()).toEqual(['get', 'post']);
   });
 

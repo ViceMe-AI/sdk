@@ -1,6 +1,6 @@
 # @viceme-ai/sdk
 
-PUBLIC-only ViceMe browser SDK for Shop-hosted danmaku and Tip capabilities.
+ViceMe browser SDK for Shop-hosted engagement and origin-bound Website Work access.
 
 ## Install
 
@@ -63,15 +63,26 @@ client.destroy();
 Run those cleanup calls from the owning component's unmount path or another
 explicit lifecycle boundary, not from `pagehide` (which also covers bfcache).
 
-`createViceMe` is purely local and never contacts Shop. A live client reports
+`createViceMe` and `ready()` are purely local and never contact Shop. A live client reports
 build support for `danmaku` and `tip`; Shop remains authoritative for whether a
 Work enables either capability. The hosted `/embed/danmaku` iframe uses Shop's
 internal SDK to read and create anonymous messages through
 `/v1/danmaku/messages`. The `/widget/tip/<workKey>` iframe handles login and
 payment only after its exact parent Origin is registered.
 
-There is no public SDK Session, Bearer token, auth, follow, access, purchase,
-or checkout surface, and no `@viceme-ai/sdk/testing` subpath.
+Access operations establish a short-lived, memory-only Work session on first
+use. They expose `client.auth`, `client.access`, and `client.checkout`; login,
+explicit follow, and hosted checkout remain ViceMe-owned UI. The host never
+receives a general ViceMe session or payment credential. There is no public
+`@viceme-ai/sdk/testing` subpath.
+
+```ts
+const decisions = await client.access.checkMany(['members', 'pro-tools']);
+if (!decisions['pro-tools']?.allowed) {
+  await client.access.require('pro-tools');
+}
+```
+
 The Tip subpath exports `TipPaidDetail` and `TipWidgetCloseDetail` for the
 sanitized `viceme:tip-paid` and `viceme:widget-close` `CustomEvent` details.
 

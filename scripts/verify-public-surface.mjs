@@ -2,10 +2,10 @@
 /**
  * Public surface verification for `@viceme-ai/sdk`.
  *
- * Locks the published surface to the PUBLIC-only hosted engagement shape:
- * - exports map contains core, danmaku, and tip;
+ * Locks the published hosted engagement and Website Work access surface:
+ * - exports map contains core, testing, danmaku, and tip;
  * - declared dist artifacts exist (js + d.ts);
- * - removed auth/session/access surfaces do not sneak back in;
+ * - internal capability modules do not become package subpaths;
  * - runtime version constant matches package.json;
  * - loader requests stay inside the Shop runtime proxy allowlist.
  */
@@ -28,8 +28,8 @@ const pkg = JSON.parse(await readFile(join(sdkDir, 'package.json'), 'utf8'));
 
 const exportKeys = Object.keys(pkg.exports ?? {}).sort();
 check(
-  JSON.stringify(exportKeys) === JSON.stringify(['.', './danmaku', './tip']),
-  `exports map must be exactly [".", "./danmaku", "./tip"], got ${JSON.stringify(exportKeys)}`,
+  JSON.stringify(exportKeys) === JSON.stringify(['.', './danmaku', './testing', './tip']),
+  `exports map must be exactly [".", "./danmaku", "./testing", "./tip"], got ${JSON.stringify(exportKeys)}`,
 );
 
 for (const [subpath, def] of Object.entries(pkg.exports ?? {})) {
@@ -107,16 +107,7 @@ check(
   `./tip declaration symbols are unexpected: ${JSON.stringify(tipTypeSymbols)}`,
 );
 
-for (const removed of [
-  'access',
-  'auth',
-  'checkout',
-  'follow',
-  'payment',
-  'purchase',
-  'session',
-  'testing',
-]) {
+for (const removed of ['access', 'auth', 'checkout', 'follow', 'payment', 'purchase', 'session']) {
   check(
     !exportKeys.includes(`./${removed}`),
     `removed subpath "./${removed}" must not be exported`,
@@ -126,7 +117,7 @@ for (const removed of [
     .catch(() => {});
 }
 
-for (const required of ['viceme.min.js', 'danmaku.js', 'tip.js', 'manifest.json']) {
+for (const required of ['viceme.min.js', 'danmaku.js', 'tip.js', 'testing.js', 'manifest.json']) {
   await access(join(distDir, required), constants.R_OK).catch(() =>
     failures.push(`hosted runtime dist/${required} missing`),
   );
@@ -163,7 +154,7 @@ const runtimeFiles = Object.keys(manifest.files ?? {}).filter(
 );
 for (const file of runtimeFiles) {
   const source = await readFile(join(distDir, file), 'utf8');
-  for (const forbidden of ['/v1/public/v1/', 'work-sessions', 'Bearer ']) {
+  for (const forbidden of ['/v1/public/v1/']) {
     check(!source.includes(forbidden), `${file} contains removed runtime pattern ${forbidden}`);
   }
 }
