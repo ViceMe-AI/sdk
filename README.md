@@ -1,17 +1,18 @@
 # ViceMe SDK
 
-PUBLIC-only browser SDK for mounting ViceMe's Shop-hosted danmaku and Tip
-capabilities on a third-party page.
+Browser SDK for mounting ViceMe's Shop-hosted danmaku and Tip capabilities and
+for adding server-authoritative login, follow, and paid access gates to a
+published creator website.
 
 - **Package**: [`@viceme-ai/sdk`](./packages/sdk)
 - **Hosted features**: `danmaku` and `tip`
+- **Website access**: authentication, explicit creator follow, and one-time paid unlock
 - **Status**: `0.x`; the normal `dev -> main` release workflow owns versioning
 
-The external SDK has no Work Session, browser Bearer token, authentication,
-follow, access gate, purchase, or checkout API. Shop resolves `workKey` through
-`WorkSdkAccess`; the Work and each requested feature must be active. Tip also
-requires an active production `WEBSITE_WIDGET` application whose registered
-Origin exactly matches the embedding page.
+Shop resolves `workKey` through `WorkSdkAccess`; the Work, verified embedding
+Origin, and requested feature must be active. Website access establishes
+short-lived in-memory Work and user sessions. Login never follows a creator
+automatically, and payment return parameters never grant access.
 
 ## Static HTML
 
@@ -99,6 +100,29 @@ pages entering the back/forward cache.
 `createViceMe({ workKey, region })` validates configuration and initializes a
 local lifecycle only. It performs no network request.
 
+## Website Access
+
+Configure the Website Work and its follow or paid features through the ViceMe
+publish flow first. Host code only consumes the returned `workKey` and feature
+keys:
+
+```ts
+const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
+const features = await client.access.getFeatures();
+const memberFeature = features.find((feature) => feature.featureKey === 'member-content');
+
+async function openProtectedContent() {
+  const decision = await client.access.require('member-content');
+  if (!decision.allowed) return;
+  await openMemberContent();
+}
+```
+
+`access.require()` follows the Shop decision: sign in, ask for separate follow
+consent, or open Hosted Checkout. It rechecks server state before returning an
+allowed decision. Creator consent UI shows identity and published work count,
+but does not request or render recent work covers.
+
 ## Public Surface
 
 ```ts
@@ -110,16 +134,20 @@ interface ViceMeClient {
   readonly workKey: string;
   readonly region: ViceMeRegion;
   readonly state: ViceMeClientState;
+  readonly auth: AuthCapability;
+  readonly access: AccessCapability;
+  readonly checkout: CheckoutCapability;
 
   ready(): Promise<void>;
-  hasCapability(name: string): boolean; // build support: "danmaku" or "tip"
+  hasCapability(name: string): boolean;
   destroy(): void;
 }
 ```
 
-The released package exports exactly `@viceme-ai/sdk`,
-`@viceme-ai/sdk/danmaku`, and `@viceme-ai/sdk/tip`. There is no
-`@viceme-ai/sdk/testing` transport or Session adapter.
+The released package exports `@viceme-ai/sdk`, `@viceme-ai/sdk/testing`,
+`@viceme-ai/sdk/danmaku`, and `@viceme-ai/sdk/tip`. The testing entry is for
+injecting deterministic transports and presenters; production code uses the
+main entry.
 
 `@viceme-ai/sdk/tip` also exports `TipPaidDetail` and
 `TipWidgetCloseDetail` for the sanitized `viceme:tip-paid` and

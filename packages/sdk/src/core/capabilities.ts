@@ -24,7 +24,6 @@ export interface FollowTarget {
   avatarUrl: string | null;
   description: string | null;
   workCount: number;
-  coverUrls: string[];
 }
 
 export type AccessReason =
@@ -151,7 +150,6 @@ function parseFollowState(value: unknown): FollowState {
       avatarUrl: target.avatarUrl,
       description: target.description,
       workCount: target.publishedWorkCount as number,
-      coverUrls: [],
     },
   };
 }

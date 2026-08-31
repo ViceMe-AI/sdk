@@ -5,20 +5,19 @@ import { defaultAccessPresenter } from '../../src/core/presentation.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('default access presenter', () => {
-  it('shows complete creator information in the login consent layer', async () => {
+  it('shows creator information without recent work covers in the follow consent layer', async () => {
     const fullDescription = '专注于 AI 创作工具与智能体工作流。'.repeat(4);
     const perform = vi.fn(async () => ({ type: 'completed' as const }));
     const presented = defaultAccessPresenter({
-      featureKey: 'auth',
-      reason: 'AUTH_REQUIRED',
-      action: 'SIGN_IN',
+      featureKey: 'followers',
+      reason: 'FOLLOW_REQUIRED',
+      action: 'FOLLOW',
       followTarget: {
         kind: 'CREATOR',
         displayName: '归藏',
         avatarUrl: 'https://cdn.example.com/creator.jpg',
         description: fullDescription,
         workCount: 2,
-        coverUrls: ['https://cdn.example.com/work-one.jpg', 'https://cdn.example.com/work-two.jpg'],
       },
       perform,
     });
@@ -44,16 +43,15 @@ describe('default access presenter', () => {
     expect(shadow.querySelector("[data-viceme='profile-name']")?.parentElement).toBe(summary);
     expect(shadow.querySelector("[data-viceme='profile-stats']")?.parentElement).toBe(summary);
     expect(shadow.querySelector("[data-viceme='profile-separator']")?.textContent).toBe('·');
-    expect(shadow.querySelectorAll("[data-viceme='profile-cover']")).toHaveLength(2);
+    expect(shadow.querySelector("[data-viceme='profile-covers']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile-cover']")).toBeNull();
     expect(shadow.querySelector("[data-viceme='close']")?.getAttribute('aria-label')).toBe('关闭');
-    expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('授权');
+    expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('关注');
     expect(shadow.querySelector('[data-viceme-cancel]')).toBeNull();
     expect(shadow.querySelector("[data-viceme='description']")?.textContent).toBe('');
-    expect(shadow.textContent).toContain('授权');
+    expect(shadow.textContent).toContain('关注');
     const styles = shadow.querySelector('style')?.textContent ?? '';
-    expect(styles).toContain("[data-action='SIGN_IN'] [data-viceme='description']");
     expect(styles).toContain('box-sizing: border-box;');
-    expect(styles).toContain('background: transparent;');
     expect(styles).not.toContain('background: rgb(0 0 0 / 56%);');
     expect(styles).not.toContain('min-height: min(32rem');
     expect(styles).not.toContain("[data-viceme='close']:hover");
@@ -63,31 +61,6 @@ describe('default access presenter', () => {
     (shadow.querySelector("[data-viceme='close']") as HTMLButtonElement).click();
     await expect(presented).resolves.toBe('dismissed');
     expect(perform).not.toHaveBeenCalled();
-  });
-
-  it('omits the cover layer when the creator has no covers', async () => {
-    const presented = defaultAccessPresenter({
-      featureKey: 'auth',
-      reason: 'AUTH_REQUIRED',
-      action: 'SIGN_IN',
-      followTarget: {
-        kind: 'CREATOR',
-        displayName: '归藏',
-        avatarUrl: null,
-        description: 'AI 创业者',
-        workCount: 0,
-        coverUrls: [],
-      },
-      perform: vi.fn(),
-    });
-    const layer = document.querySelector('viceme-access-layer')!;
-    const shadow = layer.shadowRoot!;
-
-    expect(shadow.querySelector("[data-viceme='profile']")).not.toBeNull();
-    expect(shadow.querySelector("[data-viceme='profile-covers']")).toBeNull();
-
-    (shadow.querySelector("[data-viceme='close']") as HTMLButtonElement).click();
-    await expect(presented).resolves.toBe('dismissed');
   });
 
   it('opens checkout only after an explicit action and waits for the external window', async () => {
