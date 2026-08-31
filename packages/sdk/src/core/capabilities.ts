@@ -24,20 +24,18 @@ export interface FollowTarget {
   avatarUrl: string | null;
   description: string | null;
   workCount: number;
-  coverUrls: string[];
 }
 
 export type AccessReason =
+  | 'PUBLIC'
   | 'OWNER'
   | 'FOLLOWING'
-  | 'PURCHASED'
   | 'ENTITLED'
   | 'AUTH_REQUIRED'
   | 'FOLLOW_REQUIRED'
   | 'PURCHASE_REQUIRED'
   | 'FEATURE_NOT_FOUND'
-  | 'FEATURE_DISABLED'
-  | 'POLICY_UNSUPPORTED';
+  | 'FEATURE_DISABLED';
 
 export interface AccessDecision {
   allowed: boolean;
@@ -91,6 +89,7 @@ export interface CheckoutCapability {
 interface CapabilityDeps {
   session: SessionManager;
   workKey: string;
+  widgetOrigin: string;
   presenter?: AccessPresenter;
   ready: () => Promise<void>;
 }
@@ -111,15 +110,15 @@ function malformedResponse(): ViceMeError {
 function parseUser(value: unknown): WorkUser {
   const body = objectBody(value);
   if (
-    typeof body.subject !== 'string' ||
-    !(typeof body.nickname === 'string' || body.nickname === null) ||
+    typeof body.id !== 'string' ||
+    !(typeof body.displayName === 'string' || body.displayName === null) ||
     !(typeof body.avatarUrl === 'string' || body.avatarUrl === null)
   ) {
     throw malformedResponse();
   }
   return {
-    subject: body.subject,
-    nickname: body.nickname,
+    subject: body.id,
+    nickname: body.displayName,
     avatarUrl: body.avatarUrl,
   };
 }
@@ -132,17 +131,13 @@ function parseFollowState(value: unknown): FollowState {
   ) {
     throw malformedResponse();
   }
-  const target = objectBody(body.target);
+  const target = objectBody(body.creator);
   if (
-    !(target.kind === 'CREATOR' || target.kind === 'USER') ||
     typeof target.displayName !== 'string' ||
     !(typeof target.avatarUrl === 'string' || target.avatarUrl === null) ||
     !(typeof target.description === 'string' || target.description === null) ||
-    !Number.isInteger(target.workCount) ||
-    (target.workCount as number) < 0 ||
-    !Array.isArray(target.coverUrls) ||
-    target.coverUrls.length > 2 ||
-    !target.coverUrls.every((url) => typeof url === 'string')
+    !Number.isInteger(target.publishedWorkCount) ||
+    (target.publishedWorkCount as number) < 0
   ) {
     throw malformedResponse();
   }
@@ -150,12 +145,11 @@ function parseFollowState(value: unknown): FollowState {
     following: body.following,
     followedAt: body.followedAt,
     target: {
-      kind: target.kind,
+      kind: 'CREATOR',
       displayName: target.displayName,
       avatarUrl: target.avatarUrl,
       description: target.description,
-      workCount: target.workCount as number,
-      coverUrls: target.coverUrls as string[],
+      workCount: target.publishedWorkCount as number,
     },
   };
 }
@@ -163,16 +157,15 @@ function parseFollowState(value: unknown): FollowState {
 function parseDecision(value: unknown): AccessDecision {
   const body = objectBody(value);
   const reasons: ReadonlySet<string> = new Set([
+    'PUBLIC',
     'OWNER',
     'FOLLOWING',
-    'PURCHASED',
     'ENTITLED',
     'AUTH_REQUIRED',
     'FOLLOW_REQUIRED',
     'PURCHASE_REQUIRED',
     'FEATURE_NOT_FOUND',
     'FEATURE_DISABLED',
-    'POLICY_UNSUPPORTED',
   ]);
   const actions: ReadonlySet<unknown> = new Set([null, 'SIGN_IN', 'FOLLOW', 'CHECKOUT']);
   if (
@@ -192,7 +185,6 @@ function parseDecision(value: unknown): AccessDecision {
 
 function parseFeaturePresentation(value: unknown): AccessFeaturePresentation {
   const body = objectBody(value);
-  const policy = objectBody(body.policy);
   if (
     typeof body.featureKey !== 'string' ||
     !/^[a-z][a-z0-9_-]{1,63}$/.test(body.featureKey) ||
@@ -200,9 +192,9 @@ function parseFeaturePresentation(value: unknown): AccessFeaturePresentation {
     body.title.trim().length === 0 ||
     body.title.length > 120 ||
     !(
-      policy.type === 'PUBLIC' ||
-      policy.type === 'FOLLOW_OWNER' ||
-      policy.type === 'WORK_ENTITLEMENT'
+      body.policyType === 'PUBLIC' ||
+      body.policyType === 'FOLLOW_OWNER' ||
+      body.policyType === 'WORK_ENTITLEMENT'
     )
   ) {
     throw malformedResponse();
@@ -216,27 +208,15 @@ function parseFeaturePresentation(value: unknown): AccessFeaturePresentation {
   ) {
     throw malformedResponse();
   }
-  if ((policy.type === 'WORK_ENTITLEMENT') !== (price !== null)) {
+  if ((body.policyType === 'WORK_ENTITLEMENT') !== (price !== null)) {
     throw malformedResponse();
   }
   return {
     featureKey: body.featureKey,
     title: body.title,
-    policy: { type: policy.type },
+    policy: { type: body.policyType },
     price: price === null ? null : { amountCents: price.amountCents as number, currency: 'CNY' },
   };
-}
-
-function parseOrigin(value: unknown): string {
-  if (typeof value !== 'string') throw malformedResponse();
-  try {
-    const origin = new URL(value).origin;
-    if (origin !== value) throw malformedResponse();
-    return origin;
-  } catch (error) {
-    if (error instanceof ViceMeError) throw error;
-    throw malformedResponse();
-  }
 }
 
 function randomVerifier(): string {
@@ -262,24 +242,6 @@ export function createCapabilities(deps: CapabilityDeps): {
   access: AccessCapability;
   checkout: CheckoutCapability;
 } {
-  const authenticate = async (code: string, codeVerifier: string): Promise<AuthState> => {
-    const exchange = objectBody(
-      (
-        await deps.session.request({
-          method: 'POST',
-          path: '/v1/public/v1/auth/exchange',
-          body: { code, codeVerifier },
-        })
-      ).body,
-    );
-    if (typeof exchange.token !== 'string' || typeof exchange.expiresAt !== 'number') {
-      throw malformedResponse();
-    }
-    const user = parseUser(exchange.user);
-    deps.session.authenticate({ token: exchange.token, expiresAt: exchange.expiresAt, user });
-    return { authenticated: true, user };
-  };
-
   const cancelled = () =>
     new ViceMeError({
       code: 'AUTH_CANCELLED',
@@ -291,7 +253,8 @@ export function createCapabilities(deps: CapabilityDeps): {
     url: string,
     completionOrigin: string,
     channel: string,
-    type: 'auth' | 'checkout',
+    type: 'auth',
+    initialization: Record<string, unknown>,
     complete: (data: Record<string, unknown>) => Promise<void>,
   ): AccessFrameAction => {
     if (typeof window === 'undefined') {
@@ -318,6 +281,20 @@ export function createCapabilities(deps: CapabilityDeps): {
       if (typeof event.data !== 'object' || event.data === null) return;
       const data = event.data as Record<string, unknown>;
       if (data.workKey !== deps.workKey || data.channel !== channel) return;
+      if (data.type === `viceme:${type}:ready`) {
+        if (event.source && 'postMessage' in event.source) {
+          (event.source as WindowProxy).postMessage(
+            {
+              type: `viceme:${type}:init`,
+              workKey: deps.workKey,
+              channel,
+              ...initialization,
+            },
+            completionOrigin,
+          );
+        }
+        return;
+      }
       if (data.type === `viceme:${type}:cancelled`) {
         cleanup();
         fail(cancelled());
@@ -339,34 +316,36 @@ export function createCapabilities(deps: CapabilityDeps): {
     };
   };
 
-  const startSignIn = async (
-    afterAuthenticate?: () => Promise<void>,
-  ): Promise<AccessActionResult> => {
+  const startSignIn = async (): Promise<AccessActionResult> => {
     await deps.ready();
+    if (typeof window === 'undefined') {
+      throw new ViceMeError({
+        code: 'CONFIG_INVALID',
+        message: 'Interactive access requires a browser window.',
+        retryable: false,
+      });
+    }
     const channel = randomVerifier();
-    const response = await deps.session.request({
-      method: 'POST',
-      path: '/v1/public/v1/auth/wechat/authorize',
-      body: {
-        channel,
-        // Keep the debuggable QR flow until the embedded WeChat H5 design is restored.
-        clientType: 'pc',
-        locale: resolveLocale(),
-      },
-    });
-    const authorize = objectBody(response.body);
-    if (typeof authorize.authorizationUrl !== 'string') throw malformedResponse();
+    const authorizationUrl = new URL('/sdk/login', deps.widgetOrigin);
+    authorizationUrl.search = new URLSearchParams({
+      workKey: deps.workKey,
+      channel,
+      parentOrigin: window.location.origin,
+      locale: resolveLocale(),
+    }).toString();
+    const workSessionToken = deps.session.snapshot?.token;
+    if (!workSessionToken) throw malformedResponse();
     return embeddedFrame(
-      authorize.authorizationUrl,
-      parseOrigin(authorize.completionOrigin),
+      authorizationUrl.toString(),
+      deps.widgetOrigin,
       channel,
       'auth',
+      { workSessionToken },
       async (data) => {
-        if (typeof data.code !== 'string' || typeof data.codeVerifier !== 'string') {
+        if (typeof data.userToken !== 'string') {
           throw malformedResponse();
         }
-        await authenticate(data.code, data.codeVerifier);
-        await afterAuthenticate?.();
+        deps.session.authenticate({ userToken: data.userToken, user: parseUser(data.user) });
       },
     );
   };
@@ -374,14 +353,14 @@ export function createCapabilities(deps: CapabilityDeps): {
   const getFollowState = async (): Promise<FollowState> => {
     await deps.ready();
     return parseFollowState(
-      (await deps.session.request({ method: 'GET', path: '/v1/public/v1/follow' })).body,
+      (await deps.session.request({ method: 'GET', path: '/v1/public/work-sdk/follow' })).body,
     );
   };
 
-  const updateFollow = async (method: 'PUT' | 'DELETE'): Promise<FollowState> => {
+  const updateFollow = async (): Promise<FollowState> => {
     await deps.ready();
     return parseFollowState(
-      (await deps.session.request({ method, path: '/v1/public/v1/follow' })).body,
+      (await deps.session.request({ method: 'PUT', path: '/v1/public/work-sdk/follow' })).body,
     );
   };
 
@@ -393,16 +372,11 @@ export function createCapabilities(deps: CapabilityDeps): {
     },
     async signIn() {
       const presenter = deps.presenter ?? defaultAccessPresenter;
-      const followTarget = (await getFollowState()).target;
       const result = await presenter({
         featureKey: 'auth',
         reason: 'AUTH_REQUIRED',
         action: 'SIGN_IN',
-        followTarget,
-        perform: () =>
-          startSignIn(async () => {
-            await updateFollow('PUT');
-          }),
+        perform: startSignIn,
       });
       if (result === 'dismissed') throw cancelled();
       return this.getState();
@@ -415,8 +389,14 @@ export function createCapabilities(deps: CapabilityDeps): {
 
   const follow: FollowCapability = {
     getState: getFollowState,
-    follow: () => updateFollow('PUT'),
-    unfollow: () => updateFollow('DELETE'),
+    follow: updateFollow,
+    unfollow: async () => {
+      throw new ViceMeError({
+        code: 'CAPABILITY_DISABLED',
+        message: 'Unfollow is not exposed by website access.',
+        retryable: false,
+      });
+    },
   };
 
   const checkMany = async (featureKeys: string[]): Promise<Record<string, AccessDecision>> => {
@@ -425,7 +405,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       (
         await deps.session.request({
           method: 'POST',
-          path: '/v1/public/v1/access/check',
+          path: '/v1/public/work-sdk/access/check',
           body: { featureKeys },
         })
       ).body,
@@ -436,22 +416,20 @@ export function createCapabilities(deps: CapabilityDeps): {
     );
   };
 
-  const startCheckout = async (
+  const createCheckout = async (
     featureKey: string,
     options: Omit<CheckoutOptions, 'featureKey'> = {},
-  ): Promise<{ result: CheckoutResult; action: AccessActionResult }> => {
+  ): Promise<CheckoutResult> => {
     await deps.ready();
-    const channel = randomVerifier();
     const body = {
       featureKey,
       locale: options.locale ?? 'zh-CN',
-      channel,
     };
     const response = objectBody(
       (
         await deps.session.request({
           method: 'POST',
-          path: '/v1/public/v1/checkout/sessions',
+          path: '/v1/public/work-sdk/checkout',
           body,
         })
       ).body,
@@ -459,34 +437,91 @@ export function createCapabilities(deps: CapabilityDeps): {
     if (typeof response.checkoutUrl !== 'string' || typeof response.alreadyOwned !== 'boolean') {
       throw malformedResponse();
     }
-    const completionOrigin = parseOrigin(response.completionOrigin);
-    const result = {
+    try {
+      new URL(response.checkoutUrl as string);
+    } catch {
+      throw malformedResponse();
+    }
+    return {
       checkoutUrl: response.checkoutUrl,
       alreadyOwned: response.alreadyOwned,
     };
+  };
+
+  const openCheckout = (result: CheckoutResult, featureKey: string): AccessActionResult => {
+    if (result.alreadyOwned) return { type: 'completed' };
+    if (typeof window === 'undefined') {
+      throw new ViceMeError({
+        code: 'CONFIG_INVALID',
+        message: 'Hosted checkout requires a browser window.',
+        retryable: false,
+      });
+    }
+    const checkoutWindow = window.open(result.checkoutUrl, '_blank', 'popup,width=520,height=760');
+    if (!checkoutWindow) {
+      throw new ViceMeError({
+        code: 'AUTH_CANCELLED',
+        message: 'The hosted checkout window was blocked.',
+        retryable: false,
+      });
+    }
+
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let settle!: () => void;
+    let fail!: (error: unknown) => void;
+    const completion = new Promise<void>((resolve, reject) => {
+      settle = resolve;
+      fail = reject;
+    });
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const decision = (await checkMany([featureKey]))[featureKey];
+        if (!decision) throw malformedResponse();
+        if (decision.allowed) {
+          active = false;
+          checkoutWindow.close();
+          settle();
+          return;
+        }
+        if (checkoutWindow.closed) {
+          active = false;
+          fail(cancelled());
+          return;
+        }
+        timer = setTimeout(() => void poll(), 1_500);
+      } catch (error) {
+        active = false;
+        fail(error);
+      }
+    };
+    timer = setTimeout(() => void poll(), 1_500);
     return {
-      result,
-      action: result.alreadyOwned
-        ? { type: 'completed' }
-        : embeddedFrame(result.checkoutUrl, completionOrigin, channel, 'checkout', async () => {}),
+      type: 'external',
+      completion,
+      cancel() {
+        if (!active) return;
+        active = false;
+        if (timer) clearTimeout(timer);
+        checkoutWindow.close();
+        settle();
+      },
     };
   };
 
   const checkout: CheckoutCapability = {
     async open(options) {
+      const checkoutResult = await createCheckout(options.featureKey, options);
+      if (checkoutResult.alreadyOwned) return checkoutResult;
       const presenter = deps.presenter ?? defaultAccessPresenter;
-      let checkoutResult: CheckoutResult | undefined;
       const presented = await presenter({
         featureKey: options.featureKey,
         reason: 'PURCHASE_REQUIRED',
         action: 'CHECKOUT',
-        perform: async () => {
-          const prepared = await startCheckout(options.featureKey, options);
-          checkoutResult = prepared.result;
-          return prepared.action;
-        },
+        perform: async () => openCheckout(checkoutResult, options.featureKey),
       });
-      if (presented === 'dismissed' || !checkoutResult) throw cancelled();
+      if (presented === 'dismissed') throw cancelled();
       return checkoutResult;
     },
   };
@@ -495,7 +530,12 @@ export function createCapabilities(deps: CapabilityDeps): {
     async getFeatures() {
       await deps.ready();
       const response = objectBody(
-        (await deps.session.request({ method: 'GET', path: '/v1/public/v1/access/features' })).body,
+        (
+          await deps.session.request({
+            method: 'GET',
+            path: '/v1/public/work-sdk/access/features',
+          })
+        ).body,
       );
       if (!Array.isArray(response.features) || response.features.length > 100) {
         throw malformedResponse();
@@ -518,13 +558,13 @@ export function createCapabilities(deps: CapabilityDeps): {
         attempts += 1
       ) {
         const nextAction = decision.nextAction;
-        if (nextAction === 'FOLLOW') {
-          await follow.follow();
+        const followTarget = nextAction === 'FOLLOW' ? (await follow.getState()).target : undefined;
+        const checkoutResult =
+          nextAction === 'CHECKOUT' ? await createCheckout(featureKey) : undefined;
+        if (checkoutResult?.alreadyOwned) {
           decision = await this.check(featureKey);
           continue;
         }
-        const followTarget =
-          nextAction === 'SIGN_IN' ? (await follow.getState()).target : undefined;
         const result = await presenter({
           featureKey,
           reason: decision.reason,
@@ -532,11 +572,12 @@ export function createCapabilities(deps: CapabilityDeps): {
           ...(followTarget ? { followTarget } : {}),
           perform: async () => {
             if (nextAction === 'SIGN_IN') {
-              return startSignIn(async () => {
-                await follow.follow();
-              });
+              return startSignIn();
+            } else if (nextAction === 'FOLLOW') {
+              await follow.follow();
+              return { type: 'completed' };
             } else {
-              return (await startCheckout(featureKey)).action;
+              return openCheckout(checkoutResult!, featureKey);
             }
           },
         });

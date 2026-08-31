@@ -1,146 +1,71 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createTestViceMe, createMemoryTransport, FIXTURE_WORK } from '../../src/testing.ts';
-import { createFetchTransport } from '../../src/transport/transport.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { createViceMe } from '../../src/index.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
-function makeClient(work = FIXTURE_WORK) {
-  const transport = createMemoryTransport({ work });
-  const client = createTestViceMe({ workKey: work.key, region: 'cn', transport });
-  return { client, transport };
-}
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('ViceMeClient', () => {
-  it('ready() is idempotent and shares one promise', async () => {
-    const { client, transport } = makeClient();
-    const a = client.ready();
-    const b = client.ready();
-    expect(a).toBe(b);
-    await a;
-    // Only one public API call despite two ready() invocations.
-    expect(transport.requests).toHaveLength(1);
+  it('initializes locally without reaching the network', async () => {
+    const fetchMock = vi.fn(() => {
+      throw new Error('unexpected network request');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createViceMe({ workKey: 'wrk_test', region: 'cn' });
+    expect(client.state).toBe('CREATED');
+
+    const first = client.ready();
+    const second = client.ready();
+    expect(first).toBe(second);
+    await first;
+
+    expect(client.state).toBe('READY');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('reports version, workKey, region', () => {
-    const { client } = makeClient();
+  it('adds lazy website access without changing hosted capability support', () => {
+    const client = createViceMe({ workKey: 'wrk_test', region: 'global' });
+
     expect(typeof client.version).toBe('string');
     expect(client.workKey).toBe('wrk_test');
-    expect(client.region).toBe('cn');
+    expect(client.region).toBe('global');
+    expect(client.hasCapability('danmaku')).toBe(true);
+    expect(client.hasCapability('tip')).toBe(true);
+    expect(client.hasCapability('checkout')).toBe(false);
+    expect(client.auth).toBeDefined();
+    expect(client.access).toBeDefined();
+    expect(client.checkout).toBeDefined();
+    expect(client).not.toHaveProperty('session');
+    expect(Object.getOwnPropertyNames(Object.getPrototypeOf(client)).sort()).toEqual([
+      'apiMajor',
+      'capabilities',
+      'constructor',
+      'destroy',
+      'hasCapability',
+      'markDegraded',
+      'ready',
+      'region',
+      'sessionSnapshot',
+      'state',
+      'version',
+      'workKey',
+    ]);
   });
 
   it('destroys idempotently and fails closed afterwards', async () => {
-    const { client } = makeClient();
+    const client = createViceMe({ workKey: 'wrk_test', region: 'cn' });
     await client.ready();
+
     client.destroy();
     client.destroy();
+
     expect(client.state).toBe('DESTROYED');
-    await expect(client.ready()).rejects.toSatisfy((err: unknown) => {
-      return err instanceof ViceMeError && err.code === 'CLIENT_DESTROYED';
-    });
-  });
-
-  it('rejects ready() when session fails, then allows retry', async () => {
-    const { client } = makeClient({
-      ...FIXTURE_WORK,
-      capabilities: ['fixture'],
-      key: 'wrk_test',
-    });
-    // First transport fails once; retry succeeds via a fresh transport.
-    const failing = createMemoryTransport({
-      work: FIXTURE_WORK,
-      sessionFailures: [new Error('boom')],
-    });
-    const c = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport: failing });
-    await expect(c.ready()).rejects.toThrow('boom');
-    expect(c.state).toBe('FAILED');
-    // Retry: the failing transport's queue is drained, so it now succeeds.
-    await c.ready();
-    expect(c.state).toBe('READY');
-    expect(client.state).not.toBe('DESTROYED');
-  });
-
-  it('destroy() aborts an in-flight session with CLIENT_DESTROYED', async () => {
-    const transport = createMemoryTransport({ work: FIXTURE_WORK, latencyMs: 50 });
-    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });
-    const ready = client.ready();
-    client.destroy();
-    await expect(ready).rejects.toSatisfy((err: unknown) => {
-      return err instanceof ViceMeError && err.code === 'CLIENT_DESTROYED';
-    });
-  });
-
-  it('a pre-aborted caller signal never issues a session request', async () => {
-    const transport = createMemoryTransport({ work: FIXTURE_WORK });
-    const controller = new AbortController();
-    controller.abort(new DOMException('cancelled before start', 'AbortError'));
-    const client = createTestViceMe({
-      workKey: 'wrk_test',
-      region: 'cn',
-      transport,
-      signal: controller.signal,
-    });
-
-    await expect(client.ready()).rejects.toSatisfy((err: unknown) => {
-      return err instanceof DOMException && err.name === 'AbortError';
-    });
-    expect(transport.requests).toHaveLength(0);
-    expect(client.state).toBe('FAILED');
-  });
-
-  it('destroy() detaches the caller-signal abort listener', async () => {
-    // A long-lived host AbortController must not retain a destroyed client
-    // through the abort listener attached in the constructor.
-    const controller = new AbortController();
-    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
-    const client = createTestViceMe({
-      workKey: 'wrk_test',
-      region: 'cn',
-      transport: createMemoryTransport({ work: FIXTURE_WORK }),
-      signal: controller.signal,
-    });
-    await client.ready();
-    client.destroy();
-
-    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
-    // Aborting after destroy stays a no-op for the destroyed client.
-    controller.abort(new DOMException('late cancel', 'AbortError'));
-    expect(client.state).toBe('DESTROYED');
-    await expect(client.ready()).rejects.toSatisfy((err: unknown) => {
-      return err instanceof ViceMeError && err.code === 'CLIENT_DESTROYED';
-    });
-  });
-
-  it('destroy during body read cancels the response and fails closed', async () => {
-    // Headers arrive instantly; the body stalls until the transport's abort
-    // signal fires (the real fetch cancels the stream the same way).
-    const fetchImpl = (_url: string, init: RequestInit) =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        headers: new Headers(),
-        json: () =>
-          new Promise<never>((_resolve, reject) => {
-            init.signal?.addEventListener('abort', () =>
-              reject(new DOMException('aborted', 'AbortError')),
-            );
-          }),
-      });
-    const client = createTestViceMe({
-      workKey: 'wrk_test',
-      region: 'cn',
-      transport: createFetchTransport({
-        apiBaseUrl: 'https://api.viceme.cn',
-        fetchImpl: fetchImpl as unknown as typeof fetch,
-      }),
-    });
-
-    const ready = client.ready();
-    await new Promise((resolve) => setTimeout(resolve, 20)); // headers delivered
-    client.destroy();
-
-    await expect(ready).rejects.toSatisfy((err: unknown) => {
-      return err instanceof ViceMeError && err.code === 'CLIENT_DESTROYED';
-    });
-    // No session snapshot can be populated by the late body.
-    expect(client.hasCapability('fixture')).toBe(false);
+    expect(client.hasCapability('danmaku')).toBe(false);
+    await expect(client.ready()).rejects.toSatisfy(
+      (error: unknown) => error instanceof ViceMeError && error.code === 'CLIENT_DESTROYED',
+    );
   });
 });

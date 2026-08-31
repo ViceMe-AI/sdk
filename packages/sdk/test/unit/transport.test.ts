@@ -25,7 +25,7 @@ describe('FetchTransport', () => {
 
     const res = await transport.request({
       method: 'POST',
-      path: '/v1/public/v1/work-sessions',
+      path: '/v1/public/work-sdk/sessions',
       body: { workKey: 'wrk_test' },
     });
 
@@ -33,7 +33,7 @@ describe('FetchTransport', () => {
     const call = fetchImpl.mock.calls[0]!;
     const url = call[0] as string;
     const init = call[1] as RequestInit;
-    expect(url).toBe('https://api.viceme.cn/v1/public/v1/work-sessions');
+    expect(url).toBe('https://api.viceme.cn/v1/public/work-sdk/sessions');
     expect(init.credentials).toBe('omit');
     expect(init.mode).toBe('cors');
     expect((init.headers as Record<string, string>)['content-type']).toBe('application/json');
@@ -54,7 +54,7 @@ describe('FetchTransport', () => {
     });
 
     await expect(
-      transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' }),
+      transport.request({ method: 'POST', path: '/v1/public/work-sdk/sessions' }),
     ).rejects.toSatisfy((err: unknown) => {
       const e = err as ViceMeError;
       return e instanceof ViceMeError && e.code === 'WORK_NOT_FOUND' && e.requestId === 'srv-1';
@@ -70,7 +70,7 @@ describe('FetchTransport', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     await expect(
-      transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' }),
+      transport.request({ method: 'POST', path: '/v1/public/work-sdk/sessions' }),
     ).rejects.toSatisfy(
       (e: unknown) => (e as ViceMeError).code === 'INTERNAL_ERROR' && (e as ViceMeError).retryable,
     );
@@ -95,7 +95,7 @@ describe('FetchTransport', () => {
       defaultTimeoutMs: 10,
     });
     await expect(
-      transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' }),
+      transport.request({ method: 'POST', path: '/v1/public/work-sdk/sessions' }),
     ).rejects.toSatisfy((e: unknown) => (e as ViceMeError).code === 'NETWORK_TIMEOUT');
   });
 
@@ -116,7 +116,7 @@ describe('FetchTransport', () => {
     const controller = new AbortController();
     const p = transport.request({
       method: 'POST',
-      path: '/v1/public/v1/work-sessions',
+      path: '/v1/public/work-sdk/sessions',
       signal: controller.signal,
     });
     controller.abort();
@@ -135,7 +135,7 @@ describe('FetchTransport', () => {
     await expect(
       transport.request({
         method: 'POST',
-        path: '/v1/public/v1/work-sessions',
+        path: '/v1/public/work-sdk/sessions',
         signal: controller.signal,
       }),
     ).rejects.toSatisfy((e: unknown) => {
@@ -174,7 +174,7 @@ describe('FetchTransport', () => {
       defaultTimeoutMs: 80,
     });
     await expect(
-      transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' }),
+      transport.request({ method: 'POST', path: '/v1/public/work-sdk/sessions' }),
     ).rejects.toSatisfy((e: unknown) => (e as ViceMeError).code === 'NETWORK_TIMEOUT');
   });
 
@@ -207,7 +207,7 @@ describe('FetchTransport', () => {
     const controller = new AbortController();
     const pending = transport.request({
       method: 'POST',
-      path: '/v1/public/v1/work-sessions',
+      path: '/v1/public/work-sdk/sessions',
       signal: controller.signal,
     });
     // Let the response headers (and the json() reader) attach first.

@@ -2,817 +2,263 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ViceMe Public Capabilities API",
-    "version": "0.4.0",
-    "summary": "Public creator access and hosted danmaku capabilities consumed by the ViceMe browser SDK.",
-    "description": "Shop-owned public contract for creator work sessions, WeChat login, follows, access decisions, hosted checkout, and public danmaku messages."
+    "version": "0.5.0",
+    "summary": "Public website access and hosted danmaku capabilities consumed by the ViceMe browser SDK."
   },
   "servers": [
-    {
-      "url": "https://api.viceme.cn",
-      "description": "CN region public API"
-    },
-    {
-      "url": "https://api.viceme.ai",
-      "description": "GLOBAL region public API"
-    }
+    { "url": "https://api.viceme.cn", "description": "CN region public API" },
+    { "url": "https://api.viceme.ai", "description": "GLOBAL region public API" }
   ],
-  "tags": [
-    {
-      "name": "work-sessions",
-      "description": "Public visitor sessions"
-    },
-    {
-      "name": "auth",
-      "description": "Work-scoped WeChat authentication"
-    },
-    {
-      "name": "follow",
-      "description": "Follow the work owner"
-    },
-    {
-      "name": "access",
-      "description": "Server-authoritative feature access"
-    },
-    {
-      "name": "checkout",
-      "description": "Creator-product hosted checkout"
-    },
-    {
-      "name": "danmaku",
-      "description": "Public hosted danmaku messages"
-    }
-  ],
+  "security": [],
   "paths": {
-    "/v1/public/v1/work-sessions": {
+    "/v1/public/work-sdk/sessions": {
       "post": {
-        "tags": ["work-sessions"],
-        "operationId": "createWorkSession",
-        "summary": "Establish a public visitor session for a Work",
-        "description": "Binds a short-lived capability token to the Work, the caller Origin, the enabled capability set, and an expiry. The workKey locates the Work; it is never an authorization credential. CORS accepts any browser Origin with credentials disabled; no creator-managed Origin allowlist is required.",
+        "operationId": "createWebsiteAccessSession",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateWorkSessionRequest"
-              }
+              "schema": { "$ref": "#/components/schemas/CreateWorkSessionRequest" }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Session established.",
-            "headers": {
-              "x-request-id": {
-                "schema": {
-                  "type": "string"
-                },
-                "description": "Server request id for support correlation."
-              }
-            },
+            "description": "Session established",
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkSession"
-                }
-              }
+              "application/json": { "schema": { "$ref": "#/components/schemas/WorkSession" } }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "404": {
-            "$ref": "#/components/responses/WorkNotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
-          "5xx": {
-            "$ref": "#/components/responses/InternalError"
-          }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       }
     },
-    "/v1/public/v1/auth/wechat/authorize": {
-      "post": {
-        "tags": ["auth"],
-        "operationId": "authorizeWechat",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthAuthorizeRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Hosted WeChat authorization URL.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthAuthorizeResponse"
-                }
-              }
-            }
-          },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          },
-          "5xx": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        }
-      }
-    },
-    "/v1/public/v1/auth/exchange": {
-      "post": {
-        "tags": ["auth"],
-        "operationId": "exchangeWechatCode",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthExchangeRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Authenticated work session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthExchangeResponse"
-                }
-              }
-            }
-          },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          },
-          "5xx": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        }
-      }
-    },
-    "/v1/public/v1/auth/resume-codes": {
-      "post": {
-        "tags": ["auth"],
-        "operationId": "createAuthResumeCode",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Compatibility endpoint for restoring an authenticated work session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResumeCodeResponse"
-                }
-              }
-            }
-          },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          }
-        }
-      }
-    },
-    "/v1/public/v1/auth/resume": {
-      "post": {
-        "tags": ["auth"],
-        "operationId": "resumeAuthenticatedSession",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthResumeRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Restored authenticated work session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthExchangeResponse"
-                }
-              }
-            }
-          },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          }
-        }
-      }
-    },
-    "/v1/public/v1/follow": {
+    "/v1/public/work-sdk/follow": {
       "get": {
-        "tags": ["follow"],
-        "operationId": "getFollowState",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
+        "operationId": "getWebsiteFollowState",
+        "security": [{ "workSession": [] }],
         "responses": {
           "200": {
-            "description": "Current follow state.",
+            "description": "Follow state",
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FollowState"
-                }
-              }
+              "application/json": { "schema": { "$ref": "#/components/schemas/FollowState" } }
             }
           },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       },
       "put": {
-        "tags": ["follow"],
-        "operationId": "followWorkOwner",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
+        "operationId": "followWebsiteCreator",
+        "security": [{ "workSession": [] }],
         "responses": {
           "200": {
-            "description": "Followed.",
+            "description": "Creator followed",
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FollowState"
-                }
-              }
+              "application/json": { "schema": { "$ref": "#/components/schemas/FollowState" } }
             }
           },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          }
-        }
-      },
-      "delete": {
-        "tags": ["follow"],
-        "operationId": "unfollowWorkOwner",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Unfollowed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FollowState"
-                }
-              }
-            }
-          },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       }
     },
-    "/v1/public/v1/access/check": {
+    "/v1/public/work-sdk/access/check": {
       "post": {
-        "tags": ["access"],
-        "operationId": "checkFeatureAccess",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
+        "operationId": "checkWebsiteAccess",
+        "security": [{ "workSession": [] }],
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AccessCheckRequest"
-              }
-            }
+            "application/json": { "schema": { "$ref": "#/components/schemas/AccessCheckRequest" } }
           }
         },
         "responses": {
           "200": {
-            "description": "Access decisions.",
+            "description": "Access decisions",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccessCheckResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/AccessCheckResponse" }
               }
             }
           },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       }
     },
-    "/v1/public/v1/access/features": {
+    "/v1/public/work-sdk/access/features": {
       "get": {
-        "tags": ["access"],
-        "operationId": "listAccessFeatures",
-        "summary": "List active feature presentation",
-        "description": "Returns server-authoritative titles and current prices for host-native access entry points. It does not alter access, checkout, or payment state.",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
+        "operationId": "getWebsiteAccessFeatures",
+        "security": [{ "workSession": [] }],
         "responses": {
           "200": {
-            "description": "Active feature presentation.",
+            "description": "Server-authoritative feature presentation",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccessFeaturesResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/AccessFeaturesResponse" }
               }
             }
           },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       }
     },
-    "/v1/public/v1/checkout/sessions": {
+    "/v1/public/work-sdk/checkout": {
       "post": {
-        "tags": ["checkout"],
-        "operationId": "createCheckoutSession",
-        "security": [
-          {
-            "workSession": []
-          }
-        ],
+        "operationId": "createWebsiteAccessCheckout",
+        "security": [{ "workSession": [] }],
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CheckoutRequest"
-              }
-            }
+            "application/json": { "schema": { "$ref": "#/components/schemas/CheckoutRequest" } }
           }
         },
         "responses": {
           "200": {
-            "description": "Embedded checkout URL resolved from the bound product.",
+            "description": "Hosted checkout",
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CheckoutResponse"
-                }
-              }
+              "application/json": { "schema": { "$ref": "#/components/schemas/CheckoutResponse" } }
             }
           },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          },
-          "5xx": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        }
-      }
-    },
-    "/v1/public/v1/checkout/bootstrap": {
-      "post": {
-        "tags": ["checkout"],
-        "operationId": "bootstrapEmbeddedCheckout",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CheckoutBootstrapRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Memory-only bearer session for the embedded checkout.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CheckoutBootstrapResponse"
-                }
-              }
-            }
-          },
-          "4xx": {
-            "$ref": "#/components/responses/PublicError"
-          }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       }
     },
     "/v1/danmaku/messages": {
       "get": {
-        "tags": ["danmaku"],
         "operationId": "listDanmakuMessages",
-        "summary": "List public danmaku messages for one page-position anchor",
         "parameters": [
           {
             "name": "workKey",
             "in": "query",
             "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkKey"
-            }
+            "schema": { "$ref": "#/components/schemas/WorkKey" }
           },
           {
             "name": "anchorKey",
             "in": "query",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/DanmakuAnchorKey"
-            }
+            "schema": { "$ref": "#/components/schemas/DanmakuAnchorKey" }
           },
           {
             "name": "cursor",
             "in": "query",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/DanmakuCursor"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 80,
-              "default": 30
-            }
+            "schema": { "$ref": "#/components/schemas/DanmakuCursor" }
           }
         ],
         "responses": {
           "200": {
-            "description": "Messages for the requested public work and anchor.",
+            "description": "Messages",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DanmakuMessagesResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/DanmakuMessagesResponse" }
               }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "404": {
-            "$ref": "#/components/responses/WorkNotFound"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       },
       "post": {
-        "tags": ["danmaku"],
         "operationId": "createDanmakuMessage",
-        "summary": "Create a public danmaku message",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateDanmakuMessageRequest"
-              }
+              "schema": { "$ref": "#/components/schemas/CreateDanmakuMessageRequest" }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Message created.",
+            "description": "Message created",
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DanmakuMessage"
-                }
-              }
+              "application/json": { "schema": { "$ref": "#/components/schemas/DanmakuMessage" } }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "404": {
-            "$ref": "#/components/responses/WorkNotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       }
     }
   },
   "components": {
     "securitySchemes": {
-      "workSession": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT"
-      }
+      "workSession": { "type": "http", "scheme": "bearer" }
     },
     "schemas": {
-      "WorkKey": {
-        "type": "string",
-        "pattern": "^wrk_[A-Za-z0-9_-]{4,124}$",
-        "description": "Public opaque work key."
-      },
-      "CapabilityName": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9-]{1,31}$",
-        "description": "Enabled capability name for the work."
-      },
+      "WorkKey": { "type": "string", "pattern": "^wrk_[A-Za-z0-9_-]{4,124}$" },
       "CreateWorkSessionRequest": {
         "type": "object",
-        "required": ["workKey"],
         "additionalProperties": false,
-        "properties": {
-          "workKey": {
-            "$ref": "#/components/schemas/WorkKey"
-          }
-        }
-      },
-      "WorkDescriptor": {
-        "type": "object",
-        "required": ["key", "capabilities"],
-        "additionalProperties": true,
-        "properties": {
-          "key": {
-            "$ref": "#/components/schemas/WorkKey"
-          },
-          "capabilities": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CapabilityName"
-            },
-            "minItems": 0
-          }
-        }
+        "required": ["workKey"],
+        "properties": { "workKey": { "$ref": "#/components/schemas/WorkKey" } }
       },
       "WorkSession": {
         "type": "object",
-        "required": ["work"],
-        "additionalProperties": true,
-        "description": "Unknown additional fields are allowed and ignored by the SDK (forward compatibility).",
-        "properties": {
-          "work": {
-            "$ref": "#/components/schemas/WorkDescriptor"
-          },
-          "token": {
-            "type": "string",
-            "description": "Short-lived capability token; memory-only in the SDK."
-          },
-          "expiresAt": {
-            "type": "integer",
-            "description": "Epoch milliseconds when the token expires."
-          }
-        }
-      },
-      "WorkUser": {
-        "type": "object",
-        "required": ["subject", "nickname", "avatarUrl"],
         "additionalProperties": false,
+        "required": ["workKey", "token", "expiresAt", "capabilities"],
         "properties": {
-          "subject": {
-            "type": "string"
-          },
-          "nickname": {
-            "type": ["string", "null"]
-          },
-          "avatarUrl": {
-            "type": ["string", "null"],
-            "format": "uri"
-          }
-        }
-      },
-      "AuthAuthorizeRequest": {
-        "type": "object",
-        "required": ["channel", "locale"],
-        "additionalProperties": false,
-        "properties": {
-          "channel": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{43}$"
-          },
-          "clientType": {
-            "type": "string",
-            "enum": ["h5", "pc"]
-          },
-          "locale": {
-            "type": "string",
-            "enum": ["zh-CN", "en-US"]
-          }
-        }
-      },
-      "AuthAuthorizeResponse": {
-        "type": "object",
-        "required": ["authorizationUrl", "completionOrigin"],
-        "additionalProperties": false,
-        "properties": {
-          "authorizationUrl": {
-            "type": "string",
-            "format": "uri"
-          },
-          "completionOrigin": {
-            "type": "string",
-            "format": "uri"
-          }
-        }
-      },
-      "AuthExchangeRequest": {
-        "type": "object",
-        "required": ["code", "codeVerifier"],
-        "additionalProperties": false,
-        "properties": {
-          "code": {
-            "type": "string",
-            "minLength": 32,
-            "maxLength": 256
-          },
-          "codeVerifier": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 128
-          }
-        }
-      },
-      "AuthExchangeResponse": {
-        "type": "object",
-        "required": ["token", "expiresAt", "user"],
-        "additionalProperties": false,
-        "properties": {
-          "token": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "type": "integer"
-          },
-          "user": {
-            "$ref": "#/components/schemas/WorkUser"
-          }
-        }
-      },
-      "AuthResumeCodeResponse": {
-        "type": "object",
-        "required": ["code", "expiresAt"],
-        "additionalProperties": false,
-        "properties": {
-          "code": {
-            "type": "string",
-            "minLength": 32,
-            "maxLength": 256
-          },
-          "expiresAt": {
-            "type": "integer"
-          }
-        }
-      },
-      "AuthResumeRequest": {
-        "type": "object",
-        "required": ["code"],
-        "additionalProperties": false,
-        "properties": {
-          "code": {
-            "type": "string",
-            "minLength": 32,
-            "maxLength": 256
-          }
-        }
-      },
-      "FollowState": {
-        "type": "object",
-        "required": ["following", "followedAt", "target"],
-        "additionalProperties": false,
-        "properties": {
-          "following": {
-            "type": "boolean"
-          },
-          "followedAt": {
-            "type": ["string", "null"],
-            "format": "date-time"
-          },
-          "target": {
-            "$ref": "#/components/schemas/FollowTarget"
-          }
-        }
-      },
-      "FollowTarget": {
-        "type": "object",
-        "required": ["kind", "displayName", "avatarUrl", "description", "workCount", "coverUrls"],
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": ["CREATOR", "USER"]
-          },
-          "displayName": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120
-          },
-          "avatarUrl": {
-            "type": ["string", "null"],
-            "format": "uri"
-          },
-          "description": {
-            "type": ["string", "null"],
-            "minLength": 1,
-            "maxLength": 500
-          },
-          "workCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "coverUrls": {
+          "workKey": { "$ref": "#/components/schemas/WorkKey" },
+          "token": { "type": "string" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "capabilities": {
             "type": "array",
-            "maxItems": 2,
             "items": {
               "type": "string",
-              "format": "uri"
+              "enum": ["danmaku", "tip", "access", "follow", "checkout"]
             }
           }
         }
       },
+      "Creator": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "displayName", "avatarUrl", "description", "publishedWorkCount"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "displayName": { "type": "string" },
+          "avatarUrl": { "type": ["string", "null"], "format": "uri" },
+          "description": { "type": ["string", "null"] },
+          "publishedWorkCount": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "FollowState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["following", "followedAt", "creator"],
+        "properties": {
+          "following": { "type": "boolean" },
+          "followedAt": { "type": ["string", "null"], "format": "date-time" },
+          "creator": { "$ref": "#/components/schemas/Creator" }
+        }
+      },
       "AccessCheckRequest": {
         "type": "object",
-        "required": ["featureKeys"],
         "additionalProperties": false,
+        "required": ["featureKeys"],
         "properties": {
           "featureKeys": {
             "type": "array",
             "minItems": 1,
             "maxItems": 100,
-            "items": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9_-]{1,63}$"
-            }
+            "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" }
           }
         }
       },
       "AccessDecision": {
         "type": "object",
-        "required": ["allowed", "reason", "nextAction"],
         "additionalProperties": false,
+        "required": ["allowed", "reason", "nextAction"],
         "properties": {
-          "allowed": {
-            "type": "boolean"
-          },
+          "allowed": { "type": "boolean" },
           "reason": {
             "type": "string",
             "enum": [
+              "PUBLIC",
               "OWNER",
               "FOLLOWING",
-              "PURCHASED",
               "ENTITLED",
               "AUTH_REQUIRED",
               "FOLLOW_REQUIRED",
               "PURCHASE_REQUIRED",
               "FEATURE_NOT_FOUND",
-              "FEATURE_DISABLED",
-              "POLICY_UNSUPPORTED"
+              "FEATURE_DISABLED"
             ]
           },
           "nextAction": {
@@ -823,191 +269,75 @@
       },
       "AccessCheckResponse": {
         "type": "object",
-        "required": ["decisions"],
         "additionalProperties": false,
+        "required": ["decisions"],
         "properties": {
           "decisions": {
             "type": "object",
-            "additionalProperties": {
-              "$ref": "#/components/schemas/AccessDecision"
-            }
+            "additionalProperties": { "$ref": "#/components/schemas/AccessDecision" }
           }
         }
       },
       "AccessFeaturePrice": {
         "type": "object",
-        "required": ["amountCents", "currency"],
         "additionalProperties": false,
+        "required": ["amountCents", "currency"],
         "properties": {
-          "amountCents": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "currency": {
-            "type": "string",
-            "enum": ["CNY"]
-          }
+          "amountCents": { "type": "integer", "minimum": 1 },
+          "currency": { "const": "CNY" }
         }
       },
       "AccessFeaturePresentation": {
         "type": "object",
-        "required": ["featureKey", "title", "policy", "price"],
         "additionalProperties": false,
+        "required": ["featureKey", "title", "policyType", "price"],
         "properties": {
-          "featureKey": {
+          "featureKey": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "policyType": {
             "type": "string",
-            "pattern": "^[a-z][a-z0-9_-]{1,63}$"
-          },
-          "title": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120
-          },
-          "policy": {
-            "type": "object",
-            "required": ["type"],
-            "additionalProperties": false,
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["PUBLIC", "FOLLOW_OWNER", "WORK_ENTITLEMENT"]
-              }
-            }
+            "enum": ["PUBLIC", "FOLLOW_OWNER", "WORK_ENTITLEMENT"]
           },
           "price": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/AccessFeaturePrice"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "oneOf": [{ "$ref": "#/components/schemas/AccessFeaturePrice" }, { "type": "null" }]
           }
         }
       },
       "AccessFeaturesResponse": {
         "type": "object",
-        "required": ["features"],
         "additionalProperties": false,
+        "required": ["features"],
         "properties": {
           "features": {
             "type": "array",
             "maxItems": 100,
-            "items": {
-              "$ref": "#/components/schemas/AccessFeaturePresentation"
-            }
+            "items": { "$ref": "#/components/schemas/AccessFeaturePresentation" }
           }
         }
       },
       "CheckoutRequest": {
         "type": "object",
-        "required": ["featureKey", "channel"],
         "additionalProperties": false,
+        "required": ["featureKey"],
         "properties": {
-          "featureKey": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9_-]{1,63}$"
-          },
-          "locale": {
-            "type": "string",
-            "enum": ["zh-CN", "en-US"],
-            "default": "zh-CN"
-          },
-          "channel": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{43}$"
-          }
+          "featureKey": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
+          "locale": { "type": "string", "enum": ["zh-CN", "en-US"], "default": "zh-CN" }
         }
       },
       "CheckoutResponse": {
         "type": "object",
-        "required": ["checkoutUrl", "alreadyOwned", "completionOrigin"],
         "additionalProperties": false,
+        "required": ["checkoutUrl", "alreadyOwned"],
         "properties": {
-          "checkoutUrl": {
-            "type": "string",
-            "format": "uri"
-          },
-          "alreadyOwned": {
-            "type": "boolean"
-          },
-          "completionOrigin": {
-            "type": "string",
-            "format": "uri"
-          }
-        }
-      },
-      "CheckoutBootstrapRequest": {
-        "type": "object",
-        "required": ["code"],
-        "additionalProperties": false,
-        "properties": {
-          "code": {
-            "type": "string",
-            "minLength": 32,
-            "maxLength": 256
-          }
-        }
-      },
-      "CheckoutBootstrapResponse": {
-        "type": "object",
-        "required": ["token", "expiresAt", "resumeCode"],
-        "additionalProperties": false,
-        "properties": {
-          "token": {
-            "type": "string",
-            "minLength": 32
-          },
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "resumeCode": {
-            "type": "string",
-            "minLength": 32,
-            "maxLength": 256
-          }
-        }
-      },
-      "ErrorBody": {
-        "type": "object",
-        "required": ["statusCode", "code", "message", "requestId"],
-        "additionalProperties": false,
-        "properties": {
-          "statusCode": {
-            "type": "integer"
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "CONFIG_INVALID",
-              "WORK_NOT_FOUND",
-              "CAPABILITY_DISABLED",
-              "SESSION_EXPIRED",
-              "AUTH_REQUIRED",
-              "SDK_AUTH_CODE_INVALID",
-              "RETURN_URL_NOT_ALLOWED",
-              "RATE_LIMITED",
-              "NETWORK_TIMEOUT",
-              "CHECKOUT_UNAVAILABLE",
-              "INTERNAL_ERROR"
-            ]
-          },
-          "message": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "requestId": {
-            "type": "string"
-          }
+          "checkoutUrl": { "type": "string", "format": "uri" },
+          "alreadyOwned": { "type": "boolean" }
         }
       },
       "DanmakuAnchorKey": {
         "type": "string",
         "minLength": 1,
         "maxLength": 128,
-        "description": "Opaque page-position anchor derived by the external SDK."
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
       },
       "DanmakuCursor": {
         "type": "string",
@@ -1015,145 +345,60 @@
       },
       "DanmakuMessage": {
         "type": "object",
-        "required": ["id", "workKey", "content", "anchorKey", "createdAt"],
         "additionalProperties": false,
+        "required": ["id", "workKey", "content", "anchorKey", "createdAt"],
         "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "workKey": {
-            "$ref": "#/components/schemas/WorkKey"
-          },
-          "content": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 160
-          },
+          "id": { "type": "string", "format": "uuid" },
+          "workKey": { "$ref": "#/components/schemas/WorkKey" },
+          "content": { "type": "string", "minLength": 1, "maxLength": 280 },
           "anchorKey": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/DanmakuAnchorKey"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "oneOf": [{ "$ref": "#/components/schemas/DanmakuAnchorKey" }, { "type": "null" }]
           },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
+          "createdAt": { "type": "string", "format": "date-time" }
         }
       },
       "DanmakuMessagesResponse": {
         "type": "object",
-        "required": ["items", "nextCursor", "total"],
         "additionalProperties": false,
+        "required": ["messages", "nextCursor"],
         "properties": {
-          "items": {
+          "messages": {
             "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DanmakuMessage"
-            }
+            "items": { "$ref": "#/components/schemas/DanmakuMessage" }
           },
           "nextCursor": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/DanmakuCursor"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "total": {
-            "type": "integer",
-            "minimum": 0
+            "oneOf": [{ "$ref": "#/components/schemas/DanmakuCursor" }, { "type": "null" }]
           }
         }
       },
       "CreateDanmakuMessageRequest": {
         "type": "object",
-        "required": ["workKey", "content"],
         "additionalProperties": false,
+        "required": ["workKey", "content"],
         "properties": {
-          "workKey": {
-            "$ref": "#/components/schemas/WorkKey"
-          },
-          "content": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 160
-          },
-          "anchorKey": {
-            "$ref": "#/components/schemas/DanmakuAnchorKey"
-          }
+          "workKey": { "$ref": "#/components/schemas/WorkKey" },
+          "content": { "type": "string", "minLength": 1, "maxLength": 280 },
+          "anchorKey": { "$ref": "#/components/schemas/DanmakuAnchorKey" }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "required": ["statusCode", "code", "message", "requestId"],
+        "properties": {
+          "statusCode": { "type": "integer" },
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "requestId": { "type": "string" }
         }
       }
     },
     "responses": {
       "PublicError": {
-        "description": "Public request rejected.",
+        "description": "Public API error",
         "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorBody"
-            }
-          }
-        }
-      },
-      "ValidationError": {
-        "description": "Invalid configuration.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorBody"
-            }
-          }
-        }
-      },
-      "WorkNotFound": {
-        "description": "Unknown, private, or disabled work.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorBody"
-            }
-          }
-        }
-      },
-      "RateLimited": {
-        "description": "Rate limit exceeded (retryable).",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorBody"
-            }
-          }
-        }
-      },
-      "InternalError": {
-        "description": "Server error (retryable).",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorBody"
-            }
-          }
-        }
-      },
-      "BadRequest": {
-        "description": "Invalid query or body.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorBody"
-            }
-          }
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorBody" } }
         }
       }
     }
-  },
-  "security": []
+  }
 }

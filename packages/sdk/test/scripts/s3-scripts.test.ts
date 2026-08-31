@@ -71,11 +71,13 @@ const indexBody = Buffer.from('export const SDK_VERSION = "0.1.0";\n');
 const loaderBody = Buffer.from('(function(){/* data-viceme */})();\n');
 const bootstrapBody = Buffer.from('(function(){/* fixed alias bootstrap */})();\n');
 const danmakuBody = Buffer.from('export const mount = () => {};\n');
+const tipBody = Buffer.from('export const mountTip = () => {};\n');
 mkdirSync(distDir, { recursive: true });
 writeFileSync(join(distDir, 'index.js'), indexBody);
 writeFileSync(join(distDir, 'viceme.min.js'), loaderBody);
 writeFileSync(join(distDir, 'bootstrap.min.js'), bootstrapBody);
 writeFileSync(join(distDir, 'danmaku.js'), danmakuBody);
+writeFileSync(join(distDir, 'tip.js'), tipBody);
 writeFileSync(
   join(distDir, 'manifest.json'),
   `${JSON.stringify(
@@ -83,12 +85,13 @@ writeFileSync(
       version: '0.1.0',
       apiMajor: 1,
       loader: 'viceme.min.js',
-      features: { danmaku: 'danmaku.js' },
+      features: { danmaku: 'danmaku.js', tip: 'tip.js' },
       files: {
         'index.js': digest(indexBody),
         'viceme.min.js': digest(loaderBody),
         'bootstrap.min.js': digest(bootstrapBody),
         'danmaku.js': digest(danmakuBody),
+        'tip.js': digest(tipBody),
       },
     },
     null,
@@ -209,11 +212,11 @@ describe('publish-s3-region.mjs', () => {
     ];
     // Empty region: everything uploads and the public read-back passes.
     const first = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(first.stdout).toContain('CN: 5 uploaded, 0 already identical');
+    expect(first.stdout).toContain('CN: 6 uploaded, 0 already identical');
 
     // Re-run: byte-identical objects are skipped.
     const second = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(second.stdout).toContain('CN: 0 uploaded, 5 already identical');
+    expect(second.stdout).toContain('CN: 0 uploaded, 6 already identical');
 
     // Tamper one object: the immutable violation fails closed.
     writeFileSync(join(storeRoot, '0.1.0/index.js'), 'tampered\n');

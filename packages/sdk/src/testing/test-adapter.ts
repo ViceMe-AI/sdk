@@ -26,7 +26,7 @@ export interface MemoryTransportWorkFixture {
 }
 
 export interface MemoryTransportOptions {
-  /** Work descriptor served for `POST /v1/public/v1/work-sessions`. */
+  /** Work descriptor served for `POST /v1/public/work-sdk/sessions`. */
   work: MemoryTransportWorkFixture;
   /** Artificial response latency in milliseconds (default 0). */
   latencyMs?: number;
@@ -67,7 +67,7 @@ export function createMemoryTransport(options: MemoryTransportOptions): MemoryTr
           { once: true },
         );
       });
-      if (request.path === '/v1/public/v1/work-sessions' && request.method === 'POST') {
+      if (request.path === '/v1/public/work-sdk/sessions' && request.method === 'POST') {
         const failure = failures.shift();
         if (failure) {
           if (failure instanceof Error) throw failure;
@@ -81,9 +81,12 @@ export function createMemoryTransport(options: MemoryTransportOptions): MemoryTr
         return {
           status: 201,
           body: {
-            work: { key: options.work.key, capabilities: [...options.work.capabilities] },
+            workKey: options.work.key,
+            capabilities: [...options.work.capabilities],
             ...(options.work.token !== undefined ? { token: options.work.token } : {}),
-            ...(options.work.expiresAt !== undefined ? { expiresAt: options.work.expiresAt } : {}),
+            ...(options.work.expiresAt !== undefined
+              ? { expiresAt: new Date(options.work.expiresAt).toISOString() }
+              : {}),
           },
           requestId: `test-${requests.length}`,
         };

@@ -6,7 +6,7 @@
  *   node scripts/generate-contracts.mjs            # regenerate types + manifest
  *   node scripts/generate-contracts.mjs check      # drift gate (CI)
  *
- * Source of truth: contracts/public-capabilities.openapi.json (Shop export).
+ * Source of truth: contracts/public-capabilities.openapi.json (Shop snapshot).
  * The generated file packages/sdk/src/generated/public-contract.ts is
  * committed so consumers build without codegen.
  *
@@ -34,6 +34,25 @@ const check = process.argv[2] === 'check';
 const snapshot = readFileSync(snapshotPath);
 const snapshotJson = JSON.parse(snapshot.toString('utf8'));
 const sha256 = createHash('sha256').update(snapshot).digest('hex');
+const expectedOperations = {
+  '/v1/danmaku/messages': ['get', 'post'],
+  '/v1/public/work-sdk/access/check': ['post'],
+  '/v1/public/work-sdk/access/features': ['get'],
+  '/v1/public/work-sdk/checkout': ['post'],
+  '/v1/public/work-sdk/follow': ['get', 'put'],
+  '/v1/public/work-sdk/sessions': ['post'],
+};
+if (
+  JSON.stringify(Object.keys(snapshotJson.paths ?? {}).sort()) !==
+    JSON.stringify(Object.keys(expectedOperations).sort()) ||
+  Object.entries(expectedOperations).some(
+    ([path, methods]) =>
+      JSON.stringify(Object.keys(snapshotJson.paths?.[path] ?? {}).sort()) !==
+      JSON.stringify(methods),
+  )
+) {
+  throw new Error('public contract operations do not match the supported SDK surface');
+}
 
 const BANNER = `/* eslint-disable */
 /**
@@ -86,7 +105,7 @@ try {
     const manifest = {
       contractVersion: snapshotJson.info.version,
       sha256,
-      generatedFrom: process.env.CONTRACT_SOURCE ?? 'ViceMe Shop public capabilities contract',
+      generatedFrom: process.env.CONTRACT_SOURCE ?? 'ViceMe Shop public SDK contract',
       generatedAt: new Date().toISOString(),
     };
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);

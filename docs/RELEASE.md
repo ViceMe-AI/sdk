@@ -49,11 +49,15 @@ paths and add edge caching in front — the URL contract must not change.
 
 The release flow follows the same two-workflow state machine as the CLI:
 
-`0.1.6` is the already-used baseline for this development cycle. Feature
+`0.3.0` is the already-used baseline for this development cycle. Feature
 branches intentionally leave it unchanged; the release preparation workflow
-must atomically advance the package, runtime, and changelog to `0.2.0` before
-the `dev -> main` promotion. Its existing comparison against the version on
-`main` fails closed if a normal publication attempts to reuse `0.1.6`.
+must atomically advance the package, runtime, and changelog to `0.4.0` before
+the `dev -> main` promotion. `0.4.0` intentionally removes the pre-1.0 Session,
+auth, follow, access, checkout, and testing surfaces; normal `^0.3.x` ranges do
+not select it. Loader API major `v1` remains valid because existing danmaku HTML
+attributes and namespace behavior stay compatible while Tip is additive. The
+public HTTP snapshot uses its own `1.0.0` contract version. The release check
+fails closed if a normal publication attempts to reuse `0.3.0`.
 
 1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
    `release-pr.yml` workflow uses the same stable-version algorithm as the CLI:

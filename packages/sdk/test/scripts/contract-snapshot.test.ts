@@ -29,12 +29,11 @@ describe('Shop public contract snapshot', () => {
     expect(snapshot.security).toEqual([]);
     expect(Object.keys(snapshot.paths)).toEqual(
       expect.arrayContaining([
-        '/v1/public/v1/work-sessions',
-        '/v1/public/v1/auth/wechat/authorize',
-        '/v1/public/v1/follow',
-        '/v1/public/v1/access/check',
-        '/v1/public/v1/access/features',
-        '/v1/public/v1/checkout/sessions',
+        '/v1/public/work-sdk/sessions',
+        '/v1/public/work-sdk/follow',
+        '/v1/public/work-sdk/access/check',
+        '/v1/public/work-sdk/access/features',
+        '/v1/public/work-sdk/checkout',
         '/v1/danmaku/messages',
       ]),
     );

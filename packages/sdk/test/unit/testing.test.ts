@@ -6,12 +6,13 @@ describe('createMemoryTransport', () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
     const res = await transport.request({
       method: 'POST',
-      path: '/v1/public/v1/work-sessions',
+      path: '/v1/public/work-sdk/sessions',
       body: { workKey: 'wrk_test' },
     });
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
-      work: { key: 'wrk_test', capabilities: ['fixture'] },
+      workKey: 'wrk_test',
+      capabilities: ['fixture'],
       token: 'test-session-token',
     });
     expect(transport.requests).toHaveLength(1);
@@ -19,8 +20,8 @@ describe('createMemoryTransport', () => {
 
   it('records every request for assertions', async () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
-    await transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' });
-    await transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' });
+    await transport.request({ method: 'POST', path: '/v1/public/work-sdk/sessions' });
+    await transport.request({ method: 'POST', path: '/v1/public/work-sdk/sessions' });
     expect(transport.requests).toHaveLength(2);
   });
 
@@ -31,22 +32,22 @@ describe('createMemoryTransport', () => {
     });
     const first = await transport.request({
       method: 'POST',
-      path: '/v1/public/v1/work-sessions',
+      path: '/v1/public/work-sdk/sessions',
     });
     expect(first.status).toBe(429);
-    const res = await transport.request({ method: 'POST', path: '/v1/public/v1/work-sessions' });
+    const res = await transport.request({ method: 'POST', path: '/v1/public/work-sdk/sessions' });
     expect(res.status).toBe(201);
   });
 
   it('returns 404 for unknown fixture paths', async () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
-    const res = await transport.request({ method: 'GET', path: '/v1/public/v1/nope' });
+    const res = await transport.request({ method: 'GET', path: '/v1/public/work-sdk/nope' });
     expect(res.status).toBe(404);
   });
 });
 
 describe('createTestViceMe', () => {
-  it('initializes, exposes capabilities, and destroys', async () => {
+  it('initializes locally, then exposes Work capabilities lazily', async () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
     const client = createTestViceMe({
       workKey: 'wrk_test',
@@ -58,6 +59,10 @@ describe('createTestViceMe', () => {
 
     await client.ready();
     expect(client.state).toBe('READY');
+    expect(transport.requests).toHaveLength(0);
+    expect(client.hasCapability('fixture')).toBe(false);
+
+    await client.auth.getState();
     expect(client.hasCapability('fixture')).toBe(true);
     expect((client as { capabilities?: readonly string[] }).capabilities).toEqual(['fixture']);
 

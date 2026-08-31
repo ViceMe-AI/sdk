@@ -49,7 +49,8 @@ export type {
 };
 
 /**
- * Create a headless ViceMe client for one Work.
+ * Create a ViceMe client for one Work. Hosted capabilities initialize locally;
+ * website access establishes a short-lived Work session only when used.
  *
  * @example
  * ```ts

@@ -26,14 +26,29 @@ describe('parseLoaderAttributes', () => {
     });
   });
 
-  it.each(['fixture', 'danmaku,ghost', 'danmaku,danmaku', ' danmaku '])(
-    'rejects any feature declaration other than the exact danmaku value: %s',
-    (features) => {
-      expect(() =>
-        parseLoaderAttributes(script({ ...VALID, 'data-viceme-features': features })),
-      ).toThrow(/must be exactly "danmaku"/);
-    },
-  );
+  it.each([
+    ['tip', ['tip']],
+    ['danmaku,tip', ['danmaku', 'tip']],
+    ['tip,danmaku', ['danmaku', 'tip']],
+  ])('accepts and normalizes hosted feature declaration %s', (features, expected) => {
+    expect(
+      parseLoaderAttributes(script({ ...VALID, 'data-viceme-features': features })).features,
+    ).toEqual(expected);
+  });
+
+  it.each([
+    'fixture',
+    'danmaku,ghost',
+    'danmaku,danmaku',
+    'tip,tip',
+    ' danmaku ',
+    'danmaku, tip',
+    'danmaku,',
+  ])('rejects invalid hosted feature declaration: %s', (features) => {
+    expect(() =>
+      parseLoaderAttributes(script({ ...VALID, 'data-viceme-features': features })),
+    ).toThrow(/must contain each of "danmaku" and "tip" at most once/);
+  });
 
   it('rejects unknown data-viceme-* attributes (no token smuggling)', () => {
     expect(() =>

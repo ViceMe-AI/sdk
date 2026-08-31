@@ -1,9 +1,11 @@
 /**
- * Headless ViceMe client.
+ * ViceMe client for hosted capabilities and optional website access.
  *
  * `ready()` and access checks remain headless. Interactive authentication and
  * checkout touch `window` only when the caller explicitly invokes them. `ready()` is
- * idempotent per instance (shares one promise), `destroy()` is idempotent and
+ * Hosted capability initialization stays local and synchronous. Website
+ * access establishes its Work session lazily on the first access operation.
+ * `ready()` is idempotent per instance (shares one promise), `destroy()` is idempotent and
  * synchronously cancels requests and subscriptions; every business method on a
  * destroyed client fails with `CLIENT_DESTROYED`.
  */
@@ -21,6 +23,7 @@ import {
   type CheckoutCapability,
 } from './capabilities.ts';
 import type { AccessPresenter } from './presentation.ts';
+import { BUILD_WIDGET_ORIGINS } from './build-endpoints.ts';
 
 export interface ViceMeClient {
   readonly version: string;
@@ -85,8 +88,9 @@ export class ViceMeClientImpl implements ViceMeClient {
     const capabilities = createCapabilities({
       session: this.#session,
       workKey: deps.config.workKey,
+      widgetOrigin: BUILD_WIDGET_ORIGINS[deps.config.region],
       presenter: deps.presenter,
-      ready: () => this.ready(),
+      ready: () => this.#readyAccess(),
     });
     this.auth = capabilities.auth;
     this.access = capabilities.access;
@@ -137,24 +141,21 @@ export class ViceMeClientImpl implements ViceMeClient {
 
   ready(): Promise<void> {
     if (this.#lifecycle.destroyed) return Promise.reject(clientDestroyed());
-    this.#readyPromise ??= this.#initialize();
+    if (!this.#readyPromise) {
+      this.#lifecycle.transition('READY');
+      this.#readyPromise = Promise.resolve();
+    }
     return this.#readyPromise;
   }
 
-  async #initialize(): Promise<void> {
+  async #readyAccess(): Promise<void> {
     if (this.#lifecycle.destroyed) throw clientDestroyed();
-    this.#lifecycle.transition('INITIALIZING');
+    await this.ready();
     try {
       await this.#session.establish();
       if (this.#lifecycle.destroyed) throw clientDestroyed();
-      this.#lifecycle.transition('READY');
     } catch (error) {
-      // If the client was destroyed mid-flight, report CLIENT_DESTROYED and do
-      // not attempt any further lifecycle transitions.
       if (this.#lifecycle.destroyed) throw clientDestroyed();
-      this.#lifecycle.transition('FAILED');
-      // Allow a later `ready()` retry instead of caching the failure forever.
-      this.#readyPromise = undefined;
       this.#session.invalidate();
       throw error;
     }
@@ -163,7 +164,7 @@ export class ViceMeClientImpl implements ViceMeClient {
   hasCapability(name: string): boolean {
     if (this.#lifecycle.destroyed) return false;
     const capabilities = this.#session.snapshot?.work.capabilities;
-    return capabilities !== undefined && capabilities.includes(name);
+    return name === 'danmaku' || name === 'tip' || capabilities?.includes(name) === true;
   }
 
   /** Names of capabilities enabled for this work (empty before `ready()`). */

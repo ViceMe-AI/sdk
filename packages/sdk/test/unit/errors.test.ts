@@ -8,8 +8,8 @@ import {
 
 describe('ViceMeError', () => {
   it('has stable code and derived retryable default', () => {
-    const err = new ViceMeError({ code: 'RATE_LIMITED', message: 'slow down' });
-    expect(err.code).toBe('RATE_LIMITED');
+    const err = new ViceMeError({ code: 'INTERNAL_ERROR', message: 'try again' });
+    expect(err.code).toBe('INTERNAL_ERROR');
     expect(err.retryable).toBe(true);
     expect(err.name).toBe('ViceMeError');
   });
@@ -25,14 +25,14 @@ describe('ViceMeError', () => {
 
   it('toJSON exposes only safe diagnostic fields', () => {
     const err = new ViceMeError({
-      code: 'NETWORK_TIMEOUT',
+      code: 'INTERNAL_ERROR',
       message: 'secret stack: ...',
       requestId: 'req-1',
       capability: 'danmaku',
     });
     const json = err.toJSON();
     expect(json).toEqual({
-      code: 'NETWORK_TIMEOUT',
+      code: 'INTERNAL_ERROR',
       retryable: true,
       requestId: 'req-1',
       capability: 'danmaku',

@@ -1,7 +1,7 @@
 import type { FollowTarget } from './capabilities.ts';
 import { isViceMeError } from './errors.ts';
 
-export type AccessInteractionAction = 'SIGN_IN' | 'CHECKOUT';
+export type AccessInteractionAction = 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT';
 
 export interface AccessInteraction {
   featureKey: string;
@@ -22,7 +22,13 @@ export interface AccessFrameAction {
   cancel(): void;
 }
 
-export type AccessActionResult = AccessCompletedAction | AccessFrameAction;
+export interface AccessExternalAction {
+  type: 'external';
+  completion: Promise<void>;
+  cancel(): void;
+}
+
+export type AccessActionResult = AccessCompletedAction | AccessFrameAction | AccessExternalAction;
 
 export type AccessPresentationResult = 'acted' | 'dismissed';
 
@@ -46,10 +52,15 @@ function actionCopy(action: AccessInteractionAction): {
         description: '',
         label: '授权',
       };
+    case 'FOLLOW':
+      return {
+        description: '',
+        label: '关注',
+      };
     case 'CHECKOUT':
       return {
         description: '',
-        label: '重新打开',
+        label: '打开支付',
       };
   }
 }
@@ -187,25 +198,6 @@ function ensureAccessLayerElement(): void {
             font-size: 0.875rem;
           }
           [data-viceme='profile-header'] { min-width: 0; }
-          [data-viceme='profile-covers'] {
-            display: none;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0.75rem;
-            margin-top: 1.25rem;
-            border-radius: 0.875rem;
-            padding: 0.75rem;
-            background: #f4f4f5;
-          }
-          [data-viceme='profile-covers'][data-visible='true'] { display: grid; }
-          [data-viceme='profile-cover'] {
-            display: block;
-            width: 100%;
-            aspect-ratio: 16 / 9;
-            border: 1px solid #e4e4e7;
-            border-radius: 0.625rem;
-            object-fit: cover;
-            background: #ffffff;
-          }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='description'] { display: none; }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile'][data-visible='true'] {
             display: block;
@@ -303,7 +295,6 @@ function ensureAccessLayerElement(): void {
                 </div>
               </div>
               <p data-viceme="profile-description"></p>
-              <div data-viceme="profile-covers" aria-label="作品封面"></div>
             </section>
             <p data-viceme="error" role="alert" aria-live="polite"></p>
             <div data-viceme="actions">
@@ -315,7 +306,7 @@ function ensureAccessLayerElement(): void {
       `;
       const panel = shadow.querySelector<HTMLElement>("[data-viceme='panel']")!;
       panel.dataset.action = this.interaction.action;
-      panel.dataset.frame = String(this.interaction.action === 'CHECKOUT');
+      panel.dataset.frame = 'false';
       const description = shadow.querySelector<HTMLElement>("[data-viceme='description']")!;
       description.textContent = copy.description;
       const action = shadow.querySelector<HTMLButtonElement>("[data-viceme='action']")!;
@@ -332,12 +323,11 @@ function ensureAccessLayerElement(): void {
         "[data-viceme='profile-description']",
       )!;
       const profileStats = shadow.querySelector<HTMLElement>("[data-viceme='profile-stats']")!;
-      const profileCovers = shadow.querySelector<HTMLElement>("[data-viceme='profile-covers']")!;
       action.textContent = copy.label;
-      action.hidden = this.interaction.action === 'CHECKOUT';
+      action.hidden = false;
       mainActions.dataset.single = 'true';
       const idleActionLabel = copy.label;
-      frame.title = this.interaction.action === 'SIGN_IN' ? '微信授权' : '支付';
+      frame.title = this.interaction.action === 'SIGN_IN' ? '登录授权' : '支付';
 
       const target = this.interaction.followTarget;
       if (target) {
@@ -358,18 +348,6 @@ function ensureAccessLayerElement(): void {
           profileDescription.title = target.description!;
         }
         profileStats.textContent = `${target.workCount} 个作品`;
-        if (target.coverUrls.length === 0) {
-          profileCovers.remove();
-        } else {
-          for (const [index, coverUrl] of target.coverUrls.entries()) {
-            const cover = document.createElement('img');
-            cover.dataset.viceme = 'profile-cover';
-            cover.src = coverUrl;
-            cover.alt = `${target.displayName}的作品封面 ${index + 1}`;
-            profileCovers.append(cover);
-          }
-          profileCovers.dataset.visible = 'true';
-        }
         avatarFallback.textContent = target.displayName.trim().slice(0, 1) || 'V';
         if (target.avatarUrl) {
           avatar.src = target.avatarUrl;
@@ -379,12 +357,12 @@ function ensureAccessLayerElement(): void {
         }
       }
 
-      let activeFrame: AccessFrameAction | null = null;
+      let activeAction: AccessFrameAction | AccessExternalAction | null = null;
       const close = (result: AccessPresentationResult) => {
         this.dispatchEvent(new CustomEvent('viceme:access-layer-close', { detail: result }));
       };
       const dismissLayer = () => {
-        activeFrame?.cancel();
+        activeAction?.cancel();
         close('dismissed');
       };
       backdrop.addEventListener('click', dismissLayer);
@@ -393,7 +371,7 @@ function ensureAccessLayerElement(): void {
         if (event.key === 'Escape') dismissLayer();
         if (event.key === 'Tab') {
           event.preventDefault();
-          if (activeFrame) {
+          if (activeAction?.type === 'frame') {
             frame.focus();
             return;
           }
@@ -413,16 +391,19 @@ function ensureAccessLayerElement(): void {
         try {
           const result = await this.interaction.perform();
           if (result.type === 'frame') {
-            activeFrame = result;
+            activeAction = result;
             panel.dataset.frame = 'true';
             frame.src = result.url;
             frame.focus();
             await result.completion;
+          } else if (result.type === 'external') {
+            activeAction = result;
+            await result.completion;
           }
           close('acted');
         } catch (caught) {
-          activeFrame?.cancel();
-          activeFrame = null;
+          activeAction?.cancel();
+          activeAction = null;
           panel.dataset.frame = 'false';
           frame.removeAttribute('src');
           error.textContent = actionErrorCopy(caught);
@@ -434,11 +415,7 @@ function ensureAccessLayerElement(): void {
         }
       };
       action.addEventListener('click', performAction);
-      if (this.interaction.action === 'CHECKOUT') {
-        queueMicrotask(() => void performAction());
-      } else {
-        queueMicrotask(() => action.focus());
-      }
+      queueMicrotask(() => action.focus());
     }
   }
 

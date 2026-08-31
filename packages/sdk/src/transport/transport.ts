@@ -11,12 +11,14 @@ import { ViceMeError, type ViceMeErrorCode } from '../core/errors.ts';
 
 export interface TransportRequest {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  /** Absolute path under the public API base, e.g. `/v1/public/v1/work-sessions`. */
+  /** Absolute path under the public API base. */
   path: string;
   /** JSON-serializable request body. */
   body?: unknown;
   /** Work-session token. It is never persisted by the transport. */
   authorization?: string;
+  /** Optional memory-only signed-in widget token. */
+  userAuthorization?: string;
   signal?: AbortSignal;
   /** Per-request timeout; defaults to the transport default. */
   timeoutMs?: number;
@@ -154,6 +156,9 @@ export class FetchTransport implements Transport {
           'x-client-request-id': requestId,
           ...(request.authorization !== undefined
             ? { authorization: `Bearer ${request.authorization}` }
+            : {}),
+          ...(request.userAuthorization !== undefined
+            ? { 'x-viceme-user-token': request.userAuthorization }
             : {}),
         },
         body: request.body !== undefined ? JSON.stringify(request.body) : undefined,

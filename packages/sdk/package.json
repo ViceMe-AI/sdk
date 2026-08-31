@@ -1,7 +1,7 @@
 {
   "name": "@viceme-ai/sdk",
-  "version": "0.3.0",
-  "description": "ViceMe browser SDK for hosted capabilities and creator access flows.",
+  "version": "0.4.0",
+  "description": "ViceMe hosted engagement and Website Work access SDK for static HTML, ESM, React, and Agent-generated sites.",
   "type": "module",
   "repository": {
     "type": "git",
@@ -22,6 +22,10 @@
     "./danmaku": {
       "types": "./dist/danmaku/index.d.ts",
       "import": "./dist/danmaku.js"
+    },
+    "./tip": {
+      "types": "./dist/tip/index.d.ts",
+      "import": "./dist/tip.js"
     }
   },
   "files": [

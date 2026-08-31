@@ -19,7 +19,7 @@ describe('SessionManager', () => {
     // Tamper with the served body by routing through a custom transport.
     const bad = {
       async request() {
-        return { status: 200, body: { work: { key: 'wrk_test' } } };
+        return { status: 200, body: { workKey: 'wrk_test' } };
       },
     };
     const session = new SessionManager({ workKey: 'wrk_test', transport: bad });
@@ -34,7 +34,7 @@ describe('SessionManager', () => {
       async request() {
         return {
           status: 200,
-          body: { work: { key: 'wrk_other', capabilities: ['fixture'] } },
+          body: { workKey: 'wrk_other', capabilities: ['fixture'] },
         };
       },
     };
@@ -100,14 +100,15 @@ describe('SessionManager', () => {
     const authorizations: Array<string | undefined> = [];
     const transport = {
       async request(request: { path: string; authorization?: string }) {
-        if (request.path === '/v1/public/v1/work-sessions') {
+        if (request.path === '/v1/public/work-sdk/sessions') {
           sessionCount += 1;
           return {
             status: 201,
             body: {
-              work: { key: 'wrk_test', capabilities: ['auth'] },
+              workKey: 'wrk_test',
+              capabilities: ['auth'],
               token: sessionCount === 1 ? 'stale-token' : 'fresh-token',
-              expiresAt: Date.now() + 60_000,
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
             },
           };
         }
@@ -124,7 +125,7 @@ describe('SessionManager', () => {
     const session = new SessionManager({ workKey: 'wrk_test', transport });
 
     await expect(
-      session.request({ method: 'POST', path: '/v1/public/v1/auth/wechat/authorize' }),
+      session.request({ method: 'POST', path: '/v1/public/work-sdk/access/check' }),
     ).resolves.toMatchObject({ status: 201 });
     expect(sessionCount).toBe(2);
     expect(authorizations).toEqual(['stale-token', 'fresh-token']);

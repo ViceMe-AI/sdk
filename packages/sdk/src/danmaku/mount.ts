@@ -1,7 +1,7 @@
 import type { ViceMeClient } from '../core/client.ts';
 import { BUILD_WIDGET_ORIGINS } from '../core/build-endpoints.ts';
-import { ViceMeError } from '../core/errors.ts';
-import type { CapabilityMountHandle, CapabilityMountOptions } from '../loader/mount-handle.ts';
+import { clientDestroyed, ViceMeError } from '../core/errors.ts';
+import type { CapabilityMountHandle, CapabilityMountOptions } from '../capability-mount.ts';
 import { SDK_VERSION } from '../version.ts';
 import { readDanmakuPageAnchor, type DanmakuPageAnchor } from './anchor.ts';
 
@@ -28,7 +28,9 @@ export async function mount(
   client: ViceMeClient,
   options: CapabilityMountOptions,
 ): Promise<CapabilityMountHandle> {
+  if (options.signal?.aborted) throw clientDestroyed();
   await client.ready();
+  if (options.signal?.aborted) throw clientDestroyed();
   if (!client.hasCapability('danmaku')) {
     throw new ViceMeError({
       code: 'CAPABILITY_DISABLED',
@@ -221,8 +223,10 @@ export async function mount(
   };
 
   let resolveInitialFrames: (() => void) | undefined;
+  let rejectInitialFrames: ((error: ViceMeError) => void) | undefined;
   const initialFrameReadiness = new Promise<void>((resolve, reject) => {
     resolveInitialFrames = resolve;
+    rejectInitialFrames = reject;
     readyTimer = windowObject.setTimeout(() => {
       reject(
         new ViceMeError({
@@ -312,6 +316,10 @@ export async function mount(
   };
 
   const locationPoll = windowObject.setInterval(refreshAnchor, LOCATION_POLL_MS);
+  const onAbort = (): void => {
+    rejectInitialFrames?.(clientDestroyed());
+    cleanup();
+  };
   const cleanup = (): void => {
     if (destroyed) return;
     destroyed = true;
@@ -327,15 +335,18 @@ export async function mount(
     stage.removeEventListener('load', frameLoaded);
     controls.removeEventListener('load', frameLoaded);
     modal.removeEventListener('load', frameLoaded);
+    options.signal?.removeEventListener('abort', onAbort);
     portal.remove();
   };
 
-  windowObject.addEventListener('message', onMessage);
-  windowObject.addEventListener('scroll', scheduleAnchorRefresh, { passive: true });
-  windowObject.addEventListener('resize', handleWindowResize);
-  windowObject.addEventListener('popstate', scheduleAnchorRefresh);
-  windowObject.addEventListener('hashchange', scheduleAnchorRefresh);
   try {
+    windowObject.addEventListener('message', onMessage);
+    windowObject.addEventListener('scroll', scheduleAnchorRefresh, { passive: true });
+    windowObject.addEventListener('resize', handleWindowResize);
+    windowObject.addEventListener('popstate', scheduleAnchorRefresh);
+    windowObject.addEventListener('hashchange', scheduleAnchorRefresh);
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    if (options.signal?.aborted) throw clientDestroyed();
     options.target.appendChild(portal);
     postAnchorToMountedFrames();
     await initialFrameReadiness;

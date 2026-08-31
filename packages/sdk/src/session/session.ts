@@ -2,7 +2,7 @@
  * Public visitor session.
  *
  * ```text
- * SDK + workKey + Origin -> POST /v1/public/v1/work-sessions
+ * SDK + workKey + Origin -> POST /v1/public/work-sdk/sessions
  *   -> short-lived capability token -> public capability calls
  * ```
  *
@@ -14,15 +14,9 @@
 
 import { ViceMeError } from '../core/errors.ts';
 import type { Transport, TransportRequest, TransportResponse } from '../transport/transport.ts';
-import type { components } from '../generated/public-contract.ts';
-
-/**
- * DTO shapes come from the generated public contract snapshot — the SDK never
- * hand-writes a second copy of the server DTOs. The runtime validator below
- * stays intentionally narrow (required fields of the current contract only).
- */
-type WorkSessionDto = components['schemas']['WorkSession'];
-export type CreateWorkSessionRequestDto = components['schemas']['CreateWorkSessionRequest'];
+export interface CreateWorkSessionRequestDto {
+  workKey: string;
+}
 
 export interface WorkDescriptor {
   key: string;
@@ -37,6 +31,7 @@ export interface WorkSessionSnapshot {
   /** Epoch milliseconds when the token expires, when provided by the server. */
   expiresAt?: number;
   user?: WorkUser;
+  userToken?: string;
 }
 
 export interface WorkUser {
@@ -58,18 +53,15 @@ function parseSessionResponse(body: unknown, workKey: string): WorkSessionSnapsh
   if (typeof body !== 'object' || body === null) {
     throw malformedSessionResponse();
   }
-  const raw = body as WorkSessionDto;
-  const work = raw.work as { key?: unknown; capabilities?: unknown } | undefined;
+  const raw = body as Record<string, unknown>;
   if (
-    typeof work !== 'object' ||
-    work === null ||
-    typeof work.key !== 'string' ||
-    !Array.isArray(work.capabilities) ||
-    !work.capabilities.every((c) => typeof c === 'string')
+    typeof raw.workKey !== 'string' ||
+    !Array.isArray(raw.capabilities) ||
+    !raw.capabilities.every((c) => typeof c === 'string')
   ) {
     throw malformedSessionResponse();
   }
-  if (work.key !== workKey) {
+  if (raw.workKey !== workKey) {
     throw new ViceMeError({
       code: 'WORK_NOT_FOUND',
       message: 'Work-session response did not match the requested work key.',
@@ -78,13 +70,16 @@ function parseSessionResponse(body: unknown, workKey: string): WorkSessionSnapsh
   }
   const snapshot: WorkSessionSnapshot = {
     work: {
-      key: work.key,
-      capabilities: work.capabilities as string[],
+      key: raw.workKey,
+      capabilities: raw.capabilities as string[],
     },
   };
   // Unknown extra fields are allowed and ignored (forward compatibility).
   if (typeof raw.token === 'string') snapshot.token = raw.token;
-  if (typeof raw.expiresAt === 'number') snapshot.expiresAt = raw.expiresAt;
+  if (typeof raw.expiresAt === 'string') {
+    const expiresAt = new Date(raw.expiresAt).getTime();
+    if (!Number.isNaN(expiresAt)) snapshot.expiresAt = expiresAt;
+  }
   return snapshot;
 }
 
@@ -132,7 +127,7 @@ export class SessionManager {
     this.#pending ??= this.#options.transport
       .request({
         method: 'POST',
-        path: '/v1/public/v1/work-sessions',
+        path: '/v1/public/work-sdk/sessions',
         body: { workKey: this.#options.workKey } satisfies CreateWorkSessionRequestDto,
         signal: this.#options.signal,
         timeoutMs: this.#options.timeoutMs,
@@ -149,7 +144,7 @@ export class SessionManager {
   }
 
   async request(
-    request: Omit<TransportRequest, 'authorization' | 'signal'>,
+    request: Omit<TransportRequest, 'authorization' | 'userAuthorization' | 'signal'>,
   ): Promise<TransportResponse> {
     const snapshot = await this.establish();
     if (!snapshot.token) throw malformedSessionResponse();
@@ -157,6 +152,7 @@ export class SessionManager {
       return await this.#options.transport.request({
         ...request,
         authorization: snapshot.token,
+        userAuthorization: snapshot.userToken,
         signal: this.#options.signal,
       });
     } catch (error) {
@@ -167,17 +163,17 @@ export class SessionManager {
       return this.#options.transport.request({
         ...request,
         authorization: refreshed.token,
+        userAuthorization: refreshed.userToken,
         signal: this.#options.signal,
       });
     }
   }
 
-  authenticate(input: { token: string; expiresAt: number; user: WorkUser }): void {
+  authenticate(input: { userToken: string; user: WorkUser }): void {
     if (!this.#snapshot) throw malformedSessionResponse();
     this.#snapshot = {
       ...this.#snapshot,
-      token: input.token,
-      expiresAt: input.expiresAt,
+      userToken: input.userToken,
       user: input.user,
     };
   }

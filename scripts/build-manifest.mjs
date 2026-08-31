@@ -82,7 +82,7 @@ for (const file of files.sort()) {
 }
 
 // Sanity: npm and hosted-loader runtime entries must all be present.
-for (const required of ['index.js', 'viceme.min.js', 'bootstrap.min.js', 'danmaku.js']) {
+for (const required of ['index.js', 'viceme.min.js', 'bootstrap.min.js', 'danmaku.js', 'tip.js']) {
   if (!manifest.files[required]) {
     console.error(`manifest: missing required artifact ${required}`);
     process.exit(1);
@@ -90,6 +90,7 @@ for (const required of ['index.js', 'viceme.min.js', 'bootstrap.min.js', 'danmak
 }
 
 manifest.features.danmaku = 'danmaku.js';
+manifest.features.tip = 'tip.js';
 
 await writeFile(join(distDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`manifest: ${Object.keys(manifest.files).length} artifacts @ ${pkg.version}`);
