@@ -120,7 +120,7 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('acted');
   });
 
-  it('shows the login relay directly without a click-blocking loading layer', async () => {
+  it('lets the login relay expand to the frame layout height', async () => {
     const presented = defaultAccessPresenter({
       featureKey: 'auth',
       reason: 'AUTH_REQUIRED',
@@ -135,16 +135,14 @@ describe('default access presenter', () => {
     const layer = document.querySelector('viceme-access-layer')!;
     const shadow = layer.shadowRoot!;
     const panel = shadow.querySelector("[data-viceme='panel']") as HTMLElement;
-    vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
-      height: 432,
-    } as DOMRect);
     (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(shadow.querySelector('iframe')?.getAttribute('src')).toBe('about:blank#wechat-login');
     });
     const frame = shadow.querySelector('iframe')!;
     expect(frame.hasAttribute('data-ready')).toBe(false);
-    expect(panel.style.height).toBe('432px');
+    expect(panel.style.height).toBe('');
+    expect(panel.dataset.frame).toBe('true');
     expect(shadow.querySelector("[data-viceme='frame-loading']")).toBeNull();
     expect(shadow.querySelector("[data-viceme='close']")).not.toBeNull();
     window.dispatchEvent(
