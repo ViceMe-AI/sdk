@@ -1,6 +1,6 @@
 {
   "name": "@viceme-ai/sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "ViceMe hosted engagement and Website Work access SDK for static HTML, ESM, React, and Agent-generated sites.",
   "type": "module",
   "repository": {
