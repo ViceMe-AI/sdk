@@ -198,25 +198,6 @@ function ensureAccessLayerElement(): void {
             font-size: 0.875rem;
           }
           [data-viceme='profile-header'] { min-width: 0; }
-          [data-viceme='profile-covers'] {
-            display: none;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0.75rem;
-            margin-top: 1.25rem;
-            border-radius: 0.875rem;
-            padding: 0.75rem;
-            background: #f4f4f5;
-          }
-          [data-viceme='profile-covers'][data-visible='true'] { display: grid; }
-          [data-viceme='profile-cover'] {
-            display: block;
-            width: 100%;
-            aspect-ratio: 16 / 9;
-            border: 1px solid #e4e4e7;
-            border-radius: 0.625rem;
-            object-fit: cover;
-            background: #ffffff;
-          }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='description'] { display: none; }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile'][data-visible='true'] {
             display: block;
@@ -314,7 +295,6 @@ function ensureAccessLayerElement(): void {
                 </div>
               </div>
               <p data-viceme="profile-description"></p>
-              <div data-viceme="profile-covers" aria-label="作品封面"></div>
             </section>
             <p data-viceme="error" role="alert" aria-live="polite"></p>
             <div data-viceme="actions">
@@ -343,7 +323,6 @@ function ensureAccessLayerElement(): void {
         "[data-viceme='profile-description']",
       )!;
       const profileStats = shadow.querySelector<HTMLElement>("[data-viceme='profile-stats']")!;
-      const profileCovers = shadow.querySelector<HTMLElement>("[data-viceme='profile-covers']")!;
       action.textContent = copy.label;
       action.hidden = false;
       mainActions.dataset.single = 'true';
@@ -369,18 +348,6 @@ function ensureAccessLayerElement(): void {
           profileDescription.title = target.description!;
         }
         profileStats.textContent = `${target.workCount} 个作品`;
-        if (target.coverUrls.length === 0) {
-          profileCovers.remove();
-        } else {
-          for (const [index, coverUrl] of target.coverUrls.entries()) {
-            const cover = document.createElement('img');
-            cover.dataset.viceme = 'profile-cover';
-            cover.src = coverUrl;
-            cover.alt = `${target.displayName}的作品封面 ${index + 1}`;
-            profileCovers.append(cover);
-          }
-          profileCovers.dataset.visible = 'true';
-        }
         avatarFallback.textContent = target.displayName.trim().slice(0, 1) || 'V';
         if (target.avatarUrl) {
           avatar.src = target.avatarUrl;

@@ -53,11 +53,17 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
               keys.map((key) => [
                 key,
                 key === 'followed'
-                  ? {
-                      allowed: following,
-                      reason: following ? 'FOLLOWING' : 'FOLLOW_REQUIRED',
-                      nextAction: following ? null : 'FOLLOW',
-                    }
+                  ? !request.userAuthorization
+                    ? {
+                        allowed: false,
+                        reason: 'AUTH_REQUIRED',
+                        nextAction: 'SIGN_IN',
+                      }
+                    : {
+                        allowed: following,
+                        reason: following ? 'FOLLOWING' : 'FOLLOW_REQUIRED',
+                        nextAction: following ? null : 'FOLLOW',
+                      }
                   : { allowed: false, reason: 'PURCHASE_REQUIRED', nextAction: 'CHECKOUT' },
               ]),
             ),
@@ -124,7 +130,28 @@ describe('website access capabilities', () => {
     const actions: string[] = [];
     const presenter: AccessPresenter = async (interaction) => {
       actions.push(interaction.action);
-      await interaction.perform();
+      const action = await interaction.perform();
+      if (interaction.action === 'SIGN_IN') {
+        if (action.type !== 'frame') throw new Error('expected sign-in frame');
+        const url = new URL(action.url);
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            origin: 'https://viceme.cn',
+            data: {
+              type: 'viceme:auth:complete',
+              workKey: 'wrk_test',
+              channel: url.searchParams.get('channel'),
+              userToken: 'work-bound-user-token',
+              user: {
+                id: '22222222-2222-4222-8222-222222222222',
+                displayName: 'Visitor',
+                avatarUrl: null,
+              },
+            },
+          }),
+        );
+        await action.completion;
+      }
       return 'acted';
     };
     const transport = capabilityTransport();
@@ -133,7 +160,7 @@ describe('website access capabilities', () => {
       allowed: true,
       reason: 'FOLLOWING',
     });
-    expect(actions).toEqual(['FOLLOW']);
+    expect(actions).toEqual(['SIGN_IN', 'FOLLOW']);
   });
 
   it('uses only the server-bound hosted checkout URL', async () => {
