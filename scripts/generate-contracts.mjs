@@ -34,15 +34,25 @@ const check = process.argv[2] === 'check';
 const snapshot = readFileSync(snapshotPath);
 const snapshotJson = JSON.parse(snapshot.toString('utf8'));
 const sha256 = createHash('sha256').update(snapshot).digest('hex');
-const danmakuPath = snapshotJson.paths?.['/v1/danmaku/messages'];
-const tipConfigPath = snapshotJson.paths?.['/v1/work-sdk/{workKey}/tip-config'];
+const expectedOperations = {
+  '/v1/danmaku/messages': ['get', 'post'],
+  '/v1/public/work-sdk/access/check': ['post'],
+  '/v1/public/work-sdk/access/features': ['get'],
+  '/v1/public/work-sdk/checkout': ['post'],
+  '/v1/public/work-sdk/follow': ['get', 'put'],
+  '/v1/public/work-sdk/sessions': ['post'],
+  '/v1/work-sdk/{workKey}/tip-config': ['get'],
+};
 if (
-  JSON.stringify(Object.keys(snapshotJson.paths ?? {})) !==
-    JSON.stringify(['/v1/danmaku/messages', '/v1/work-sdk/{workKey}/tip-config']) ||
-  JSON.stringify(Object.keys(danmakuPath ?? {}).sort()) !== JSON.stringify(['get', 'post']) ||
-  JSON.stringify(Object.keys(tipConfigPath ?? {}).sort()) !== JSON.stringify(['get'])
+  JSON.stringify(Object.keys(snapshotJson.paths ?? {}).sort()) !==
+    JSON.stringify(Object.keys(expectedOperations).sort()) ||
+  Object.entries(expectedOperations).some(
+    ([path, methods]) =>
+      JSON.stringify(Object.keys(snapshotJson.paths?.[path] ?? {}).sort()) !==
+      JSON.stringify(methods),
+  )
 ) {
-  throw new Error('public contract paths do not match the capability allowlist');
+  throw new Error('public contract operations do not match the supported SDK surface');
 }
 
 const BANNER = `/* eslint-disable */
@@ -96,7 +106,7 @@ try {
     const manifest = {
       contractVersion: snapshotJson.info.version,
       sha256,
-      generatedFrom: process.env.CONTRACT_SOURCE ?? 'ViceMe Shop public capability contract',
+      generatedFrom: process.env.CONTRACT_SOURCE ?? 'ViceMe Shop public SDK contract',
       generatedAt: new Date().toISOString(),
     };
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);

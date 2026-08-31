@@ -1,18 +1,33 @@
 /**
  * `@viceme-ai/sdk` public entry.
  *
- * Production consumers get a local hosted-capability client plus public types.
+ * Production consumers get `createViceMe` plus public types. Test injection
+ * lives under `@viceme-ai/sdk/testing`.
  */
 
-import { validatePublicConfig } from './core/config.ts';
+import { createFetchTransport } from './transport/transport.ts';
+import { resolveApiBaseUrl, validatePublicConfig } from './core/config.ts';
 import { ViceMeClientImpl } from './core/client.ts';
 import { ViceMeError, isViceMeError, type ViceMeErrorCode } from './core/errors.ts';
 import type { ViceMeClient, ViceMeMountedInstance } from './core/client.ts';
 import type { ViceMeRegion, ViceMeConfig } from './core/config.ts';
 import type { ViceMeClientState } from './core/lifecycle.ts';
+import type {
+  AccessCapability,
+  AccessDecision,
+  AccessFeaturePresentation,
+  AccessPolicyType,
+  AccessReason,
+  AuthCapability,
+  AuthState,
+  CheckoutCapability,
+  CheckoutOptions,
+  CheckoutResult,
+} from './core/capabilities.ts';
+import type { WorkUser } from './session/session.ts';
 import { SDK_VERSION, API_MAJOR } from './version.ts';
 
-export { ViceMeError, isViceMeError, SDK_VERSION, API_MAJOR };
+export { ViceMeError, isViceMeError, SDK_VERSION, API_MAJOR, resolveApiBaseUrl };
 export type {
   ViceMeClient,
   ViceMeMountedInstance,
@@ -20,10 +35,22 @@ export type {
   ViceMeRegion,
   ViceMeClientState,
   ViceMeErrorCode,
+  AccessCapability,
+  AccessDecision,
+  AccessFeaturePresentation,
+  AccessPolicyType,
+  AccessReason,
+  AuthCapability,
+  AuthState,
+  CheckoutCapability,
+  CheckoutOptions,
+  CheckoutResult,
+  WorkUser,
 };
 
 /**
- * Create a local hosted-capability client for one Work.
+ * Create a ViceMe client for one Work. Hosted capabilities initialize locally;
+ * website access establishes a short-lived Work session only when used.
  *
  * @example
  * ```ts
@@ -34,5 +61,9 @@ export type {
  */
 export function createViceMe(config: unknown): ViceMeClient {
   const validated = validatePublicConfig(config);
-  return new ViceMeClientImpl(validated);
+  const apiBaseUrl = resolveApiBaseUrl(validated.region);
+  const transport = createFetchTransport({
+    apiBaseUrl,
+  });
+  return new ViceMeClientImpl({ config: validated, transport });
 }

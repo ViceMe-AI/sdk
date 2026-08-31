@@ -308,7 +308,7 @@ describe('tip mount', () => {
     });
     expect(document.querySelector('[data-viceme-tip="mounted"]')).toBeNull();
 
-    const unsupported: ViceMeClient = {
+    const unsupported = {
       version: '0.3.0',
       workKey: 'wrk_test_demo',
       region: 'cn',
@@ -316,7 +316,7 @@ describe('tip mount', () => {
       ready: vi.fn(async () => undefined),
       hasCapability: () => false,
       destroy: vi.fn(),
-    };
+    } as unknown as ViceMeClient;
     await expect(
       mount(unsupported, { target: document.body, theme: 'auto' }),
     ).rejects.toMatchObject({ code: 'CAPABILITY_DISABLED', capability: 'tip' });

@@ -1,6 +1,12 @@
 # @viceme-ai/sdk
 
-PUBLIC-only ViceMe browser SDK for Shop-hosted danmaku and Tip capabilities.
+ViceMe browser SDK for Shop-hosted engagement and origin-bound Website Work access.
+
+The latest published package is `0.4.0`, which contains Website Access v2 but
+not Headless Tip. This source tree keeps the `0.4.0` development baseline while
+the independent release PR owns the atomic `0.5.0` version, manifest, and
+changelog update. Publication remains blocked while the repository has
+`LICENSE-PENDING.md` instead of an approved `LICENSE`.
 
 ## Install
 
@@ -61,7 +67,7 @@ client.destroy();
 Run those cleanup calls from the owning component's unmount path or another
 explicit lifecycle boundary, not from `pagehide` (which also covers bfcache).
 
-`createViceMe` is purely local and never contacts Shop. A live client reports
+`createViceMe` and `ready()` are purely local and never contact Shop. A live client reports
 build support for `danmaku` and `tip`; Shop remains authoritative for whether a
 Work enables either capability. The hosted `/embed/danmaku` iframe uses Shop's
 internal SDK to read and create anonymous messages through
@@ -74,8 +80,19 @@ Pass a selected public pair value for Tip: `keys.test` is `wrk_test_...` and
 `keys.live` is `wrk_live_...`. Legacy `wrk_...` keys remain accepted for
 Danmaku compatibility, but Tip rejects them locally.
 
-There is no public SDK Session, Bearer token, auth, follow, access, order, or
-payment data surface, and no generic `@viceme-ai/sdk/testing` subpath.
+Access operations establish a short-lived, memory-only Work session on first
+use. They expose `client.auth`, `client.access`, and `client.checkout`; login,
+explicit follow, and hosted checkout remain ViceMe-owned UI. The host never
+receives a general ViceMe session or payment credential. Tests can inject a
+deterministic transport and presenter through `@viceme-ai/sdk/testing`.
+
+```ts
+const decisions = await client.access.checkMany(['members', 'pro-tools']);
+if (!decisions['pro-tools']?.allowed) {
+  await client.access.require('pro-tools');
+}
+```
+
 The Tip subpath exports `TipPaidDetail` and `TipWidgetCloseDetail` for the
 sanitized `viceme:tip-paid` and `viceme:widget-close` `CustomEvent` details.
 `TipPaidDetail` contains only `status`, trusted `work.id/title`, amount, and CNY;
@@ -92,6 +109,9 @@ close and paid notifications, and removes its iframe, timer, media listener,
 and message listener on destroy.
 
 ## Headless Tip
+
+This additive API targets `0.5.0`. Do not expect `createTip` or
+`@viceme-ai/sdk/tip/testing` from the immutable npm `0.4.0` package.
 
 ```ts
 import { createViceMe } from '@viceme-ai/sdk';

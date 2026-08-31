@@ -13,6 +13,7 @@ import {
 const TIP_CONFIG_KEYS = ['work', 'workKey', 'environment', 'currency', 'amount', 'providers'];
 const TIP_WORK_KEYS = ['id', 'title'];
 const TIP_AMOUNT_KEYS = ['minCents', 'maxCents', 'stepCents'];
+const PUBLIC_ERROR_KEYS = ['statusCode', 'code', 'message', 'requestId'];
 const HEADLESS_READY_KEYS = ['type', 'channel', 'workKey'];
 const HEADLESS_PAID_KEYS = [
   'type',
@@ -42,6 +43,28 @@ function tipConfigInvalid(): ViceMeError {
     code: 'TIP_CONFIG_INVALID',
     message: 'Shop returned an invalid Tip configuration.',
     retryable: false,
+    capability: 'tip',
+  });
+}
+
+function isCredentialsNotAllowedError(input: unknown): input is { requestId: string } {
+  if (!isStrictRecord(input, PUBLIC_ERROR_KEYS)) return false;
+  return (
+    input.statusCode === 400 &&
+    input.code === 'TIP_CONFIG_CREDENTIALS_NOT_ALLOWED' &&
+    typeof input.message === 'string' &&
+    typeof input.requestId === 'string' &&
+    input.requestId.length >= 1 &&
+    input.requestId.length <= 128
+  );
+}
+
+function tipConfigCredentialsNotAllowed(requestId: string): ViceMeError {
+  return new ViceMeError({
+    code: 'TIP_CONFIG_CREDENTIALS_NOT_ALLOWED',
+    message: 'Tip configuration requests must not include credentials.',
+    retryable: false,
+    requestId,
     capability: 'tip',
   });
 }
@@ -231,15 +254,6 @@ async function fetchTipConfig(client: ViceMeClient, ownerSignal: AbortSignal): P
       headers: { accept: 'application/json' },
       signal: controller.signal,
     });
-    if (response.status !== 200) {
-      await response.body?.cancel().catch(() => undefined);
-      if (response.status === 404) throw tipCapabilityDisabled();
-      throw new ViceMeError({
-        code: 'INTERNAL_ERROR',
-        message: 'Unable to load Tip configuration.',
-        capability: 'tip',
-      });
-    }
     const contentType = response.headers
       .get('content-type')
       ?.split(';', 1)[0]
@@ -250,6 +264,34 @@ async function fetchTipConfig(client: ViceMeClient, ownerSignal: AbortSignal): P
       responseOrigin = response.url ? new URL(response.url).origin : undefined;
     } catch {
       responseOrigin = 'invalid';
+    }
+    if (response.status !== 200) {
+      if (response.status === 404) {
+        await response.body?.cancel().catch(() => undefined);
+        throw tipCapabilityDisabled();
+      }
+      if (
+        response.status === 400 &&
+        contentType === 'application/json' &&
+        (!responseOrigin || responseOrigin === widgetOrigin)
+      ) {
+        let body: unknown;
+        try {
+          body = await readTipConfigBody(response);
+        } catch {
+          throw internalTipError();
+        }
+        if (isCredentialsNotAllowedError(body)) {
+          throw tipConfigCredentialsNotAllowed(body.requestId);
+        }
+      } else {
+        await response.body?.cancel().catch(() => undefined);
+      }
+      throw new ViceMeError({
+        code: 'INTERNAL_ERROR',
+        message: 'Unable to load Tip configuration.',
+        capability: 'tip',
+      });
     }
     if (contentType !== 'application/json' || (responseOrigin && responseOrigin !== widgetOrigin)) {
       await response.body?.cancel().catch(() => undefined);

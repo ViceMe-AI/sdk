@@ -1,14 +1,14 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "ViceMe Public Capability API",
+    "title": "ViceMe Public Capabilities API",
     "version": "1.1.0",
-    "summary": "Public configuration and hosted engagement APIs exposed by Shop.",
-    "description": "Shop owns the public Work capability APIs. The external SDK reads only Tip configuration; the Shop SDK inside the hosted danmaku iframe owns anonymous message reads and writes."
+    "summary": "Public Website Work access, Tip configuration, and hosted danmaku capabilities consumed by the ViceMe browser SDK.",
+    "description": "Shop owns the public Work capability APIs. Website access uses short-lived Work sessions, Tip configuration is credentialless, and the Shop SDK inside the hosted danmaku iframe owns anonymous message reads and writes."
   },
   "servers": [
-    { "url": "https://viceme.cn", "description": "CN Shop gateway" },
-    { "url": "https://viceme.ai", "description": "GLOBAL Shop gateway" }
+    { "url": "https://api.viceme.cn", "description": "CN region public API" },
+    { "url": "https://api.viceme.ai", "description": "GLOBAL region public API" }
   ],
   "security": [],
   "tags": [
@@ -16,11 +16,120 @@
     { "name": "tip", "description": "Public Tip capability configuration" }
   ],
   "paths": {
+    "/v1/public/work-sdk/sessions": {
+      "post": {
+        "operationId": "createWebsiteAccessSession",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateWorkSessionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Session established",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/WorkSession" } }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
+        }
+      }
+    },
+    "/v1/public/work-sdk/follow": {
+      "get": {
+        "operationId": "getWebsiteFollowState",
+        "security": [{ "workSession": [] }],
+        "responses": {
+          "200": {
+            "description": "Follow state",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/FollowState" } }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
+        }
+      },
+      "put": {
+        "operationId": "followWebsiteCreator",
+        "security": [{ "workSession": [] }],
+        "responses": {
+          "200": {
+            "description": "Creator followed",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/FollowState" } }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
+        }
+      }
+    },
+    "/v1/public/work-sdk/access/check": {
+      "post": {
+        "operationId": "checkWebsiteAccess",
+        "security": [{ "workSession": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/AccessCheckRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access decisions",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccessCheckResponse" }
+              }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
+        }
+      }
+    },
+    "/v1/public/work-sdk/access/features": {
+      "get": {
+        "operationId": "getWebsiteAccessFeatures",
+        "security": [{ "workSession": [] }],
+        "responses": {
+          "200": {
+            "description": "Server-authoritative feature presentation",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccessFeaturesResponse" }
+              }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
+        }
+      }
+    },
+    "/v1/public/work-sdk/checkout": {
+      "post": {
+        "operationId": "createWebsiteAccessCheckout",
+        "security": [{ "workSession": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CheckoutRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Hosted checkout",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/CheckoutResponse" } }
+            }
+          },
+          "4xx": { "$ref": "#/components/responses/PublicError" }
+        }
+      }
+    },
     "/v1/danmaku/messages": {
       "get": {
-        "tags": ["danmaku"],
         "operationId": "listDanmakuMessages",
-        "summary": "List public danmaku messages for one page-position anchor",
         "parameters": [
           {
             "name": "workKey",
@@ -31,45 +140,28 @@
           {
             "name": "anchorKey",
             "in": "query",
-            "required": false,
             "schema": { "$ref": "#/components/schemas/DanmakuAnchorKey" }
           },
           {
             "name": "cursor",
             "in": "query",
-            "required": false,
             "schema": { "$ref": "#/components/schemas/DanmakuCursor" }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 80,
-              "default": 30
-            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Messages for the requested public work and anchor.",
+            "description": "Messages",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/DanmakuMessagesResponse" }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "404": { "$ref": "#/components/responses/WorkNotFound" },
-          "500": { "$ref": "#/components/responses/InternalError" }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       },
       "post": {
-        "tags": ["danmaku"],
         "operationId": "createDanmakuMessage",
-        "summary": "Create a public danmaku message",
         "requestBody": {
           "required": true,
           "content": {
@@ -80,17 +172,12 @@
         },
         "responses": {
           "201": {
-            "description": "Message created.",
+            "description": "Message created",
             "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/DanmakuMessage" }
-              }
+              "application/json": { "schema": { "$ref": "#/components/schemas/DanmakuMessage" } }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "404": { "$ref": "#/components/responses/WorkNotFound" },
-          "429": { "$ref": "#/components/responses/RateLimited" },
-          "500": { "$ref": "#/components/responses/InternalError" }
+          "4xx": { "$ref": "#/components/responses/PublicError" }
         }
       }
     },
@@ -99,6 +186,10 @@
         "tags": ["tip"],
         "operationId": "getTipConfig",
         "summary": "Read public Tip configuration for one Work",
+        "servers": [
+          { "url": "https://viceme.cn", "description": "CN Shop gateway" },
+          { "url": "https://viceme.ai", "description": "GLOBAL Shop gateway" }
+        ],
         "parameters": [
           {
             "name": "workKey",
@@ -116,6 +207,7 @@
               }
             }
           },
+          "400": { "$ref": "#/components/responses/TipConfigCredentialsNotAllowed" },
           "404": { "$ref": "#/components/responses/TipUnavailable" },
           "500": { "$ref": "#/components/responses/InternalError" }
         }
@@ -123,11 +215,160 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "workSession": { "type": "http", "scheme": "bearer" }
+    },
     "schemas": {
-      "WorkKey": {
-        "type": "string",
-        "pattern": "^wrk_[A-Za-z0-9_-]{4,124}$",
-        "description": "Public opaque key issued by WorkSdkAccess."
+      "WorkKey": { "type": "string", "pattern": "^wrk_[A-Za-z0-9_-]{4,124}$" },
+      "CreateWorkSessionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workKey"],
+        "properties": { "workKey": { "$ref": "#/components/schemas/WorkKey" } }
+      },
+      "WorkSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workKey", "token", "expiresAt", "capabilities"],
+        "properties": {
+          "workKey": { "$ref": "#/components/schemas/WorkKey" },
+          "token": { "type": "string" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["danmaku", "tip", "access", "follow", "checkout"]
+            }
+          }
+        }
+      },
+      "Creator": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "displayName", "avatarUrl", "description", "publishedWorkCount"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "displayName": { "type": "string" },
+          "avatarUrl": { "type": ["string", "null"], "format": "uri" },
+          "description": { "type": ["string", "null"] },
+          "publishedWorkCount": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "FollowState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["following", "followedAt", "creator"],
+        "properties": {
+          "following": { "type": "boolean" },
+          "followedAt": { "type": ["string", "null"], "format": "date-time" },
+          "creator": { "$ref": "#/components/schemas/Creator" }
+        }
+      },
+      "AccessCheckRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["featureKeys"],
+        "properties": {
+          "featureKeys": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" }
+          }
+        }
+      },
+      "AccessDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["allowed", "reason", "nextAction"],
+        "properties": {
+          "allowed": { "type": "boolean" },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "PUBLIC",
+              "OWNER",
+              "FOLLOWING",
+              "ENTITLED",
+              "AUTH_REQUIRED",
+              "FOLLOW_REQUIRED",
+              "PURCHASE_REQUIRED",
+              "FEATURE_NOT_FOUND",
+              "FEATURE_DISABLED"
+            ]
+          },
+          "nextAction": {
+            "type": ["string", "null"],
+            "enum": ["SIGN_IN", "FOLLOW", "CHECKOUT", null]
+          }
+        }
+      },
+      "AccessCheckResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decisions"],
+        "properties": {
+          "decisions": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/components/schemas/AccessDecision" }
+          }
+        }
+      },
+      "AccessFeaturePrice": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["amountCents", "currency"],
+        "properties": {
+          "amountCents": { "type": "integer", "minimum": 1 },
+          "currency": { "const": "CNY" }
+        }
+      },
+      "AccessFeaturePresentation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["featureKey", "title", "policyType", "price"],
+        "properties": {
+          "featureKey": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "policyType": {
+            "type": "string",
+            "enum": ["PUBLIC", "FOLLOW_OWNER", "WORK_ENTITLEMENT"]
+          },
+          "price": {
+            "oneOf": [{ "$ref": "#/components/schemas/AccessFeaturePrice" }, { "type": "null" }]
+          }
+        }
+      },
+      "AccessFeaturesResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["features"],
+        "properties": {
+          "features": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "$ref": "#/components/schemas/AccessFeaturePresentation" }
+          }
+        }
+      },
+      "CheckoutRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["featureKey"],
+        "properties": {
+          "featureKey": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
+          "locale": { "type": "string", "enum": ["zh-CN", "en-US"], "default": "zh-CN" }
+        }
+      },
+      "CheckoutResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["checkoutUrl", "alreadyOwned"],
+        "properties": {
+          "checkoutUrl": { "type": "string", "format": "uri" },
+          "alreadyOwned": { "type": "boolean" }
+        }
       },
       "TipWorkKey": {
         "type": "string",
@@ -184,11 +425,22 @@
           }
         }
       },
+      "TipConfigCredentialsError": {
+        "type": "object",
+        "required": ["statusCode", "code", "message", "requestId"],
+        "additionalProperties": false,
+        "properties": {
+          "statusCode": { "type": "integer", "const": 400 },
+          "code": { "type": "string", "const": "TIP_CONFIG_CREDENTIALS_NOT_ALLOWED" },
+          "message": { "type": "string" },
+          "requestId": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      },
       "DanmakuAnchorKey": {
         "type": "string",
         "minLength": 1,
         "maxLength": 128,
-        "description": "Opaque page-position anchor derived by the external SDK."
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
       },
       "DanmakuCursor": {
         "type": "string",
@@ -196,12 +448,12 @@
       },
       "DanmakuMessage": {
         "type": "object",
-        "required": ["id", "workKey", "content", "anchorKey", "createdAt"],
         "additionalProperties": false,
+        "required": ["id", "workKey", "content", "anchorKey", "createdAt"],
         "properties": {
           "id": { "type": "string", "format": "uuid" },
           "workKey": { "$ref": "#/components/schemas/WorkKey" },
-          "content": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "content": { "type": "string", "minLength": 1, "maxLength": 280 },
           "anchorKey": {
             "oneOf": [{ "$ref": "#/components/schemas/DanmakuAnchorKey" }, { "type": "null" }]
           },
@@ -210,72 +462,51 @@
       },
       "DanmakuMessagesResponse": {
         "type": "object",
-        "required": ["items", "nextCursor", "total"],
         "additionalProperties": false,
+        "required": ["messages", "nextCursor"],
         "properties": {
-          "items": {
+          "messages": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/DanmakuMessage" }
           },
           "nextCursor": {
             "oneOf": [{ "$ref": "#/components/schemas/DanmakuCursor" }, { "type": "null" }]
-          },
-          "total": { "type": "integer", "minimum": 0 }
+          }
         }
       },
       "CreateDanmakuMessageRequest": {
         "type": "object",
-        "required": ["workKey", "content"],
         "additionalProperties": false,
+        "required": ["workKey", "content"],
         "properties": {
           "workKey": { "$ref": "#/components/schemas/WorkKey" },
-          "content": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "content": { "type": "string", "minLength": 1, "maxLength": 280 },
           "anchorKey": { "$ref": "#/components/schemas/DanmakuAnchorKey" }
         }
       },
       "ErrorBody": {
         "type": "object",
         "required": ["statusCode", "code", "message", "requestId"],
-        "additionalProperties": false,
         "properties": {
-          "statusCode": { "type": "integer", "minimum": 400, "maximum": 599 },
-          "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
-          "message": {
-            "oneOf": [
-              { "type": "string" },
-              {
-                "type": "array",
-                "minItems": 1,
-                "items": { "type": "string" }
-              }
-            ]
-          },
-          "requestId": { "type": "string", "minLength": 1, "maxLength": 128 }
+          "statusCode": { "type": "integer" },
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "requestId": { "type": "string" }
         }
       }
     },
     "responses": {
-      "BadRequest": {
-        "description": "Invalid query or body.",
+      "PublicError": {
+        "description": "Public API error",
         "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorBody" }
-          }
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorBody" } }
         }
       },
-      "WorkNotFound": {
-        "description": "Unknown, inactive, or non-PUBLIC danmaku work.",
+      "TipConfigCredentialsNotAllowed": {
+        "description": "Tip configuration requests must not include Cookie or Authorization credentials.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorBody" }
-          }
-        }
-      },
-      "RateLimited": {
-        "description": "Danmaku write rate limit exceeded.",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorBody" }
+            "schema": { "$ref": "#/components/schemas/TipConfigCredentialsError" }
           }
         }
       },

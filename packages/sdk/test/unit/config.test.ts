@@ -4,19 +4,28 @@ import { validatePublicConfig } from '../../src/core/config.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('validatePublicConfig', () => {
-  it.each(['wrk_test_demo', 'wrk_live_demo', 'wrk_public_demo'])(
-    'accepts public Work key %s',
-    (workKey) => {
-      expect(validatePublicConfig({ workKey, region: 'cn' })).toEqual({ workKey, region: 'cn' });
-    },
-  );
+  it('accepts workKey, region, and an optional abort signal', () => {
+    for (const workKey of ['wrk_test_demo', 'wrk_live_demo', 'wrk_public_demo']) {
+      expect(validatePublicConfig({ workKey, region: 'cn' })).toEqual({
+        workKey,
+        region: 'cn',
+        signal: undefined,
+      });
+    }
+    const signal = new AbortController().signal;
+    expect(validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn', signal })).toEqual({
+      workKey: 'wrk_public_xxx',
+      region: 'cn',
+      signal,
+    });
+  });
 
   it('rejects non-object input', () => {
     expect(() => validatePublicConfig('nope')).toThrow(ViceMeError);
     expect(() => validatePublicConfig(null)).toThrow(ViceMeError);
   });
 
-  it.each(['apiBaseUrl', 'signal', 'transport', 'token', 'presenter'])(
+  it.each(['apiBaseUrl', 'transport', 'token', 'presenter'])(
     'rejects removed or internal field %s',
     (field) => {
       expect(() =>

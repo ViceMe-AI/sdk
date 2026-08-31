@@ -103,7 +103,7 @@ describe('danmaku mount', () => {
 
   it('does not retain a failed ESM mount registration', async () => {
     let enabled = false;
-    const sdkClient: ViceMeClient = {
+    const sdkClient = {
       version: '0.3.0',
       workKey: 'wrk_test_demo',
       region: 'cn',
@@ -111,7 +111,7 @@ describe('danmaku mount', () => {
       ready: vi.fn(async () => undefined),
       hasCapability: () => enabled,
       destroy: vi.fn(),
-    };
+    } as unknown as ViceMeClient;
 
     await expect(
       mountDanmaku(sdkClient, { target: document.body, theme: 'auto' }),
@@ -331,7 +331,7 @@ describe('danmaku mount', () => {
   });
 
   it('fails closed when a non-danmaku client is supplied', async () => {
-    const unsupported: ViceMeClient = {
+    const unsupported = {
       version: '0.3.0',
       workKey: 'wrk_test_demo',
       region: 'cn',
@@ -339,7 +339,7 @@ describe('danmaku mount', () => {
       ready: vi.fn(async () => undefined),
       hasCapability: () => false,
       destroy: vi.fn(),
-    };
+    } as unknown as ViceMeClient;
 
     await expect(
       mount(unsupported, { target: document.body, theme: 'auto' }),

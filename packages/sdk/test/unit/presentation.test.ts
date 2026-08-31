@@ -1,0 +1,233 @@
+// @vitest-environment happy-dom
+
+import { describe, expect, it, vi } from 'vitest';
+import { defaultAccessPresenter } from '../../src/core/presentation.ts';
+import { ViceMeError } from '../../src/core/errors.ts';
+
+describe('default access presenter', () => {
+  it('shows creator information without recent work covers in the follow consent layer', async () => {
+    const fullDescription = '专注于 AI 创作工具与智能体工作流。'.repeat(4);
+    const perform = vi.fn(async () => ({ type: 'completed' as const }));
+    const presented = defaultAccessPresenter({
+      featureKey: 'followers',
+      reason: 'FOLLOW_REQUIRED',
+      action: 'FOLLOW',
+      followTarget: {
+        kind: 'CREATOR',
+        displayName: '归藏',
+        avatarUrl: 'https://cdn.example.com/creator.jpg',
+        description: fullDescription,
+        workCount: 2,
+      },
+      perform,
+    });
+    const layer = document.querySelector('viceme-access-layer');
+    expect(layer).not.toBeNull();
+    const shadow = layer!.shadowRoot!;
+
+    expect(shadow.querySelector("[data-viceme='title']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile']")?.getAttribute('data-visible')).toBe(
+      'true',
+    );
+    expect(shadow.querySelector("[data-viceme='profile-name']")?.textContent).toBe('归藏');
+    expect(shadow.querySelector("[data-viceme='profile-description']")?.textContent).toBe(
+      `${[...fullDescription].slice(0, 50).join('')}…`,
+    );
+    expect(shadow.querySelector("[data-viceme='profile-description']")?.getAttribute('title')).toBe(
+      fullDescription,
+    );
+    expect(shadow.querySelector("[data-viceme='profile-title']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile-consent']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile-stats']")?.textContent).toBe('2 个作品');
+    const summary = shadow.querySelector("[data-viceme='profile-summary']");
+    expect(shadow.querySelector("[data-viceme='profile-name']")?.parentElement).toBe(summary);
+    expect(shadow.querySelector("[data-viceme='profile-stats']")?.parentElement).toBe(summary);
+    expect(shadow.querySelector("[data-viceme='profile-separator']")?.textContent).toBe('·');
+    expect(shadow.querySelector("[data-viceme='profile-covers']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='profile-cover']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='close']")?.getAttribute('aria-label')).toBe('关闭');
+    expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('关注');
+    expect(shadow.querySelector('[data-viceme-cancel]')).toBeNull();
+    expect(shadow.querySelector("[data-viceme='description']")?.textContent).toBe('');
+    expect(shadow.textContent).toContain('关注');
+    const styles = shadow.querySelector('style')?.textContent ?? '';
+    expect(styles).toContain('box-sizing: border-box;');
+    expect(styles).not.toContain('background: rgb(0 0 0 / 56%);');
+    expect(styles).not.toContain('min-height: min(32rem');
+    expect(styles).not.toContain("[data-viceme='close']:hover");
+    expect(styles).toContain('height: min(92dvh, 46rem);');
+    expect(styles).not.toContain('height: 8rem;');
+
+    (shadow.querySelector("[data-viceme='close']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+    expect(perform).not.toHaveBeenCalled();
+  });
+
+  it('opens checkout only after an explicit action and waits for the external window', async () => {
+    let complete!: () => void;
+    const completion = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    const perform = vi.fn(async () => ({
+      type: 'external' as const,
+      completion,
+      cancel: vi.fn(),
+    }));
+    const presented = defaultAccessPresenter({
+      featureKey: 'emperor',
+      reason: 'PURCHASE_REQUIRED',
+      action: 'CHECKOUT',
+      perform,
+    });
+    const layer = document.querySelector('viceme-access-layer');
+    const panel = layer?.shadowRoot?.querySelector("[data-viceme='panel']") as HTMLElement;
+    const action = layer?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement;
+    expect(panel.dataset.frame).toBe('false');
+    expect(action.textContent).toBe('打开支付');
+    expect(perform).not.toHaveBeenCalled();
+    action.click();
+    await vi.waitFor(() => expect(perform).toHaveBeenCalledOnce());
+    expect(layer?.shadowRoot?.querySelector('iframe')?.hasAttribute('src')).toBe(false);
+    complete();
+
+    await expect(presented).resolves.toBe('acted');
+  });
+
+  it('lets the login relay expand to the frame layout height', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      perform: vi.fn(async () => ({
+        type: 'frame' as const,
+        url: 'about:blank#wechat-login',
+        completion: new Promise<void>(() => undefined),
+        cancel: vi.fn(),
+      })),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
+    const panel = shadow.querySelector("[data-viceme='panel']") as HTMLElement;
+    (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(shadow.querySelector('iframe')?.getAttribute('src')).toBe('about:blank#wechat-login');
+    });
+    const frame = shadow.querySelector('iframe')!;
+    expect(frame.hasAttribute('data-ready')).toBe(false);
+    expect(panel.style.height).toBe('');
+    expect(panel.dataset.frame).toBe('true');
+    expect(shadow.querySelector("[data-viceme='frame-loading']")).toBeNull();
+    expect(shadow.querySelector("[data-viceme='close']")).not.toBeNull();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'viceme:frame:resize', height: 72 },
+        origin: 'null',
+        source: frame.contentWindow,
+      }),
+    );
+    expect(frame.style.height).toBe('');
+
+    (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+  });
+
+  it('cancels an active checkout window from the backdrop', async () => {
+    const cancel = vi.fn();
+    const perform = vi.fn(async () => ({
+      type: 'external' as const,
+      completion: new Promise<void>(() => undefined),
+      cancel,
+    }));
+    const presented = defaultAccessPresenter({
+      featureKey: 'emperor',
+      reason: 'PURCHASE_REQUIRED',
+      action: 'CHECKOUT',
+      perform,
+    });
+    const layer = document.querySelector('viceme-access-layer');
+    (layer?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(perform).toHaveBeenCalledOnce());
+    (layer?.shadowRoot?.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+
+    await expect(presented).resolves.toBe('dismissed');
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('shows immediate progress after the first interactive click', async () => {
+    let finish!: () => void;
+    const perform = vi.fn(
+      () =>
+        new Promise<{ type: 'completed' }>((resolve) => {
+          finish = () => resolve({ type: 'completed' });
+        }),
+    );
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      perform,
+    });
+    const action = document
+      .querySelector('viceme-access-layer')
+      ?.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement;
+
+    expect(action.parentElement?.dataset.single).toBe('true');
+    action.click();
+
+    expect(action.disabled).toBe(true);
+    expect(action.getAttribute('aria-busy')).toBe('true');
+    expect(action.textContent).toBe('正在打开…');
+    finish();
+    await expect(presented).resolves.toBe('acted');
+  });
+
+  it('explains when the login session has expired', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      perform: vi.fn(async () => {
+        throw new ViceMeError({
+          code: 'SESSION_EXPIRED',
+          message: 'The work session has expired.',
+        });
+      }),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
+
+    (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
+        '授权会话已过期，请重试。',
+      );
+    });
+    (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+  });
+
+  it('reports invalid WeChat login configuration', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'auth',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      perform: vi.fn(async () => {
+        throw new ViceMeError({
+          code: 'CONFIG_INVALID',
+          message: 'Invalid WeChat sign-in configuration.',
+        });
+      }),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    const shadow = layer.shadowRoot!;
+
+    (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
+        '微信授权配置无效，请稍后重试。',
+      );
+    });
+    (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+  });
+});

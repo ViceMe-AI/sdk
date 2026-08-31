@@ -1,17 +1,29 @@
 # ViceMe SDK
 
-PUBLIC-only browser SDK for mounting ViceMe's Shop-hosted capabilities or
-handing a host-rendered Tip UI to a secure Shop frame.
+Browser SDK for mounting ViceMe's Shop-hosted danmaku and Tip capabilities and
+for adding server-authoritative login, follow, and paid access gates to a
+published creator website.
 
 - **Package**: [`@viceme-ai/sdk`](./packages/sdk)
 - **Hosted features**: `danmaku` and `tip`
+- **Website access**: authentication, explicit creator follow, and one-time paid unlock
 - **Status**: `0.x`; the normal `dev -> main` release workflow owns versioning
+- **Latest published package**: `0.4.0` with Website Access v2; it does not contain Headless Tip
+- **Current source target**: `0.5.0`, adding Headless Tip through a separate release PR
 
-The external SDK has no Work Session, browser Bearer token, authentication,
-follow, access gate, order, or payment data API. Shop resolves `workKey` through
-`WorkSdkAccess`; the Work and each requested feature must be active. Any Origin
-may use a Tip key. A matching Commerce Application is optional server-resolved
-attribution, never authorization.
+Shop resolves `workKey` through `WorkSdkAccess`; the Work, verified embedding
+Origin, and requested feature must be active. Website access establishes
+short-lived in-memory Work and user sessions. Login never follows a creator
+automatically, and payment return parameters never grant access.
+Headless Tip is a separate credentialless boundary: it does not expose the
+Website Access token, user session, order, payment action, or provider
+transaction data to the host page.
+
+The source tree intentionally keeps `package.json` and `SDK_VERSION` at the
+published `0.4.0` development baseline. The independent release PR will
+atomically generate `0.5.0`, its runtime manifest, and changelog. That release
+also remains fail closed while `LICENSE-PENDING.md` exists and no approved root
+`LICENSE` has been committed.
 
 ## Static HTML
 
@@ -99,6 +111,10 @@ compatibility, but the Tip capability rejects them locally.
 
 ## Headless Tip
 
+Headless Tip is present in the current source tree and targets `0.5.0`; npm and
+CN/GLOBAL immutable `0.5.0` artifacts do not exist until the release workflow
+completes.
+
 Use `createTip` when the host renders the amount and provider controls but Shop
 must still own confirmation, payment, risk, and result authority:
 
@@ -174,9 +190,12 @@ The npm entry and immutable CDN ESM entry are built from the same `tip.js`
 implementation. Exact-version CDN imports do not install a `window` global:
 
 ```ts
-import { createViceMe } from 'https://s3.viceme.cn/viceme-sdk/0.4.0/index.js';
-import { createTip } from 'https://s3.viceme.cn/viceme-sdk/0.4.0/tip.js';
+import { createViceMe } from 'https://s3.viceme.cn/viceme-sdk/0.5.0/index.js';
+import { createTip } from 'https://s3.viceme.cn/viceme-sdk/0.5.0/tip.js';
 ```
+
+Use those exact URLs only after `0.5.0` is published and verified. Substituting
+`0.4.0` is invalid because that immutable release does not export `createTip`.
 
 For components and Storybook, use the isolated deterministic fake:
 
@@ -190,6 +209,29 @@ const tip = createTestTip({ config, outcome: 'PAID' });
 `CANCELLED`, `UNKNOWN`, or an `Error`. This test entry never changes production
 `createTip` behavior.
 
+## Website Access
+
+Configure the Website Work and its follow or paid features through the ViceMe
+publish flow first. Host code only consumes the returned `workKey` and feature
+keys:
+
+```ts
+const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
+const features = await client.access.getFeatures();
+const memberFeature = features.find((feature) => feature.featureKey === 'member-content');
+
+async function openProtectedContent() {
+  const decision = await client.access.require('member-content');
+  if (!decision.allowed) return;
+  await openMemberContent();
+}
+```
+
+`access.require()` follows the Shop decision: sign in, ask for separate follow
+consent, or open Hosted Checkout. It rechecks server state before returning an
+allowed decision. Creator consent UI shows identity and published work count,
+but does not request or render recent work covers.
+
 ## Public Surface
 
 ```ts
@@ -201,17 +243,21 @@ interface ViceMeClient {
   readonly workKey: string;
   readonly region: ViceMeRegion;
   readonly state: ViceMeClientState;
+  readonly auth: AuthCapability;
+  readonly access: AccessCapability;
+  readonly checkout: CheckoutCapability;
 
   ready(): Promise<void>;
-  hasCapability(name: string): boolean; // build support: "danmaku" or "tip"
+  hasCapability(name: string): boolean;
   destroy(): void;
 }
 ```
 
-The released package exports exactly `@viceme-ai/sdk`,
+The `0.5.0` target exports `@viceme-ai/sdk`, `@viceme-ai/sdk/testing`,
 `@viceme-ai/sdk/danmaku`, `@viceme-ai/sdk/tip`, and
-`@viceme-ai/sdk/tip/testing`. There is no generic `@viceme-ai/sdk/testing`
-transport or Session adapter.
+`@viceme-ai/sdk/tip/testing`. The generic testing entry injects deterministic
+Website Access transports and presenters; the scoped Tip entry is an isolated
+`TipClient` fake. Production code uses the main and capability entries.
 
 `@viceme-ai/sdk/tip` also exports `TipPaidDetail` and
 `TipWidgetCloseDetail` for the sanitized `viceme:tip-paid` and
@@ -222,7 +268,7 @@ transport or Session adapter.
 
 - The loader fetches only `manifest.json`, requested capability entries, and
   referenced `chunks/*.js` beside `viceme.min.js`.
-- Headless `getConfig` performs the sole host-page data request. Headless
+- Headless `getConfig` performs Tip's sole host-page data request. Headless
   `open` sends only channel, Work key, amount, optional provider, locale, and
   resolved light/dark appearance to the exact trusted frame.
 - The external SDK derives an opaque page-position anchor, creates the stage,

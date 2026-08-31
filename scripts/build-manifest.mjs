@@ -87,6 +87,7 @@ for (const required of [
   'viceme.min.js',
   'bootstrap.min.js',
   'danmaku.js',
+  'testing.js',
   'tip.js',
   'tip/testing.js',
 ]) {

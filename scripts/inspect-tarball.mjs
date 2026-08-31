@@ -99,11 +99,17 @@ try {
     const { createTestTip } = await import(
       new URL('./dist/tip/testing.js', import.meta.url).href
     );
+    const { createMemoryTransport, createTestViceMe } = await import(
+      new URL('./dist/testing.js', import.meta.url).href
+    );
     if (typeof createViceMe !== 'function') throw new Error('createViceMe missing');
     if (typeof mountDanmaku !== 'function') throw new Error('mountDanmaku missing');
     if (typeof mountTip !== 'function') throw new Error('mountTip missing');
     if (typeof createTip !== 'function') throw new Error('createTip missing');
     if (typeof createTestTip !== 'function') throw new Error('createTestTip missing');
+    if (typeof createMemoryTransport !== 'function' || typeof createTestViceMe !== 'function') {
+      throw new Error('Website Access testing entry missing');
+    }
     if (typeof ViceMeError !== 'function' || !isViceMeError(new ViceMeError({ code: 'INTERNAL_ERROR', message: 'x' }))) {
       throw new Error('error model missing');
     }
@@ -119,7 +125,10 @@ try {
     if (!client.hasCapability('danmaku') || !client.hasCapability('tip') || client.hasCapability('checkout')) {
       throw new Error('PUBLIC-only capability check broken');
     }
-    for (const removed of ['auth', 'access', 'checkout', 'follow', 'session']) {
+    if (typeof client.auth?.getState !== 'function') throw new Error('auth capability missing');
+    if (typeof client.access?.check !== 'function') throw new Error('access capability missing');
+    if (typeof client.checkout?.open !== 'function') throw new Error('checkout capability missing');
+    for (const removed of ['follow', 'session']) {
       if (removed in client) throw new Error('removed client surface restored: ' + removed);
     }
     client.destroy();
@@ -146,6 +155,7 @@ try {
   if (!manifest.files['tip.js']?.sha256) throw new Error('manifest missing tip.js digest');
   if (!manifest.files['tip/testing.js']?.sha256)
     throw new Error('manifest missing tip/testing.js digest');
+  if (!manifest.files['testing.js']?.sha256) throw new Error('manifest missing testing.js digest');
   if (manifest.features?.danmaku !== 'danmaku.js' || manifest.features?.tip !== 'tip.js')
     throw new Error('manifest missing hosted features');
 

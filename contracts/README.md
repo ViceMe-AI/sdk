@@ -1,26 +1,30 @@
 # Public API Contract Snapshots
 
-This directory holds the machine-readable snapshot of Shop's public danmaku API
-and credential-free Tip configuration API.
+This directory holds the machine-readable snapshot of the Shop public SDK APIs
+for Website Work access, hosted danmaku, and credential-free Tip configuration.
 
 ## Authority
 
-- The **Shop API** is the single authority for the HTTP contract. Session,
-  authentication, follow, access, orders, payment actions, Admin, and ops
-  endpoints are not part of this snapshot.
+- The **Shop API** is the single authority for the HTTP contract. The snapshot
+  contains anonymous danmaku, origin-bound Website Work access calls, and the
+  credentialless Tip configuration read; payment-provider, order, Admin, and
+  ops endpoints are not public SDK contracts.
 - TypeScript reference types are generated from the snapshot by
   `scripts/generate-contracts.mjs` into
   `packages/sdk/src/generated/public-contract.ts` (committed), and CI fails if
   regeneration drifts.
-- The external SDK calls only Tip config. It mounts Shop's hosted
-  `/embed/danmaku` iframe; the Shop SDK inside that frame calls the message API.
+- Danmaku remains hosted in Shop's `/embed/danmaku` iframe. Access calls use a
+  short-lived Work token bound to the published Work and its verified Origin.
+- Headless Tip calls only `GET /v1/work-sdk/{workKey}/tip-config`, without
+  Cookie or Authorization. Shop's trusted frame owns all Tip write operations.
 
 ## Current state
 
-`public-capabilities.openapi.json` contains anonymous message reads/writes and
-`GET /v1/work-sdk/{workKey}/tip-config`. Tip config contains no order, token,
-payment action, or provider transaction data. There is no SDK Work Session or
-generic browser Bearer token.
+`public-capabilities.openapi.json` contains anonymous message reads/writes plus
+Work-session, follow, access-decision, feature-presentation, and hosted-checkout
+entry points, together with the read-only Tip configuration endpoint. The Work
+token is memory-only and is not a general user session; Tip config contains no
+token, order, payment action, or provider transaction data.
 
 The manifest records snapshot provenance:
 
@@ -28,7 +32,7 @@ The manifest records snapshot provenance:
 {
   "contractVersion": "1.1.0",
   "sha256": "…",
-  "generatedFrom": "ViceMe Shop public danmaku contract",
+  "generatedFrom": "ViceMe Shop public SDK contract",
   "generatedAt": "…"
 }
 ```
@@ -36,11 +40,11 @@ The manifest records snapshot provenance:
 ## Update flow
 
 ```text
-Shop changes a public capability API
+Shop changes a public SDK API
   -> Shop updates the public contract artifact
   -> SDK "Contract Sync" PR replaces the snapshot + manifest
   -> pnpm contracts:generate && pnpm contracts:check
-  -> SDK validates its hosted and Headless boundaries
+  -> SDK validates its hosted, origin-bound, and Headless runtime boundaries
   -> stable SDK release
   -> Shop enables the capability
 ```
@@ -56,12 +60,14 @@ Shop changes a public capability API
 
 - The SDK strictly validates Tip config fields and rejects unknown or missing
   fields for the current contract version.
+- Website Access keeps its existing response compatibility behavior; merging
+  Tip does not narrow or replace those endpoints.
 - A snapshot digest mismatch fails CI; the SDK never guesses at runtime.
 - The loader API major changes only when its public HTML attributes, global
   namespace, or hosted mount semantics become incompatible. This snapshot is
   not the loader namespace. Tip is additive to the published `v1` surface:
-  npm `0.3.0` never exported Tip or a Tip paid event, so no unsafe intermediate
-  order-bearing message is a compatibility contract.
+  npm `0.4.0` exported mounted Tip but not `createTip` or `tip/testing`;
+  Headless is therefore an additive `0.5.0` public capability.
 
 ## Commands
 

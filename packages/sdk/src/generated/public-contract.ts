@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 1.1.0, sha256 d77fb0d08c05f522…)
+ * (contractVersion 1.1.0, sha256 05292778fd6242db…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -13,6 +13,86 @@
  */
 
 export interface paths {
+    "/v1/public/work-sdk/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createWebsiteAccessSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/work-sdk/follow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getWebsiteFollowState"];
+        put: operations["followWebsiteCreator"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/work-sdk/access/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checkWebsiteAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/work-sdk/access/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getWebsiteAccessFeatures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/work-sdk/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createWebsiteAccessCheckout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/danmaku/messages": {
         parameters: {
             query?: never;
@@ -20,10 +100,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List public danmaku messages for one page-position anchor */
         get: operations["listDanmakuMessages"];
         put?: never;
-        /** Create a public danmaku message */
         post: operations["createDanmakuMessage"];
         delete?: never;
         options?: never;
@@ -52,8 +130,75 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Public opaque key issued by WorkSdkAccess. */
         WorkKey: string;
+        CreateWorkSessionRequest: {
+            workKey: components["schemas"]["WorkKey"];
+        };
+        WorkSession: {
+            workKey: components["schemas"]["WorkKey"];
+            token: string;
+            /** Format: date-time */
+            expiresAt: string;
+            capabilities: ("danmaku" | "tip" | "access" | "follow" | "checkout")[];
+        };
+        Creator: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            /** Format: uri */
+            avatarUrl: string | null;
+            description: string | null;
+            publishedWorkCount: number;
+        };
+        FollowState: {
+            following: boolean;
+            /** Format: date-time */
+            followedAt: string | null;
+            creator: components["schemas"]["Creator"];
+        };
+        AccessCheckRequest: {
+            featureKeys: string[];
+        };
+        AccessDecision: {
+            allowed: boolean;
+            /** @enum {string} */
+            reason: "PUBLIC" | "OWNER" | "FOLLOWING" | "ENTITLED" | "AUTH_REQUIRED" | "FOLLOW_REQUIRED" | "PURCHASE_REQUIRED" | "FEATURE_NOT_FOUND" | "FEATURE_DISABLED";
+            /** @enum {string|null} */
+            nextAction: "SIGN_IN" | "FOLLOW" | "CHECKOUT" | null;
+        };
+        AccessCheckResponse: {
+            decisions: {
+                [key: string]: components["schemas"]["AccessDecision"];
+            };
+        };
+        AccessFeaturePrice: {
+            amountCents: number;
+            /** @constant */
+            currency: "CNY";
+        };
+        AccessFeaturePresentation: {
+            featureKey: string;
+            title: string;
+            /** @enum {string} */
+            policyType: "PUBLIC" | "FOLLOW_OWNER" | "WORK_ENTITLEMENT";
+            price: components["schemas"]["AccessFeaturePrice"] | null;
+        };
+        AccessFeaturesResponse: {
+            features: components["schemas"]["AccessFeaturePresentation"][];
+        };
+        CheckoutRequest: {
+            featureKey: string;
+            /**
+             * @default zh-CN
+             * @enum {string}
+             */
+            locale: "zh-CN" | "en-US";
+        };
+        CheckoutResponse: {
+            /** Format: uri */
+            checkoutUrl: string;
+            alreadyOwned: boolean;
+        };
         /** @description Public opaque test or live key issued for Tip. */
         TipWorkKey: string;
         /** @enum {string} */
@@ -83,7 +228,14 @@ export interface components {
             amount: components["schemas"]["TipAmount"];
             providers: components["schemas"]["TipProvider"][];
         };
-        /** @description Opaque page-position anchor derived by the external SDK. */
+        TipConfigCredentialsError: {
+            /** @constant */
+            statusCode: 400;
+            /** @constant */
+            code: "TIP_CONFIG_CREDENTIALS_NOT_ALLOWED";
+            message: string;
+            requestId: string;
+        };
         DanmakuAnchorKey: string;
         DanmakuCursor: string;
         DanmakuMessage: {
@@ -96,9 +248,8 @@ export interface components {
             createdAt: string;
         };
         DanmakuMessagesResponse: {
-            items: components["schemas"]["DanmakuMessage"][];
+            messages: components["schemas"]["DanmakuMessage"][];
             nextCursor: components["schemas"]["DanmakuCursor"] | null;
-            total: number;
         };
         CreateDanmakuMessageRequest: {
             workKey: components["schemas"]["WorkKey"];
@@ -108,13 +259,13 @@ export interface components {
         ErrorBody: {
             statusCode: number;
             code: string;
-            message: string | string[];
+            message: string;
             requestId: string;
         };
     };
     responses: {
-        /** @description Invalid query or body. */
-        BadRequest: {
+        /** @description Public API error */
+        PublicError: {
             headers: {
                 [name: string]: unknown;
             };
@@ -122,22 +273,13 @@ export interface components {
                 "application/json": components["schemas"]["ErrorBody"];
             };
         };
-        /** @description Unknown, inactive, or non-PUBLIC danmaku work. */
-        WorkNotFound: {
+        /** @description Tip configuration requests must not include Cookie or Authorization credentials. */
+        TipConfigCredentialsNotAllowed: {
             headers: {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["ErrorBody"];
-            };
-        };
-        /** @description Danmaku write rate limit exceeded. */
-        RateLimited: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorBody"];
+                "application/json": components["schemas"]["TipConfigCredentialsError"];
             };
         };
         /** @description Unknown Work or Tip is unavailable for this Work or region. */
@@ -166,13 +308,150 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    createWebsiteAccessSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Session established */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkSession"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    getWebsiteFollowState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Follow state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowState"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    followWebsiteCreator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Creator followed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowState"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    checkWebsiteAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Access decisions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessCheckResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    getWebsiteAccessFeatures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server-authoritative feature presentation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessFeaturesResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    createWebsiteAccessCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Hosted checkout */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutResponse"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
     listDanmakuMessages: {
         parameters: {
             query: {
                 workKey: components["schemas"]["WorkKey"];
                 anchorKey?: components["schemas"]["DanmakuAnchorKey"];
                 cursor?: components["schemas"]["DanmakuCursor"];
-                limit?: number;
             };
             header?: never;
             path?: never;
@@ -180,7 +459,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Messages for the requested public work and anchor. */
+            /** @description Messages */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -189,9 +468,7 @@ export interface operations {
                     "application/json": components["schemas"]["DanmakuMessagesResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["WorkNotFound"];
-            500: components["responses"]["InternalError"];
+            "4xx": components["responses"]["PublicError"];
         };
     };
     createDanmakuMessage: {
@@ -207,7 +484,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Message created. */
+            /** @description Message created */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -216,10 +493,7 @@ export interface operations {
                     "application/json": components["schemas"]["DanmakuMessage"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["WorkNotFound"];
-            429: components["responses"]["RateLimited"];
-            500: components["responses"]["InternalError"];
+            "4xx": components["responses"]["PublicError"];
         };
     };
     getTipConfig: {
@@ -242,6 +516,7 @@ export interface operations {
                     "application/json": components["schemas"]["TipConfig"];
                 };
             };
+            400: components["responses"]["TipConfigCredentialsNotAllowed"];
             404: components["responses"]["TipUnavailable"];
             500: components["responses"]["InternalError"];
         };

@@ -25,16 +25,28 @@ const snapshot = JSON.parse(
 };
 
 describe('Shop public contract snapshot', () => {
-  it('contains only danmaku operations and the read-only Tip config', () => {
+  it('contains only Website Access, danmaku, and read-only Tip config operations', () => {
     expect(snapshot.security).toEqual([]);
-    expect(Object.keys(snapshot.paths)).toEqual([
+    expect(Object.keys(snapshot.paths).sort()).toEqual([
       '/v1/danmaku/messages',
+      '/v1/public/work-sdk/access/check',
+      '/v1/public/work-sdk/access/features',
+      '/v1/public/work-sdk/checkout',
+      '/v1/public/work-sdk/follow',
+      '/v1/public/work-sdk/sessions',
       '/v1/work-sdk/{workKey}/tip-config',
     ]);
     expect(Object.keys(snapshot.paths['/v1/danmaku/messages']!).sort()).toEqual(['get', 'post']);
     expect(Object.keys(snapshot.paths['/v1/work-sdk/{workKey}/tip-config']!).sort()).toEqual([
       'get',
     ]);
+    expect(
+      (
+        snapshot.paths['/v1/work-sdk/{workKey}/tip-config']?.get as {
+          responses?: Record<string, unknown>;
+        }
+      ).responses,
+    ).toHaveProperty('400.$ref', '#/components/responses/TipConfigCredentialsNotAllowed');
   });
 
   it('keeps anonymous identity out of create and message payloads', () => {
@@ -80,6 +92,10 @@ describe('Shop public contract snapshot', () => {
       'minCents',
       'stepCents',
     ]);
+    expect(schemas.TipConfigCredentialsError?.properties).toMatchObject({
+      code: { const: 'TIP_CONFIG_CREDENTIALS_NOT_ALLOWED' },
+      statusCode: { const: 400 },
+    });
     expect(JSON.stringify(schemas.TipConfig)).not.toMatch(
       /orderNo|token|paymentAction|transactionId|scene|metadata/i,
     );

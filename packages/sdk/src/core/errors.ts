@@ -8,9 +8,18 @@
 
 export type ViceMeErrorCode =
   | 'CONFIG_INVALID'
+  | 'WORK_NOT_FOUND'
   | 'CAPABILITY_DISABLED'
   | 'CLIENT_DESTROYED'
+  | 'SESSION_EXPIRED'
+  | 'AUTH_REQUIRED'
+  | 'AUTH_CANCELLED'
+  | 'RETURN_URL_NOT_ALLOWED'
+  | 'RATE_LIMITED'
+  | 'NETWORK_TIMEOUT'
+  | 'CHECKOUT_UNAVAILABLE'
   | 'INTERNAL_ERROR'
+  | 'TIP_CONFIG_CREDENTIALS_NOT_ALLOWED'
   | 'TIP_CONFIG_INVALID'
   | 'TIP_OPEN_IN_PROGRESS'
   | 'TIP_READY_TIMEOUT';
@@ -25,7 +34,12 @@ export interface ViceMeErrorInit {
   capability?: string;
 }
 
-const RETRYABLE_BY_DEFAULT: ReadonlySet<ViceMeErrorCode> = new Set(['INTERNAL_ERROR']);
+const RETRYABLE_BY_DEFAULT: ReadonlySet<ViceMeErrorCode> = new Set([
+  'RATE_LIMITED',
+  'NETWORK_TIMEOUT',
+  'CHECKOUT_UNAVAILABLE',
+  'INTERNAL_ERROR',
+]);
 
 export class ViceMeError extends Error {
   readonly code: ViceMeErrorCode;

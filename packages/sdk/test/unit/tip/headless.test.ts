@@ -164,6 +164,35 @@ describe('TipClient.getConfig', () => {
     client.destroy();
   });
 
+  it('preserves the stable credential rejection code from a bounded Shop error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        configResponse(
+          {
+            statusCode: 400,
+            code: 'TIP_CONFIG_CREDENTIALS_NOT_ALLOWED',
+            message: 'Tip config requests must not include credentials',
+            requestId: 'req-tip-credentials',
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    const client = createViceMe({ workKey: 'wrk_test_demo', region: 'cn' });
+    const tip = createTip(client);
+
+    await expect(tip.getConfig()).rejects.toMatchObject({
+      code: 'TIP_CONFIG_CREDENTIALS_NOT_ALLOWED',
+      retryable: false,
+      requestId: 'req-tip-credentials',
+      capability: 'tip',
+    });
+
+    tip.destroy();
+    client.destroy();
+  });
+
   it.each([
     ['unknown top-level field', { ...TIP_CONFIG, orderNo: 'must-not-pass' }],
     [
@@ -444,7 +473,7 @@ describe('TipClient.getConfig', () => {
   it('fails without a request when the client build lacks Tip', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const unsupported: ViceMeClient = {
+    const unsupported = {
       version: '0.3.0',
       workKey: 'wrk_test_demo',
       region: 'cn',
@@ -452,7 +481,7 @@ describe('TipClient.getConfig', () => {
       ready: vi.fn(async () => undefined),
       hasCapability: () => false,
       destroy: vi.fn(),
-    };
+    } as unknown as ViceMeClient;
     const tip = createTip(unsupported);
 
     await expect(tip.getConfig()).rejects.toMatchObject({
