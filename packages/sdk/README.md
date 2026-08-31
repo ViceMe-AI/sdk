@@ -86,6 +86,12 @@ explicit follow, and hosted checkout remain ViceMe-owned UI. The host never
 receives a general ViceMe session or payment credential. Tests can inject a
 deterministic transport and presenter through `@viceme-ai/sdk/testing`.
 
+Website access login renders the work-bound WeChat QR code directly in the SDK
+layer. Paid access keeps desktop QR payment and WeChat JSAPI in that layer;
+mobile H5/WAP payment may open a provider page or app. The original page polls
+the server-authoritative access decision and closes the layer after entitlement
+is active. This behavior does not change the separate Tip Widget flow.
+
 ```ts
 const decisions = await client.access.checkMany(['members', 'pro-tools']);
 if (!decisions['pro-tools']?.allowed) {

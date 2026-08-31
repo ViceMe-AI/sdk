@@ -9,9 +9,13 @@ import type {
   TransportResponse,
 } from '../../src/transport/transport.ts';
 
-function capabilityTransport(alreadyOwned = true): Transport & { requests: TransportRequest[] } {
+function capabilityTransport(
+  alreadyOwned = true,
+  unlocksAfterCheckout = false,
+): Transport & { requests: TransportRequest[] } {
   const requests: TransportRequest[] = [];
   let following = false;
+  let checkoutCreated = false;
   return {
     requests,
     async request(request: TransportRequest): Promise<TransportResponse> {
@@ -64,7 +68,9 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
                         reason: following ? 'FOLLOWING' : 'FOLLOW_REQUIRED',
                         nextAction: following ? null : 'FOLLOW',
                       }
-                  : { allowed: false, reason: 'PURCHASE_REQUIRED', nextAction: 'CHECKOUT' },
+                  : unlocksAfterCheckout && checkoutCreated
+                    ? { allowed: true, reason: 'ENTITLED', nextAction: null }
+                    : { allowed: false, reason: 'PURCHASE_REQUIRED', nextAction: 'CHECKOUT' },
               ]),
             ),
           },
@@ -87,6 +93,7 @@ function capabilityTransport(alreadyOwned = true): Transport & { requests: Trans
         };
       }
       if (request.path === '/v1/public/work-sdk/checkout') {
+        checkoutCreated = true;
         return {
           status: 200,
           body: {
@@ -180,13 +187,13 @@ describe('website access capabilities', () => {
     });
   });
 
-  it('opens unpaid hosted checkout in a separate window instead of an iframe', async () => {
-    const checkoutWindow = { closed: false, close: vi.fn() };
-    const open = vi.spyOn(window, 'open').mockReturnValue(checkoutWindow as unknown as Window);
+  it('keeps unpaid hosted checkout inside the access layer', async () => {
+    const open = vi.spyOn(window, 'open');
     const presenter: AccessPresenter = async (interaction) => {
       const action = await interaction.perform();
-      expect(action.type).toBe('external');
-      if (action.type !== 'external') throw new Error('expected external checkout');
+      expect(action.type).toBe('frame');
+      if (action.type !== 'frame') throw new Error('expected checkout frame');
+      expect(action.url).toBe('https://viceme.cn/hosted-checkout/session-id');
       action.cancel();
       await action.completion;
       return 'acted';
@@ -201,12 +208,29 @@ describe('website access capabilities', () => {
     await expect(client.checkout.open({ featureKey: 'paid' })).resolves.toMatchObject({
       alreadyOwned: false,
     });
-    expect(open).toHaveBeenCalledWith(
-      'https://viceme.cn/hosted-checkout/session-id',
-      '_blank',
-      'popup,width=520,height=760',
-    );
-    expect(checkoutWindow.close).toHaveBeenCalledOnce();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the original page access after embedded payment completes', async () => {
+    vi.useFakeTimers();
+    const presenter: AccessPresenter = async (interaction) => {
+      const action = await interaction.perform();
+      if (action.type !== 'frame') throw new Error('expected checkout frame');
+      await vi.advanceTimersByTimeAsync(1_500);
+      await action.completion;
+      return 'acted';
+    };
+    const client = createTestViceMe({
+      workKey: 'wrk_test',
+      region: 'cn',
+      transport: capabilityTransport(false, true),
+      presenter,
+    });
+
+    await expect(client.checkout.open({ featureKey: 'paid' })).resolves.toMatchObject({
+      alreadyOwned: false,
+    });
+    vi.useRealTimers();
   });
 
   it('accepts the platform-origin login completion for this Work and channel', async () => {

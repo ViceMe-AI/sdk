@@ -457,14 +457,6 @@ export function createCapabilities(deps: CapabilityDeps): {
         retryable: false,
       });
     }
-    const checkoutWindow = window.open(result.checkoutUrl, '_blank', 'popup,width=520,height=760');
-    if (!checkoutWindow) {
-      throw new ViceMeError({
-        code: 'AUTH_CANCELLED',
-        message: 'The hosted checkout window was blocked.',
-        retryable: false,
-      });
-    }
 
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -481,13 +473,7 @@ export function createCapabilities(deps: CapabilityDeps): {
         if (!decision) throw malformedResponse();
         if (decision.allowed) {
           active = false;
-          checkoutWindow.close();
           settle();
-          return;
-        }
-        if (checkoutWindow.closed) {
-          active = false;
-          fail(cancelled());
           return;
         }
         timer = setTimeout(() => void poll(), 1_500);
@@ -498,13 +484,13 @@ export function createCapabilities(deps: CapabilityDeps): {
     };
     timer = setTimeout(() => void poll(), 1_500);
     return {
-      type: 'external',
+      type: 'frame',
+      url: result.checkoutUrl,
       completion,
       cancel() {
         if (!active) return;
         active = false;
         if (timer) clearTimeout(timer);
-        checkoutWindow.close();
         settle();
       },
     };
