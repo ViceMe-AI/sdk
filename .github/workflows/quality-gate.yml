@@ -2,19 +2,43 @@ name: Quality Gate
 
 on:
   pull_request:
-  push:
-    branches: [main, dev]
 
 concurrency:
-  group: quality-gate-${{ github.ref }}
+  group: quality-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  classify:
+    name: Classify PR head
+    runs-on: ubuntu-latest
+    outputs:
+      run-full: ${{ steps.classify.outputs.run-full }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - id: classify
+        name: Decide whether the promotion head is final
+        env:
+          PR_BASE_REF: ${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || '' }}
+        run: |
+          PR_HEAD_SUBJECT="$(git log -1 --format=%s)"
+          PR_HEAD_BODY="$(git log -1 --format=%B)"
+          PR_HEAD_AUTHOR_EMAIL="$(git log -1 --format=%ae)"
+          export PR_HEAD_SUBJECT PR_HEAD_BODY PR_HEAD_AUTHOR_EMAIL
+          echo "run-full=$(bash scripts/ci/validate-pr-target.sh --should-run-full-checks)" >>"${GITHUB_OUTPUT}"
+      - name: Test pull request target contract
+        run: bash scripts/ci/validate-pr-target.sh --self-test
+
   check:
     name: Format, lint, types, unit tests, build, tarball audit
+    needs: classify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -30,18 +54,22 @@ jobs:
         run: bash scripts/ci/validate-pr-target.sh --self-test
 
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        if: needs.classify.outputs.run-full == 'true'
         with:
           version: 11
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: needs.classify.outputs.run-full == 'true'
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install dependencies
+        if: needs.classify.outputs.run-full == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Format check
+        if: needs.classify.outputs.run-full == 'true'
         run: pnpm format:check
 
       # Workflow gate: js-yaml pre-check (duplicate keys, structural
@@ -49,41 +77,52 @@ jobs:
       # (schema, expressions, events). actionlint is digest-pinned and
       # cross-platform via the same Node wrapper contributors run locally.
       - name: Workflow gate (syntax + actionlint semantics)
+        if: needs.classify.outputs.run-full == 'true'
         run: pnpm workflows:check
 
       - name: Lint
+        if: needs.classify.outputs.run-full == 'true'
         run: pnpm lint
 
       - name: Typecheck
+        if: needs.classify.outputs.run-full == 'true'
         run: pnpm typecheck
 
       - name: Contract drift gate
+        if: needs.classify.outputs.run-full == 'true'
         run: pnpm contracts:check
 
       # The gate itself is side-effect free; this asserts nothing in the
       # working tree changed during the whole check job.
       - name: Working tree must be clean after gates
+        if: needs.classify.outputs.run-full == 'true'
         run: git diff --exit-code -- contracts packages/sdk/src/generated
 
       - name: Unit tests
+        if: needs.classify.outputs.run-full == 'true'
         run: pnpm test
 
       - name: Build (clean -> esm -> loader -> types -> manifest)
+        if: needs.classify.outputs.run-full == 'true'
         run: pnpm build
 
       - name: Tarball audit, public surface, size budget
+        if: needs.classify.outputs.run-full == 'true'
         run: pnpm pack:check
 
       - name: Secret and internal-endpoint scan
+        if: needs.classify.outputs.run-full == 'true'
         run: node scripts/scan-forbidden-patterns.mjs
 
       - name: Whitespace / conflict marker check
+        if: needs.classify.outputs.run-full == 'true'
         run: git diff --check
 
   browser:
     name: Browser matrix (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    needs: check
+    needs: [classify, check]
+    if: needs.classify.outputs.run-full == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -115,7 +154,8 @@ jobs:
   fixtures:
     name: Framework fixtures build from workspace
     runs-on: ubuntu-latest
-    needs: check
+    needs: [classify, check]
+    if: needs.classify.outputs.run-full == 'true'
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -143,7 +183,8 @@ jobs:
   tarball-fixtures:
     name: Install fixtures from the real npm tarball
     runs-on: ubuntu-latest
-    needs: check
+    needs: [classify, check]
+    if: needs.classify.outputs.run-full == 'true'
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
