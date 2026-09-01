@@ -3,7 +3,6 @@ import { BUILD_WIDGET_ORIGINS } from '../core/build-endpoints.ts';
 import { clientDestroyed, ViceMeError } from '../core/errors.ts';
 import { dispatchViceMeEvent } from '../browser-events.ts';
 import type { CapabilityMountHandle, CapabilityMountOptions } from '../capability-mount.ts';
-import { isValidTipWorkKey } from '../core/config.ts';
 import { isValidTipWorkTitle } from './validation.ts';
 
 type WidgetAppearance = 'light' | 'dark';
@@ -47,15 +46,6 @@ export async function mount(
       capability: 'tip',
     });
   }
-  if (!isValidTipWorkKey(client.workKey)) {
-    throw new ViceMeError({
-      code: 'CAPABILITY_DISABLED',
-      message: 'Tip is not available for this Work key.',
-      retryable: false,
-      capability: 'tip',
-    });
-  }
-
   const documentObject = options.target.ownerDocument;
   const windowObject = documentObject.defaultView;
   if (!windowObject) {
@@ -87,7 +77,6 @@ export async function mount(
   const shadow = portal.attachShadow({ mode: 'open' });
   const frame = documentObject.createElement('iframe');
   const frameUrl = new URL(`/widget/tip/${encodeURIComponent(client.workKey)}`, widgetOrigin);
-  frameUrl.searchParams.set('protocol', '2');
   frameUrl.searchParams.set('appearance', appearance);
   frame.title = 'ViceMe Tip';
   frame.src = frameUrl.toString();

@@ -1,6 +1,5 @@
 import type { ViceMeClient } from '../core/client.ts';
 import { BUILD_WIDGET_ORIGINS } from '../core/build-endpoints.ts';
-import { isValidTipWorkKey } from '../core/config.ts';
 import { clientDestroyed, ViceMeError } from '../core/errors.ts';
 import type { TipClient, TipConfig, TipOpenOptions, TipOpenResult } from './index.ts';
 import {
@@ -79,7 +78,7 @@ function parseTipConfig(input: unknown, expectedWorkKey: string): TipConfig {
   ) {
     throw tipConfigInvalid();
   }
-  if (!isValidTipWorkKey(input.workKey) || input.workKey !== expectedWorkKey) {
+  if (input.workKey !== expectedWorkKey) {
     throw tipConfigInvalid();
   }
   if (input.environment !== 'SANDBOX' && input.environment !== 'PRODUCTION') {
@@ -235,7 +234,6 @@ async function fetchTipConfig(client: ViceMeClient, ownerSignal: AbortSignal): P
   await client.ready();
   if (!client.hasCapability('tip')) throw tipCapabilityDisabled();
   if (client.region !== 'cn') throw tipCapabilityDisabled();
-  if (!isValidTipWorkKey(client.workKey)) throw tipCapabilityDisabled();
   if (ownerSignal.aborted) throw clientDestroyed();
   const controller = new AbortController();
   const abortRequest = (): void => controller.abort();
@@ -368,7 +366,6 @@ export function createHeadlessTip(client: ViceMeClient): TipClient {
         return Promise.reject(tipCapabilityDisabled());
       }
       if (client.region !== 'cn') return Promise.reject(tipCapabilityDisabled());
-      if (!isValidTipWorkKey(client.workKey)) return Promise.reject(tipCapabilityDisabled());
 
       let options: TipOpenOptions;
       try {

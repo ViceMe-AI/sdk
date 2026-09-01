@@ -208,7 +208,7 @@ describe('TipClient.getConfig', () => {
     ['missing provider', { ...TIP_CONFIG, providers: [] }],
     ['invalid work id', { ...TIP_CONFIG, work: { ...TIP_CONFIG.work, id: 'not-a-uuid' } }],
     ['blank work title', { ...TIP_CONFIG, work: { ...TIP_CONFIG.work, title: '' } }],
-    ['mismatched work key', { ...TIP_CONFIG, workKey: 'wrk_other' }],
+    ['mismatched work key', { ...TIP_CONFIG, workKey: 'wrk_test_other' }],
   ])('rejects %s in an untrusted response', async (_case, body) => {
     vi.stubGlobal(
       'fetch',
@@ -317,23 +317,6 @@ describe('TipClient.getConfig', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const client = createViceMe({ workKey: 'wrk_test_demo', region: 'global' });
-    const tip = createTip(client);
-
-    await expect(tip.getConfig()).rejects.toMatchObject({
-      code: 'CAPABILITY_DISABLED',
-      retryable: false,
-      capability: 'tip',
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    tip.destroy();
-    client.destroy();
-  });
-
-  it('keeps legacy Work keys valid for other capabilities but rejects them for Headless Tip', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const client = createViceMe({ workKey: 'wrk_public_demo', region: 'cn' });
     const tip = createTip(client);
 
     await expect(tip.getConfig()).rejects.toMatchObject({
@@ -673,7 +656,7 @@ describe('TipClient.open', () => {
     frameMessage(frame, readyMessage(), 'https://attacker.example');
     frameMessage(frame, readyMessage(), 'https://viceme.cn', wrongSource);
     frameMessage(frame, readyMessage({ channel: 'wrong' }));
-    frameMessage(frame, readyMessage({ workKey: 'wrk_other' }));
+    frameMessage(frame, readyMessage({ workKey: 'wrk_test_other' }));
     expect(frame.contentWindow?.postMessage).not.toHaveBeenCalled();
 
     frameMessage(frame, readyMessage());
@@ -690,7 +673,7 @@ describe('TipClient.open', () => {
     frameMessage(frame, validPaid, 'https://attacker.example');
     frameMessage(frame, validPaid, 'https://viceme.cn', wrongSource);
     frameMessage(frame, { ...validPaid, channel: 'wrong' });
-    frameMessage(frame, { ...validPaid, workKey: 'wrk_other' });
+    frameMessage(frame, { ...validPaid, workKey: 'wrk_test_other' });
     frameMessage(frame, { ...validPaid, amountCents: 521 });
     frameMessage(frame, { ...validPaid, currency: 'USD' });
     frameMessage(frame, { ...validPaid, work: { ...TIP_CONFIG.work, id: 'wrong' } });

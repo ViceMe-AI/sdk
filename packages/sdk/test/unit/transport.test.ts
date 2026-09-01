@@ -26,7 +26,7 @@ describe('FetchTransport', () => {
     const res = await transport.request({
       method: 'POST',
       path: '/v1/public/work-sdk/sessions',
-      body: { workKey: 'wrk_test' },
+      body: { workKey: 'wrk_test_demo' },
     });
 
     expect(res.status).toBe(200);

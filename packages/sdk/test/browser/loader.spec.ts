@@ -5,7 +5,9 @@ import { API_MAJOR, SDK_VERSION } from '../../src/version.ts';
 const DANMAKU_WIDGET_ORIGIN = (
   process.env.VICEME_BUILD_CN_WIDGET_ORIGIN ?? 'https://viceme.cn'
 ).replace(/\/+$/, '');
-const S3_ALIAS_ORIGIN = `http://127.0.0.1:${process.env.S3_PORT ?? 4174}`;
+const S3_ORIGIN = `http://127.0.0.1:${process.env.S3_PORT ?? 4174}`;
+const EXACT_SDK_PREFIX = `/viceme-sdk/${SDK_VERSION}/`;
+const EXACT_LOADER_URL = `${S3_ORIGIN}${EXACT_SDK_PREFIX}viceme.min.js`;
 
 interface RecordedEvent {
   type: string;
@@ -335,19 +337,17 @@ test.describe('PUBLIC-only hosted danmaku loader', () => {
 
     await page.locator('#host-action').click();
     await expect(page.locator('#host-status')).toHaveText('clicked');
-    const shopPaths = requests
-      .filter((url) => new URL(url).origin === new URL(page.url()).origin)
+    const sdkPaths = requests
+      .filter((url) => new URL(url).origin === S3_ORIGIN)
       .map((url) => new URL(url).pathname);
-    expect(shopPaths).toContain('/viceme-sdk/v1/viceme.min.js');
-    expect(shopPaths).toContain('/viceme-sdk/v1/manifest.json');
-    expect(shopPaths).toContain('/viceme-sdk/v1/danmaku.js');
-    expect(shopPaths).not.toContain('/viceme-sdk/-/aliases/v1');
+    expect(sdkPaths).toContain(`${EXACT_SDK_PREFIX}viceme.min.js`);
+    expect(sdkPaths).toContain(`${EXACT_SDK_PREFIX}manifest.json`);
+    expect(sdkPaths).toContain(`${EXACT_SDK_PREFIX}danmaku.js`);
+    expect(new URL(page.url()).origin).not.toBe(S3_ORIGIN);
     expectNoRemovedApiRequests(requests);
   });
 
-  test('the real v1 bootstrap preserves its CSP nonce and loads the exact release', async ({
-    page,
-  }) => {
+  test('the exact-version loader preserves its CSP nonce across origins', async ({ page }) => {
     const styleCspErrors: string[] = [];
     page.on('console', (message) => {
       const text = message.text();
@@ -371,15 +371,13 @@ test.describe('PUBLIC-only hosted danmaku loader', () => {
       .toBe('viceme-test');
     await waitForEvent(page, 'viceme:ready');
 
-    const aliasRequests = requests.filter((url) => new URL(url).origin === S3_ALIAS_ORIGIN);
-    const paths = aliasRequests.map((url) => new URL(url).pathname);
-    expect(paths).toContain('/viceme-sdk/v1/viceme.min.js');
-    expect(paths).toContain('/viceme-sdk/-/aliases/v1');
-    expect(paths).toContain(`/viceme-sdk/${SDK_VERSION}/viceme.min.js`);
-    expect(paths).toContain(`/viceme-sdk/${SDK_VERSION}/manifest.json`);
-    expect(paths).toContain(`/viceme-sdk/${SDK_VERSION}/danmaku.js`);
-    expect(paths).not.toContain('/viceme-sdk/v1/manifest.json');
-    expect(new URL(page.url()).origin).not.toBe(S3_ALIAS_ORIGIN);
+    const s3Requests = requests.filter((url) => new URL(url).origin === S3_ORIGIN);
+    const paths = s3Requests.map((url) => new URL(url).pathname);
+    expect(paths).toContain(`${EXACT_SDK_PREFIX}viceme.min.js`);
+    expect(paths).toContain(`${EXACT_SDK_PREFIX}manifest.json`);
+    expect(paths).toContain(`${EXACT_SDK_PREFIX}danmaku.js`);
+    expect(paths.every((path) => path.startsWith(EXACT_SDK_PREFIX))).toBe(true);
+    expect(new URL(page.url()).origin).not.toBe(S3_ORIGIN);
     await expect
       .poll(() =>
         page.evaluate(() => {
@@ -405,27 +403,25 @@ test.describe('PUBLIC-only hosted danmaku loader', () => {
     expect(styleCspErrors).toEqual([]);
   });
 
-  test('dynamic insertion uses manifest.json, danmaku.js, and proxy-allowed chunks only', async ({
-    page,
-  }) => {
+  test('dynamic insertion uses only exact-version manifest-allowed artifacts', async ({ page }) => {
     const requests = recordRequests(page);
     await mockHostedDanmaku(page);
     await page.goto(cfgUrl(VALID_ATTRS));
     await waitForEvent(page, 'viceme:ready');
 
     const runtimePaths = requests
+      .filter((url) => new URL(url).origin === S3_ORIGIN)
       .map((url) => new URL(url).pathname)
-      .filter((path) => path.startsWith('/viceme-sdk/v1/'));
-    expect(runtimePaths).toContain('/viceme-sdk/v1/viceme.min.js');
-    expect(runtimePaths).toContain('/viceme-sdk/v1/manifest.json');
-    expect(runtimePaths).toContain('/viceme-sdk/v1/danmaku.js');
-    expect(runtimePaths).not.toContain('/viceme-sdk/v1/index.js');
+      .filter((path) => path.startsWith(EXACT_SDK_PREFIX));
+    expect(runtimePaths).toContain(`${EXACT_SDK_PREFIX}viceme.min.js`);
+    expect(runtimePaths).toContain(`${EXACT_SDK_PREFIX}manifest.json`);
+    expect(runtimePaths).toContain(`${EXACT_SDK_PREFIX}danmaku.js`);
+    expect(runtimePaths).not.toContain(`${EXACT_SDK_PREFIX}index.js`);
     for (const path of runtimePaths) {
-      expect(path).toMatch(
-        /^\/viceme-sdk\/v1\/(?:viceme\.min\.js|manifest\.json|danmaku\.js|tip\.js|chunks\/[a-zA-Z0-9._-]+\.js)$/,
+      expect(path.slice(EXACT_SDK_PREFIX.length)).toMatch(
+        /^(?:viceme\.min\.js|manifest\.json|danmaku\.js|tip\.js|chunks\/[a-zA-Z0-9._-]+\.js)$/,
       );
     }
-    expect(requests.map((url) => new URL(url).pathname)).not.toContain('/viceme-sdk/-/aliases/v1');
     expectNoRemovedApiRequests(requests);
   });
 
@@ -483,14 +479,14 @@ test.describe('hosted engagement loader', () => {
     expect(tip.referers).toEqual([`${new URL(page.url()).origin}/`]);
 
     const runtimePaths = requests.map((url) => new URL(url).pathname);
-    expect(runtimePaths).toContain('/viceme-sdk/v1/danmaku.js');
-    expect(runtimePaths).toContain('/viceme-sdk/v1/tip.js');
+    expect(runtimePaths).toContain(`${EXACT_SDK_PREFIX}danmaku.js`);
+    expect(runtimePaths).toContain(`${EXACT_SDK_PREFIX}tip.js`);
 
     const tipFrame = page
       .frames()
       .find((frame) => new URL(frame.url(), page.url()).pathname.startsWith('/widget/tip/'));
     if (!tipFrame) throw new TypeError('Tip frame missing');
-    expect(new URL(tipFrame.url()).searchParams.get('protocol')).toBe('2');
+    expect(new URL(tipFrame.url()).searchParams.get('mode')).toBeNull();
     await tipFrame.locator('#open').click();
     await expect(tipFrame.locator('#payment-surface')).toBeVisible();
     await tipFrame.locator('#paid').click();
@@ -605,7 +601,7 @@ test.describe('hosted engagement loader', () => {
 });
 
 test.describe('release manifest trust boundary', () => {
-  const manifestRoute = '**/viceme-sdk/v1/manifest.json';
+  const manifestRoute = `**${EXACT_SDK_PREFIX}manifest.json`;
 
   test('rejects release version and API major tears before loading a feature', async ({ page }) => {
     const cases = [
@@ -665,10 +661,7 @@ test.describe('release manifest trust boundary', () => {
       ).toMatchObject({ code: 'CONFIG_INVALID', retryable: false });
       expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
 
-      const resolved = new URL(
-        featurePath,
-        `${new URL(page.url()).origin}/viceme-sdk/v1/manifest.json`,
-      );
+      const resolved = new URL(featurePath, `${S3_ORIGIN}${EXACT_SDK_PREFIX}manifest.json`);
       resolved.hash = '';
       expect(requests.slice(requestStart), featurePath).not.toContain(resolved.href);
       await page.unroute(manifestRoute, handler);
@@ -748,6 +741,10 @@ test.describe('hosted frame readiness failures', () => {
 test.describe('attribute validation fails closed', () => {
   const cases: Array<{ name: string; attrs: Record<string, string> }> = [
     { name: 'missing work', attrs: { ...VALID_ATTRS, 'data-viceme-work': '' } },
+    {
+      name: 'non-canonical work key',
+      attrs: { ...VALID_ATTRS, 'data-viceme-work': 'invalid-work-key' },
+    },
     { name: 'invalid region', attrs: { ...VALID_ATTRS, 'data-viceme-region': 'eu' } },
     { name: 'missing feature', attrs: { ...VALID_ATTRS, 'data-viceme-features': '' } },
     { name: 'unknown feature', attrs: { ...VALID_ATTRS, 'data-viceme-features': 'fixture' } },
@@ -879,15 +876,15 @@ test.describe('deduplication and namespace lifecycle', () => {
     await waitForEvent(page, 'viceme:destroyed');
     expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
 
-    await page.evaluate(() => {
+    await page.evaluate((loaderUrl) => {
       const script = document.createElement('script');
-      script.src = '/viceme-sdk/v1/viceme.min.js';
+      script.src = loaderUrl;
       script.setAttribute('data-viceme-work', 'wrk_test_demo');
       script.setAttribute('data-viceme-region', 'cn');
       script.setAttribute('data-viceme-features', 'danmaku');
       script.setAttribute('data-viceme-target', '#host-a');
       document.body.append(script);
-    });
+    }, EXACT_LOADER_URL);
     await waitForEvent(page, 'viceme:ready', 2);
     expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(1);
     await expect.poll(() => hosted.hits).toBe(4);

@@ -134,7 +134,7 @@ try {
       '--title',
       tag,
       '--notes',
-      `Release artifacts for ${args.version}, sourced from the published npm tarball. CDN promotion: run the Promote CDN workflow against this tag.`,
+      `Release artifacts for ${args.version}, sourced from the published npm tarball and published to both exact-version S3 paths.`,
       ...staged.map((f) => join(assetsDir, f)),
     );
   }

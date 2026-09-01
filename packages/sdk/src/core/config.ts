@@ -12,7 +12,7 @@ import { BUILD_API_BASE_URLS } from './build-endpoints.ts';
 export type ViceMeRegion = 'cn' | 'global';
 
 export interface ViceMeConfig {
-  /** Public opaque Work key (`wrk_...`). It is not a secret. */
+  /** Public opaque test or live Work key. It is not a secret. */
   workKey: string;
   /** Routes public API and CDN traffic. */
   region: ViceMeRegion;
@@ -37,10 +37,6 @@ export function resolveApiBaseUrl(region: ViceMeRegion): string {
 }
 
 export function isValidWorkKey(value: unknown): value is string {
-  return typeof value === 'string' && /^wrk_[A-Za-z0-9_-]{4,124}$/.test(value);
-}
-
-export function isValidTipWorkKey(value: unknown): value is string {
   return typeof value === 'string' && /^wrk_(?:test|live)_[A-Za-z0-9_-]{4,119}$/.test(value);
 }
 
@@ -65,7 +61,9 @@ export function validatePublicConfig(input: unknown): ViceMeConfig {
     }
   }
   if (!isValidWorkKey(raw.workKey)) {
-    throw configInvalid('Configuration field "workKey" must be a public work key ("wrk_...").');
+    throw configInvalid(
+      'Configuration field "workKey" must start with "wrk_test_" or "wrk_live_".',
+    );
   }
   if (!isValidRegion(raw.region)) {
     throw configInvalid('Configuration field "region" must be "cn" or "global".');

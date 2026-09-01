@@ -14,9 +14,8 @@ name: SDK release publication
 #     -> Feishu release notification (only after npm AND both regions)
 #
 # Recovery: workflow_dispatch with the existing tag converges every step —
-# npm (integrity match), release assets (idempotent), and both S3 regions
-# (immutable put semantics). The /viceme-sdk/v1 stable alias stays a separate,
-# explicit Promote CDN operation (promote forward / authorized rollback).
+# npm (integrity match), release assets (idempotent), and both exact-version S3
+# regions (immutable put semantics).
 
 on:
   push:
@@ -36,7 +35,7 @@ env:
   DIST_TAG: latest
 
 concurrency:
-  # Serialize releases: npm dist-tags and the alias pointer have no CAS.
+  # Serialize releases because npm dist-tags have no CAS.
   group: viceme-sdk-release
   cancel-in-progress: false
 
