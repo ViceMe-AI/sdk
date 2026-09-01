@@ -43,6 +43,14 @@ front.
 
 ## Releasing a stable npm version
 
+Keep `main` as the repository default branch, but target normal feature and fix
+pull requests explicitly at `dev`. Repository settings allow merge commits only
+and disable squash and rebase merging. Separate branch rulesets keep required
+checks strict on `dev`; the `main` ruleset requires the same quality checks plus
+`Release candidate preparation` without requiring `dev` to contain the previous
+release merge commit. The required quality job rejects `main` pull requests
+unless they come from the same repository's `dev` or `hotfix/*`.
+
 The release flow follows the same two-workflow state machine as the CLI:
 
 `0.4.0` is the immutable published baseline for this development cycle. It
