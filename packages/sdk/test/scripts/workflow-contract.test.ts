@@ -73,14 +73,12 @@ describe('workflow contracts', () => {
     expect(text).toContain('https://s3.viceme.cn/viceme-sdk/${VERSION}/');
     expect(text).toContain('https://s3.viceme.ai/viceme-sdk/${VERSION}/');
     expect(text).not.toContain('/sdk/${VERSION}');
-    expect(text).not.toContain('/sdk/-/aliases');
   });
 
   it('no floating action version tags anywhere', () => {
     for (const name of [
       'release-pr.yml',
       'release.yml',
-      'promote-cdn.yml',
       'release-assets.yml',
       'quality-gate.yml',
       'feishu.yml',
@@ -120,7 +118,6 @@ describe('workflow contracts', () => {
     expect(publication).not.toContain('release:gate');
     expect(jobBlock(publication, 'quality')).toContain('node scripts/assert-release-license.mjs');
     expect(jobBlock(publication, 'npm-publish')).toContain('node scripts/publish-or-verify.mjs');
-    expect(workflow('promote-cdn.yml')).toContain('node scripts/assert-release-license.mjs');
     expect(workflow('release-assets.yml')).toContain('node scripts/assert-release-license.mjs');
   });
 

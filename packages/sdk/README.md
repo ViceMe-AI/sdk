@@ -20,7 +20,7 @@ pnpm add @viceme-ai/sdk
 <div id="viceme-engagement"></div>
 <script
   defer
-  src="https://viceme.cn/viceme-sdk/v1/viceme.min.js"
+  src="https://s3.viceme.cn/viceme-sdk/0.5.0/viceme.min.js"
   data-viceme-work="wrk_live_demo"
   data-viceme-region="cn"
   data-viceme-features="danmaku,tip"
@@ -32,14 +32,16 @@ pnpm add @viceme-ai/sdk
 The feature declaration accepts `danmaku`, `tip`, or both without whitespace or
 duplicates.
 
-The Shop `/viceme-sdk/v1/*` proxy serves one configured exact release. It is
-distinct from the direct S3 `v1/viceme.min.js` fixed bootstrap, which reads
-`-/aliases/v1` before loading an immutable exact-version directory.
+Static CDN entry points always use an immutable exact-version directory. The CN
+host is `s3.viceme.cn`; GLOBAL uses `s3.viceme.ai`. The `0.5.0` URL above is the
+current source target and is unavailable until that exact release is published
+and verified.
 
-With CSP, allow the exact regional Shop origin in `script-src`, `connect-src`,
-and `frame-src`, and keep `object-src 'none'`. A nonce with `'strict-dynamic'`
-may authorize dynamic scripts, but the other directives still need exact
-origins. Do not use `*` or a ViceMe subdomain wildcard.
+With CSP, allow the exact regional S3 origin in `script-src` and `connect-src`,
+the exact regional Shop origin in `frame-src`, and keep `object-src 'none'`. A
+nonce with `'strict-dynamic'` may authorize dynamic scripts, but the other
+directives still need exact origins. Do not use `*` or a ViceMe subdomain
+wildcard.
 
 ## ESM
 
@@ -76,9 +78,8 @@ payment, risk, and result authority. Visitors do not sign in to ViceMe and are
 anonymous to the creator; the observed parent Origin is attribution rather than
 an authorization gate.
 
-Pass a selected public pair value for Tip: `keys.test` is `wrk_test_...` and
-`keys.live` is `wrk_live_...`. Legacy `wrk_...` keys remain accepted for
-Danmaku compatibility, but Tip rejects them locally.
+Pass a selected public pair value: `keys.test` is `wrk_test_...` and `keys.live`
+is `wrk_live_...`. Other Work key shapes are rejected locally.
 
 Access operations establish a short-lived, memory-only Work session on first
 use. They expose `client.auth`, `client.access`, and `client.checkout`; login,

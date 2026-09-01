@@ -95,5 +95,5 @@ packages/sdk/src/<capability>/
 Releases use the same Conventional Commit version policy and protected
 `dev -> main` promotion flow as the ViceMe CLI, followed by npm trusted
 publishing (OIDC). CDN artifacts always come from the same release build as
-the npm tarball; exact versions are immutable and `v1` aliases move only
-through the release workflow. See `.github/workflows/`.
+the npm tarball and are published only under immutable exact-version paths.
+See `.github/workflows/`.

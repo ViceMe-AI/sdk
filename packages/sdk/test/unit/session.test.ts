@@ -6,7 +6,7 @@ import { ViceMeError } from '../../src/core/errors.ts';
 describe('SessionManager', () => {
   it('establishes once and caches the snapshot', async () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
-    const session = new SessionManager({ workKey: 'wrk_test', transport });
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport });
 
     await session.establish();
     await session.establish();
@@ -19,10 +19,10 @@ describe('SessionManager', () => {
     // Tamper with the served body by routing through a custom transport.
     const bad = {
       async request() {
-        return { status: 200, body: { workKey: 'wrk_test' } };
+        return { status: 200, body: { workKey: 'wrk_test_demo' } };
       },
     };
-    const session = new SessionManager({ workKey: 'wrk_test', transport: bad });
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport: bad });
     await expect(session.establish()).rejects.toSatisfy(
       (e: unknown) => (e as ViceMeError).code === 'INTERNAL_ERROR',
     );
@@ -34,11 +34,11 @@ describe('SessionManager', () => {
       async request() {
         return {
           status: 200,
-          body: { workKey: 'wrk_other', capabilities: ['fixture'] },
+          body: { workKey: 'wrk_test_other', capabilities: ['fixture'] },
         };
       },
     };
-    const session = new SessionManager({ workKey: 'wrk_test', transport: mismatched });
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport: mismatched });
     await expect(session.establish()).rejects.toSatisfy(
       (e: unknown) => (e as ViceMeError).code === 'WORK_NOT_FOUND',
     );
@@ -46,7 +46,7 @@ describe('SessionManager', () => {
 
   it('invalidate drops the token so the next establish re-authenticates', async () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
-    const session = new SessionManager({ workKey: 'wrk_test', transport });
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport });
     await session.establish();
     session.invalidate();
     await session.establish();
@@ -58,7 +58,7 @@ describe('SessionManager', () => {
     const transport = createMemoryTransport({
       work: { ...FIXTURE_WORK, expiresAt: clock + 10_000 },
     });
-    const session = new SessionManager({ workKey: 'wrk_test', transport, now: () => clock });
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport, now: () => clock });
 
     await session.establish();
     clock += 5_000;
@@ -71,7 +71,7 @@ describe('SessionManager', () => {
     const transport = createMemoryTransport({
       work: { ...FIXTURE_WORK, expiresAt: clock + 5_000 },
     });
-    const session = new SessionManager({ workKey: 'wrk_test', transport, now: () => clock });
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport, now: () => clock });
 
     await session.establish();
     clock += 6_000;
@@ -85,7 +85,7 @@ describe('SessionManager', () => {
       work: { ...FIXTURE_WORK, expiresAt: clock + 1_000 },
       latencyMs: 30,
     });
-    const session = new SessionManager({ workKey: 'wrk_test', transport, now: () => clock });
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport, now: () => clock });
 
     await session.establish();
     clock += 2_000;
@@ -105,7 +105,7 @@ describe('SessionManager', () => {
           return {
             status: 201,
             body: {
-              workKey: 'wrk_test',
+              workKey: 'wrk_test_demo',
               capabilities: ['auth'],
               token: sessionCount === 1 ? 'stale-token' : 'fresh-token',
               expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -122,7 +122,7 @@ describe('SessionManager', () => {
         return { status: 201, body: { ok: true } };
       },
     };
-    const session = new SessionManager({ workKey: 'wrk_test', transport });
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport });
 
     await expect(
       session.request({ method: 'POST', path: '/v1/public/work-sdk/access/check' }),

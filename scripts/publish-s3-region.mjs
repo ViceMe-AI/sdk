@@ -167,9 +167,11 @@ try {
 }
 
 // Public read-back from the region's real public entry.
-execFileSync(process.execPath, [join(here, 'verify-cdn.mjs'), '--base', args.publicBase], {
-  stdio: 'inherit',
-});
+execFileSync(
+  process.execPath,
+  [join(here, 'verify-cdn.mjs'), '--base', args.publicBase, '--expect-version', manifest.version],
+  { stdio: 'inherit' },
+);
 const publicLicense = await fetch(new URL('LICENSE', args.publicBase), {
   redirect: 'error',
   signal: AbortSignal.timeout(10_000),

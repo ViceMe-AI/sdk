@@ -7,11 +7,11 @@ describe('createMemoryTransport', () => {
     const res = await transport.request({
       method: 'POST',
       path: '/v1/public/work-sdk/sessions',
-      body: { workKey: 'wrk_test' },
+      body: { workKey: 'wrk_test_demo' },
     });
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       capabilities: ['fixture'],
       token: 'test-session-token',
     });
@@ -50,7 +50,7 @@ describe('createTestViceMe', () => {
   it('initializes locally, then exposes Work capabilities lazily', async () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
     const client = createTestViceMe({
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       transport,
     });
@@ -75,10 +75,10 @@ describe('createTestViceMe', () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
     expect(() => createTestViceMe({ workKey: 'bad', region: 'cn', transport })).toThrow();
     expect(() =>
-      createTestViceMe({ workKey: 'wrk_test', region: 'eu' as never, transport }),
+      createTestViceMe({ workKey: 'wrk_test_demo', region: 'eu' as never, transport }),
     ).toThrow();
     expect(() =>
-      createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport: {} as never }),
+      createTestViceMe({ workKey: 'wrk_test_demo', region: 'cn', transport: {} as never }),
     ).toThrow();
   });
 });

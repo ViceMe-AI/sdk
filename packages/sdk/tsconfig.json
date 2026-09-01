@@ -9,7 +9,6 @@
     "vite.config.esm.ts",
     "vite.config.endpoints.ts",
     "vite.config.loader.ts",
-    "vite.config.bootstrap.ts",
     "playwright.config.ts"
   ]
 }
