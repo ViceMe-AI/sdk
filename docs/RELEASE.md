@@ -78,11 +78,17 @@ exact-version CDN objects remain immutable and must never be retrofitted.
    provenance while allowing a failed publication to reserve a version on
    `main`. Conventional Commits after that baseline select major, minor, or
    patch; the workflow then generates the package version, runtime version, and
-   changelog. It runs the full SDK quality gate and uses the
+   changelog. The initial unprepared promotion head runs only the cheap PR
+   target gate; it does not start dependency installation, browser matrices,
+   framework fixtures, or tarball fixtures. Release preparation runs the full
+   SDK quality gate and uses the
    Release App (Contents write only) to commit those generated files back to
-   protected `dev`. It then
-   uses `GITHUB_TOKEN` to update the same PR title and body. No additional
-   Version Packages PR is created.
+   protected `dev` with trusted preparation and evidence trailers. The exact
+   prepared head then runs the complete pull-request Quality Gate once. The
+   synchronized release-preparation run only verifies the marked bot commit and
+   reuses the original evidence; it does not reinstall dependencies or repeat
+   the full preparation. It then uses `GITHUB_TOKEN` to update the same PR title
+   and body. No additional Version Packages PR is created.
 2. **Identity**: after that PR is merged, `release.yml` and
    `resolve-release-context.mjs` bind the run to the exact reviewed `dev` head
    recorded by the merged promotion PR (not the generated merge commit); the
@@ -112,6 +118,13 @@ exact-version CDN objects remain immutable and must never be retrofitted.
 
 A release is DONE only when step 6 has run. Exact-version artifacts are
 never left as a manual follow-up.
+
+The general Quality Gate is pull-request-owned. It does not also run on pushes
+to `dev` or `main`: normal changes are validated by their reviewed PR, the
+Release App push is validated by the synchronized promotion PR, and release
+publication reruns its release-specific quality gates after the reviewed
+promotion reaches `main`. This prevents the same prepared SDK commit from
+starting parallel push and pull-request matrices.
 
 ## Recovery
 
