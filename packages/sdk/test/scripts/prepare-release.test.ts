@@ -129,6 +129,53 @@ function runDivergedRelease() {
   }
 }
 
+function runReleaseAfterSkippedVersion() {
+  const repo = mkdtempSync(join(tmpdir(), 'viceme-sdk-skipped-release-'));
+  const writeVersion = (version: string) => {
+    writeFileSync(
+      join(repo, 'packages/sdk/package.json'),
+      `${JSON.stringify({ name: '@viceme-ai/sdk', version }, null, 2)}\n`,
+    );
+    writeFileSync(
+      join(repo, 'packages/sdk/src/version.ts'),
+      `export const API_MAJOR = 1;\nexport const SDK_VERSION = '${version}';\n`,
+    );
+    writeFileSync(
+      join(repo, 'packages/sdk/CHANGELOG.md'),
+      `# Changelog\n\n## [${version}] - 2026-08-01\n\n- Baseline.\n`,
+    );
+  };
+
+  try {
+    mkdirSync(join(repo, 'packages/sdk/src'), { recursive: true });
+    writeVersion('0.4.0');
+    git(repo, ['init', '--initial-branch=main']);
+    git(repo, ['config', 'user.name', 'ViceMe Test']);
+    git(repo, ['config', 'user.email', 'test@viceme.invalid']);
+    git(repo, ['config', 'commit.gpgsign', 'false']);
+    git(repo, ['add', '.']);
+    git(repo, ['commit', '-m', 'chore(release): @viceme-ai/sdk@0.4.0']);
+    git(repo, ['tag', '@viceme-ai/sdk@0.4.0']);
+
+    writeVersion('0.5.0');
+    git(repo, ['add', '.']);
+    git(repo, ['commit', '-m', 'chore(release): @viceme-ai/sdk@0.5.0']);
+    git(repo, ['checkout', '-b', 'dev']);
+    writeFileSync(join(repo, 'access.txt'), 'embedded access\n');
+    git(repo, ['add', 'access.txt']);
+    git(repo, ['commit', '-m', 'feat(sdk): add embedded access']);
+
+    return JSON.parse(
+      execFileSync(process.execPath, [prepareReleaseScript, '--fallback-ref', 'main'], {
+        cwd: repo,
+        encoding: 'utf8',
+      }),
+    ) as { base_ref: string; bump: string; commit_count: number; version: string };
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+}
+
 describe('prepare-release CLI-aligned policy', () => {
   it('selects semantic version bumps from Conventional Commits', () => {
     expect(selectBump([parseConventionalCommit(commit('fix: repair loader'))])).toBe('patch');
@@ -203,6 +250,15 @@ describe('prepare-release CLI-aligned policy', () => {
       version: '0.5.0',
       bump: 'minor',
       base_ref: '@viceme-ai/sdk@0.4.0',
+      commit_count: 1,
+    });
+  });
+
+  it('uses the protected branch after an untagged release version was merged', () => {
+    expect(runReleaseAfterSkippedVersion()).toEqual({
+      version: '0.6.0',
+      bump: 'minor',
+      base_ref: 'main',
       commit_count: 1,
     });
   });

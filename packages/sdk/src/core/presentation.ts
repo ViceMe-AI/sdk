@@ -273,6 +273,9 @@ function ensureAccessLayerElement(): void {
             }
             [data-viceme='panel'][data-frame='true'] { width: min(30rem, 100%); }
             [data-viceme='panel'][data-action='SIGN_IN'] { width: min(30rem, 100%); }
+            [data-viceme='panel'][data-action='CHECKOUT'][data-frame='true'] {
+              width: min(42rem, 100%);
+            }
           }
           @media (prefers-reduced-motion: no-preference) {
             [data-viceme='panel'] { animation: viceme-enter 160ms ease-out; }

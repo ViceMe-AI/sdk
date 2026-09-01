@@ -88,6 +88,23 @@ function latestReleaseTag() {
   return tags.find((tag) => semverPattern.test(tag.slice(releaseTagPrefix.length))) ?? '';
 }
 
+function compareVersions(leftRaw, rightRaw) {
+  const left = parseVersion(leftRaw);
+  const right = parseVersion(rightRaw);
+  return left.major - right.major || left.minor - right.minor || left.patch - right.patch;
+}
+
+function releaseBase(releaseTag, fallbackRef) {
+  if (releaseTag === '') return fallbackRef;
+
+  const fallbackPackage = readAtRef(fallbackRef, packageFilename);
+  if (fallbackPackage === '') return releaseTag;
+
+  const fallbackVersion = JSON.parse(fallbackPackage).version;
+  const releaseVersion = releaseTag.slice(releaseTagPrefix.length);
+  return compareVersions(fallbackVersion, releaseVersion) > 0 ? fallbackRef : releaseTag;
+}
+
 function commitsSince(ref) {
   const record = '%H%x1f%s%x1f%b%x1e';
   const output = gitOptional(['log', '--no-merges', `--format=${record}`, `${ref}..HEAD`]);
@@ -115,7 +132,7 @@ function writeJSON(filename, value) {
 
 export function prepareRelease({ fallbackRef = 'origin/main' } = {}) {
   const releaseTag = latestReleaseTag();
-  const baseRef = releaseTag || fallbackRef;
+  const baseRef = releaseBase(releaseTag, fallbackRef);
   if (!gitOptional(['rev-parse', '--verify', baseRef])) {
     throw new Error(`release base ref does not exist: ${baseRef}`);
   }
