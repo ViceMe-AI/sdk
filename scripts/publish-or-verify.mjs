@@ -20,6 +20,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as wait } from 'node:timers/promises';
+import './assert-release-license.mjs';
 import { decideMutableTagMove } from './lib/release-policy.mjs';
 
 const registry = 'https://registry.npmjs.org';

@@ -17,7 +17,8 @@ const distDir = join(sdkDir, 'dist');
 const pagesDir = join(here, 'pages');
 const manifest = JSON.parse(await readFile(join(distDir, 'manifest.json'), 'utf8'));
 const SDK_CHUNK_PATH = /^chunks\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.js$/;
-const SDK_ENTRY_PATHS = new Set(['manifest.json', 'viceme.min.js', 'danmaku.js', 'tip.js']);
+const SHOP_SDK_ENTRY_PATHS = new Set(['manifest.json', 'viceme.min.js', 'danmaku.js', 'tip.js']);
+const EXACT_SDK_ENTRY_PATHS = new Set(['manifest.json', ...Object.keys(manifest.files)]);
 
 const MIME = new Map([
   ['.js', 'text/javascript; charset=utf-8'],
@@ -59,12 +60,12 @@ async function serve(req, res, topology) {
       file = join(distDir, 'bootstrap.min.js');
     } else if (topology === 'shop' && path.startsWith('/viceme-sdk/v1/')) {
       const rest = path.slice('/viceme-sdk/v1/'.length);
-      if (SDK_ENTRY_PATHS.has(rest) || SDK_CHUNK_PATH.test(rest)) {
+      if (SHOP_SDK_ENTRY_PATHS.has(rest) || SDK_CHUNK_PATH.test(rest)) {
         file = join(distDir, normalize(rest));
       }
     } else if (topology === 's3' && path.startsWith(`/viceme-sdk/${manifest.version}/`)) {
       const rest = path.split('/').slice(3).join('/');
-      if (SDK_ENTRY_PATHS.has(rest) || SDK_CHUNK_PATH.test(rest)) {
+      if (EXACT_SDK_ENTRY_PATHS.has(rest)) {
         file = join(distDir, normalize(rest));
       }
     }

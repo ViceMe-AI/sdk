@@ -6,7 +6,7 @@ import { mountDanmaku } from '../../../src/danmaku/index.ts';
 import { FRAME_READY_TIMEOUT_MS, mount } from '../../../src/danmaku/mount.ts';
 
 function client(region: 'cn' | 'global' = 'cn'): ViceMeClient {
-  return createViceMe({ workKey: 'wrk_test', region });
+  return createViceMe({ workKey: 'wrk_test_demo', region });
 }
 
 function setIframePageLoading(disabled: boolean): void {
@@ -105,7 +105,7 @@ describe('danmaku mount', () => {
     let enabled = false;
     const sdkClient = {
       version: '0.3.0',
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       state: 'READY',
       ready: vi.fn(async () => undefined),
@@ -138,7 +138,7 @@ describe('danmaku mount', () => {
     expect(frames[0]?.title).toBe('ViceMe Danmaku');
     expect(frames[0]?.style.pointerEvents).toBe('none');
     expect(frames[0]?.src).toContain('https://viceme.cn/embed/danmaku?');
-    expect(frames[0]?.src).toContain('workKey=wrk_test');
+    expect(frames[0]?.src).toContain('workKey=wrk_test_demo');
     expect(frames[0]?.src).toContain('mode=stage');
     expect(frames[0]?.src).toContain('anchorKey=page%3A');
     expect(frames[0]?.src).not.toContain('private');
@@ -333,7 +333,7 @@ describe('danmaku mount', () => {
   it('fails closed when a non-danmaku client is supplied', async () => {
     const unsupported = {
       version: '0.3.0',
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       state: 'READY',
       ready: vi.fn(async () => undefined),

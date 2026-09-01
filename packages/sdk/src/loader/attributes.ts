@@ -46,7 +46,7 @@ export function parseLoaderAttributes(element: Element): LoaderAttributes {
 
   const workKey = element.getAttribute('data-viceme-work');
   if (!isValidWorkKey(workKey)) {
-    throw configInvalid('Loader attribute "data-viceme-work" must be a public work key ("wrk_…").');
+    throw configInvalid('Loader attribute "data-viceme-work" must be a public Work key.');
   }
 
   const region = element.getAttribute('data-viceme-region');

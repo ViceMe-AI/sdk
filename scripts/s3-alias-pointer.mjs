@@ -3,7 +3,8 @@
  * Move the stable `/viceme-sdk/v1` alias on the dual-region S3 topology.
  *
  * Per region (credentials via env, region-selected):
- *   1. read the current public pointer and apply the shared policy
+ *   1. verify the exact version's license and manifest, then read the current
+ *      public pointer and apply the shared policy
  *      (promote = monotonic forward only; rollback = explicit, requires
  *      --from-current to match the live value);
  *   2. publish the loader object at bucket key v1/viceme.min.js with immutable
@@ -36,9 +37,9 @@ import {
   readPointerState,
 } from './lib/pointer-client.mjs';
 
+const BUCKET_PATH = 'viceme-sdk';
 const POINTER_KEY = '-/aliases/v1';
 const ALIAS_SEGMENT = 'v1';
-const BUCKET_PATH = 'viceme-sdk';
 const EXPECTED_BUCKET = process.env.EXPECT_BUCKET ?? 'viceme-sdk';
 const awsBin = process.env.AWS_BIN ?? 'aws';
 const DEFAULT_BASES = { cn: 'https://s3.viceme.cn', global: 'https://s3.viceme.ai' };
@@ -128,6 +129,42 @@ try {
   for (const region of regions) {
     const config = regionConfig(region);
     const aws = makeAws(config);
+
+    const licenseLocal = join(scratch, `LICENSE-${region}`);
+    const licenseGet = aws(
+      's3',
+      'cp',
+      `s3://${config.bucket}/${args.version}/LICENSE`,
+      licenseLocal,
+      '--only-show-errors',
+    );
+    if (licenseGet.status !== 0 || readFileSync(licenseLocal, 'utf8').trim() === '') {
+      console.error(
+        `s3-alias-pointer: exact version ${args.version} has no non-empty LICENSE in ${region}`,
+      );
+      process.exit(1);
+    }
+
+    const manifestLocal = join(scratch, `manifest-${region}.json`);
+    const manifestGet = aws(
+      's3',
+      'cp',
+      `s3://${config.bucket}/${args.version}/manifest.json`,
+      manifestLocal,
+      '--only-show-errors',
+    );
+    let manifest;
+    try {
+      manifest = manifestGet.status === 0 ? JSON.parse(readFileSync(manifestLocal, 'utf8')) : null;
+    } catch {
+      manifest = null;
+    }
+    if (manifest?.version !== args.version || manifest?.apiMajor !== 1) {
+      console.error(
+        `s3-alias-pointer: exact version ${args.version} has an invalid manifest in ${region}`,
+      );
+      process.exit(1);
+    }
     const pointerUrl = `${config.publicBase}/${BUCKET_PATH}/${POINTER_KEY}`;
 
     // 1. Policy against the live public pointer, BEFORE any write. The

@@ -8,8 +8,8 @@ describe('dispatchViceMeEvent', () => {
     host.addEventListener('viceme:ready', listener);
 
     const detail: VicemeReadyDetail & Record<string, unknown> = {
-      clientKey: 'v1+cn+wrk_test',
-      workKey: 'wrk_test',
+      clientKey: 'v1+cn+wrk_test_demo',
+      workKey: 'wrk_test_demo',
       capabilities: ['fixture'],
       version: '0.1.0',
       // Extra fields must be stripped by the sanitizer.
@@ -20,8 +20,8 @@ describe('dispatchViceMeEvent', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     const received = (listener.mock.calls[0]![0] as CustomEvent).detail;
     expect(received).toEqual({
-      clientKey: 'v1+cn+wrk_test',
-      workKey: 'wrk_test',
+      clientKey: 'v1+cn+wrk_test_demo',
+      workKey: 'wrk_test_demo',
       capabilities: ['fixture'],
       version: '0.1.0',
     });
@@ -34,8 +34,8 @@ describe('dispatchViceMeEvent', () => {
     document.addEventListener('viceme:capability-ready', listener);
 
     dispatchViceMeEvent(host, 'viceme:capability-ready', {
-      clientKey: 'v1+cn+wrk_test',
-      instanceKey: 'v1+cn+wrk_test::fixture::el1',
+      clientKey: 'v1+cn+wrk_test_demo',
+      instanceKey: 'v1+cn+wrk_test_demo::fixture::el1',
       capability: 'fixture',
       version: '0.1.0',
     });
@@ -63,18 +63,26 @@ describe('dispatchViceMeEvent', () => {
     host.addEventListener('viceme:tip-paid', listener);
 
     dispatchViceMeEvent(host, 'viceme:tip-paid', {
-      workId: '00000000-0000-4000-8000-000000000001',
+      work: {
+        id: '00000000-0000-4000-8000-000000000001',
+        title: 'Test work',
+        creatorId: 'must-not-leak',
+      },
       orderNo: 'VT20260827010203abcdef123456',
       status: 'PAID',
       amountCents: 520,
+      currency: 'CNY',
       accessToken: 'must-not-leak',
     } as never);
 
     expect((listener.mock.calls[0]![0] as CustomEvent).detail).toEqual({
-      workId: '00000000-0000-4000-8000-000000000001',
-      orderNo: 'VT20260827010203abcdef123456',
       status: 'PAID',
+      work: {
+        id: '00000000-0000-4000-8000-000000000001',
+        title: 'Test work',
+      },
       amountCents: 520,
+      currency: 'CNY',
     });
   });
 });

@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 0.5.0, sha256 c1a40e817924cc77…)
+ * (contractVersion 1.1.0, sha256 05292778fd6242db…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -109,6 +109,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/work-sdk/{workKey}/tip-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read public Tip configuration for one Work */
+        get: operations["getTipConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -182,6 +199,43 @@ export interface components {
             checkoutUrl: string;
             alreadyOwned: boolean;
         };
+        /** @description Public opaque test or live key issued for Tip. */
+        TipWorkKey: string;
+        /** @enum {string} */
+        TipEnvironment: "SANDBOX" | "PRODUCTION";
+        /** @enum {string} */
+        TipCurrency: "CNY";
+        /** @enum {string} */
+        TipProvider: "WECHAT_PAY" | "ALIPAY";
+        TipWork: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+        };
+        TipAmount: {
+            /** @enum {integer} */
+            minCents: 100;
+            /** @enum {integer} */
+            maxCents: 20000;
+            /** @enum {integer} */
+            stepCents: 1;
+        };
+        TipConfig: {
+            work: components["schemas"]["TipWork"];
+            workKey: components["schemas"]["TipWorkKey"];
+            environment: components["schemas"]["TipEnvironment"];
+            currency: components["schemas"]["TipCurrency"];
+            amount: components["schemas"]["TipAmount"];
+            providers: components["schemas"]["TipProvider"][];
+        };
+        TipConfigCredentialsError: {
+            /** @constant */
+            statusCode: 400;
+            /** @constant */
+            code: "TIP_CONFIG_CREDENTIALS_NOT_ALLOWED";
+            message: string;
+            requestId: string;
+        };
         DanmakuAnchorKey: string;
         DanmakuCursor: string;
         DanmakuMessage: {
@@ -212,6 +266,33 @@ export interface components {
     responses: {
         /** @description Public API error */
         PublicError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorBody"];
+            };
+        };
+        /** @description Tip configuration requests must not include Cookie or Authorization credentials. */
+        TipConfigCredentialsNotAllowed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["TipConfigCredentialsError"];
+            };
+        };
+        /** @description Unknown Work or Tip is unavailable for this Work or region. */
+        TipUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorBody"];
+            };
+        };
+        /** @description Unexpected Shop error. */
+        InternalError: {
             headers: {
                 [name: string]: unknown;
             };
@@ -413,6 +494,31 @@ export interface operations {
                 };
             };
             "4xx": components["responses"]["PublicError"];
+        };
+    };
+    getTipConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workKey: components["schemas"]["TipWorkKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sanitized public Tip configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TipConfig"];
+                };
+            };
+            400: components["responses"]["TipConfigCredentialsNotAllowed"];
+            404: components["responses"]["TipUnavailable"];
+            500: components["responses"]["InternalError"];
         };
     };
 }

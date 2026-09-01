@@ -41,6 +41,7 @@ const expectedOperations = {
   '/v1/public/work-sdk/checkout': ['post'],
   '/v1/public/work-sdk/follow': ['get', 'put'],
   '/v1/public/work-sdk/sessions': ['post'],
+  '/v1/work-sdk/{workKey}/tip-config': ['get'],
 };
 if (
   JSON.stringify(Object.keys(snapshotJson.paths ?? {}).sort()) !==

@@ -36,10 +36,13 @@ export interface VicemeWidgetCloseDetail {
 }
 
 export interface VicemeTipPaidDetail {
-  workId: string;
-  orderNo: string;
   status: 'PAID';
+  work: {
+    id: string;
+    title: string;
+  };
   amountCents: number;
+  currency: 'CNY';
 }
 
 export type VicemeEventType =
@@ -68,7 +71,7 @@ const ALLOWED_KEYS: ReadonlyMap<VicemeEventType, ReadonlySet<string>> = new Map(
   ],
   ['viceme:destroyed', new Set(['clientKey', 'instanceKey', 'capability'])],
   ['viceme:widget-close', new Set(['workId'])],
-  ['viceme:tip-paid', new Set(['workId', 'orderNo', 'status', 'amountCents'])],
+  ['viceme:tip-paid', new Set(['status', 'work', 'amountCents', 'currency'])],
 ]);
 
 /** Strip anything outside the documented allowlist before dispatch. */
@@ -76,6 +79,15 @@ export function sanitizeDetail(
   type: VicemeEventType,
   detail: VicemeEventDetailMap[VicemeEventType],
 ): VicemeEventDetailMap[VicemeEventType] {
+  if (type === 'viceme:tip-paid') {
+    const paid = detail as VicemeTipPaidDetail;
+    return {
+      status: paid.status,
+      work: { id: paid.work.id, title: paid.work.title },
+      amountCents: paid.amountCents,
+      currency: paid.currency,
+    };
+  }
   const allowed = ALLOWED_KEYS.get(type)!;
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(detail)) {
