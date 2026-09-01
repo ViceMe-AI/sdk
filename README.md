@@ -272,6 +272,9 @@ Website Access transports and presenters; the scoped Tip entry is an isolated
 - The external SDK derives an opaque page-position anchor, creates the stage,
   responsive-width controls, and lazy modal iframes, validates bridge message
   origin/source, and owns cleanup.
+- Website access login and desktop checkout stay inside those SDK-owned modal
+  frames. Mobile H5/WAP may open the payment provider page or app; the original
+  page keeps polling the signed Work access decision and unlocks after payment.
 - Shop Web owns `/embed/danmaku`, including rendering, keyboard behavior,
   reduced-motion behavior, and interaction.
 - The Shop SDK inside that iframe calls anonymous `GET` and `POST`

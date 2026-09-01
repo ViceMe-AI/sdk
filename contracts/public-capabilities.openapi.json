@@ -368,10 +368,14 @@
       "CheckoutResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["checkoutUrl", "alreadyOwned"],
+        "required": ["checkoutUrl", "alreadyOwned", "expiresAt"],
         "properties": {
           "checkoutUrl": { "type": "string", "format": "uri" },
-          "alreadyOwned": { "type": "boolean" }
+          "alreadyOwned": { "type": "boolean" },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
         }
       },
       "TipEnvironment": {

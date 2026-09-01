@@ -24,9 +24,7 @@ test.beforeAll(async () => {
   presentationBundle = chunk.code;
 });
 
-test('checkout action is visible and opens its external popup from a real click', async ({
-  page,
-}) => {
+test('checkout action loads inside the SDK layer without an external popup', async ({ page }) => {
   await page.route('**/test/presentation.js', (route) =>
     route.fulfill({
       status: 200,
@@ -48,8 +46,12 @@ test('checkout action is visible and opens its external popup from a real click'
         reason: "PURCHASE_REQUIRED",
         action: "CHECKOUT",
         perform: async () => {
-          window.open("/pages/health.html?checkout=1", "_blank");
-          return { type: "external", completion, cancel() {} };
+          return {
+            type: "frame",
+            url: "/pages/health.html?checkout=1",
+            completion,
+            cancel() {},
+          };
         },
       });
     `,
@@ -59,11 +61,14 @@ test('checkout action is visible and opens its external popup from a real click'
     name: '打开支付',
   });
   await expect(action).toBeVisible();
-  const popupPromise = page.waitForEvent('popup');
+  let popupCount = 0;
+  page.on('popup', () => {
+    popupCount += 1;
+  });
   await action.click();
-  const popup = await popupPromise;
-  await expect.poll(() => popup.url()).toContain('checkout=1');
-  await popup.close();
+  const frame = page.locator('viceme-access-layer').locator('iframe');
+  await expect(frame).toHaveAttribute('src', /checkout=1/u);
+  expect(popupCount).toBe(0);
   await page.evaluate(() => {
     (window as typeof window & { __completeCheckout: () => void }).__completeCheckout();
   });
