@@ -18,13 +18,16 @@
   <body>
     <main>
       <h1>Third-party host page</h1>
-      <p>The host adds no SDK CSS or API calls. Replace the public work key below.</p>
+      <p>
+        The host adds no SDK CSS or API calls. Replace the public work key below. This exact 0.5.0
+        URL is unavailable until that release is published and verified.
+      </p>
       <button type="button">Host-page action</button>
       <div id="viceme-engagement"></div>
     </main>
     <!-- prettier-ignore -->
     <script
-      defer src="https://viceme.cn/viceme-sdk/v1/viceme.min.js" data-viceme-work="wrk_public_example" data-viceme-region="cn"
+      defer src="https://s3.viceme.cn/viceme-sdk/0.5.0/viceme.min.js" data-viceme-work="wrk_live_example" data-viceme-region="cn"
       data-viceme-features="danmaku,tip" data-viceme-target="#viceme-engagement"
       data-viceme-theme="auto"></script>
   </body>

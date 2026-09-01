@@ -3,7 +3,7 @@
  * Public surface verification for `@viceme-ai/sdk`.
  *
  * Locks the published hosted engagement and Website Work access surface:
- * - exports map contains core, testing, danmaku, and tip;
+ * - exports map contains core, testing, danmaku, tip, and scoped Tip testing;
  * - declared dist artifacts exist (js + d.ts);
  * - internal capability modules do not become package subpaths;
  * - runtime version constant matches package.json;
@@ -11,7 +11,7 @@
  */
 import { access, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readApiMajor } from './lib/version-source.mjs';
 
@@ -28,8 +28,9 @@ const pkg = JSON.parse(await readFile(join(sdkDir, 'package.json'), 'utf8'));
 
 const exportKeys = Object.keys(pkg.exports ?? {}).sort();
 check(
-  JSON.stringify(exportKeys) === JSON.stringify(['.', './danmaku', './testing', './tip']),
-  `exports map must be exactly [".", "./danmaku", "./testing", "./tip"], got ${JSON.stringify(exportKeys)}`,
+  JSON.stringify(exportKeys) ===
+    JSON.stringify(['.', './danmaku', './testing', './tip', './tip/testing']),
+  `exports map is unexpected: ${JSON.stringify(exportKeys)}`,
 );
 
 for (const [subpath, def] of Object.entries(pkg.exports ?? {})) {
@@ -79,8 +80,8 @@ const tipRuntimeSymbols = Object.keys(
   await import(pathToFileURL(join(distDir, 'tip.js')).href),
 ).sort();
 check(
-  JSON.stringify(tipRuntimeSymbols) === JSON.stringify(['mountTip']),
-  `./tip runtime symbols must be exactly ["mountTip"], got ${JSON.stringify(tipRuntimeSymbols)}`,
+  JSON.stringify(tipRuntimeSymbols) === JSON.stringify(['createTip', 'mountTip']),
+  `./tip runtime symbols must be exactly ["createTip", "mountTip"], got ${JSON.stringify(tipRuntimeSymbols)}`,
 );
 
 const tipDeclarations = await readFile(join(distDir, 'tip', 'index.d.ts'), 'utf8');
@@ -98,13 +99,50 @@ check(
 check(
   JSON.stringify(tipTypeSymbols) ===
     JSON.stringify([
+      'TipClient',
+      'TipConfig',
       'TipMountHandle',
       'TipMountOptions',
+      'TipOpenOptions',
+      'TipOpenResult',
       'TipPaidDetail',
+      'TipProvider',
       'TipWidgetCloseDetail',
+      'createTip',
       'mountTip',
     ]),
   `./tip declaration symbols are unexpected: ${JSON.stringify(tipTypeSymbols)}`,
+);
+
+const tipTestingRuntimeSymbols = Object.keys(
+  await import(pathToFileURL(join(distDir, 'tip', 'testing.js')).href),
+).sort();
+check(
+  JSON.stringify(tipTestingRuntimeSymbols) === JSON.stringify(['createTestTip']),
+  `./tip/testing runtime symbols are unexpected: ${JSON.stringify(tipTestingRuntimeSymbols)}`,
+);
+
+const tipTestingDeclarations = await readFile(join(distDir, 'tip', 'testing.d.ts'), 'utf8');
+const tipTestingTypeSymbols = [
+  ...tipTestingDeclarations.matchAll(
+    /^export (?:declare )?(?:function|class|const|let|var|interface|type|enum)\s+([A-Za-z_$][\w$]*)/gm,
+  ),
+]
+  .map((match) => match[1])
+  .sort();
+check(
+  JSON.stringify(tipTestingTypeSymbols) ===
+    JSON.stringify(['TipTestOptions', 'TipTestOutcome', 'createTestTip']),
+  `./tip/testing declaration symbols are unexpected: ${JSON.stringify(tipTestingTypeSymbols)}`,
+);
+
+const testingRuntimeSymbols = Object.keys(
+  await import(pathToFileURL(join(distDir, 'testing.js')).href),
+).sort();
+check(
+  JSON.stringify(testingRuntimeSymbols) ===
+    JSON.stringify(['FIXTURE_WORK', 'createMemoryTransport', 'createTestViceMe']),
+  `./testing runtime symbols are unexpected: ${JSON.stringify(testingRuntimeSymbols)}`,
 );
 
 for (const removed of ['access', 'auth', 'checkout', 'follow', 'payment', 'purchase', 'session']) {
@@ -117,7 +155,14 @@ for (const removed of ['access', 'auth', 'checkout', 'follow', 'payment', 'purch
     .catch(() => {});
 }
 
-for (const required of ['viceme.min.js', 'danmaku.js', 'tip.js', 'testing.js', 'manifest.json']) {
+for (const required of [
+  'viceme.min.js',
+  'danmaku.js',
+  'tip.js',
+  'testing.js',
+  'tip/testing.js',
+  'manifest.json',
+]) {
   await access(join(distDir, required), constants.R_OK).catch(() =>
     failures.push(`hosted runtime dist/${required} missing`),
   );
@@ -148,7 +193,9 @@ const runtimeFiles = Object.keys(manifest.files ?? {}).filter(
   (file) =>
     file === 'index.js' ||
     file === 'danmaku.js' ||
+    file === 'testing.js' ||
     file === 'tip.js' ||
+    file === 'tip/testing.js' ||
     file === 'viceme.min.js' ||
     file.startsWith('chunks/'),
 );
@@ -159,21 +206,21 @@ for (const file of runtimeFiles) {
   }
 }
 
-const pending = ['danmaku.js', 'tip.js'];
+const pending = ['danmaku.js', 'testing.js', 'tip.js', 'tip/testing.js'];
 const visited = new Set();
 while (pending.length > 0) {
   const file = pending.pop();
   if (visited.has(file)) continue;
   visited.add(file);
   const source = await readFile(join(distDir, file), 'utf8');
-  const references = [...source.matchAll(/["']\.\/(.+?\.js)["']/g)].map((match) => match[1]);
-  for (const reference of references) {
-    check(
-      /^chunks\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.js$/.test(reference),
-      `${file} references Shop-proxy-blocked asset ${reference}`,
-    );
-    check(manifest.files?.[reference], `manifest does not describe referenced asset ${reference}`);
-    if (!visited.has(reference)) pending.push(reference);
+  const references = [...source.matchAll(/["'](\.{1,2}\/.+?\.js)["']/g)].map((match) => match[1]);
+  for (const specifier of references) {
+    const reference = posix.normalize(posix.join(posix.dirname(file), specifier));
+    const proxyAllowed = /^chunks\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.js$/.test(reference);
+    check(proxyAllowed, `${file} references Shop-proxy-blocked asset ${specifier} (${reference})`);
+    const described = manifest.files?.[reference] !== undefined;
+    check(described, `manifest does not describe referenced asset ${reference}`);
+    if (proxyAllowed && described && !visited.has(reference)) pending.push(reference);
   }
 }
 

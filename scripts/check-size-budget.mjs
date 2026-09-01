@@ -17,6 +17,7 @@ const BUDGETS = {
   'viceme.min.js': { gzip: 12 * 1024, label: 'CDN loader with shared Website access client' },
   'danmaku.js': { gzip: 16 * 1024, label: 'hosted danmaku capability' },
   'tip.js': { gzip: 8 * 1024, label: 'hosted tip capability' },
+  'tip/testing.js': { gzip: 2 * 1024, label: 'Tip deterministic test adapter' },
 };
 
 const manifest = JSON.parse(await readFile(join(distDir, 'manifest.json'), 'utf8'));

@@ -54,7 +54,7 @@ export type {
  *
  * @example
  * ```ts
- * const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
+ * const client = createViceMe({ workKey: 'wrk_live_demo', region: 'cn' });
  * await client.ready();
  * client.destroy();
  * ```

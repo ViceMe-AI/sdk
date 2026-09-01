@@ -2,9 +2,8 @@
 /**
  * Local static server for Playwright loader tests.
  *
- * Port 4173 models Shop's `/viceme-sdk/v1/*` proxy to one configured exact
- * release. Port 4174 models the direct S3 alias: fixed bootstrap, pointer,
- * then immutable exact-version files.
+ * Port 4173 serves third-party host pages. Port 4174 serves the immutable
+ * exact-version S3 artifacts cross-origin.
  */
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -16,8 +15,7 @@ const sdkDir = join(here, '..', '..');
 const distDir = join(sdkDir, 'dist');
 const pagesDir = join(here, 'pages');
 const manifest = JSON.parse(await readFile(join(distDir, 'manifest.json'), 'utf8'));
-const SDK_CHUNK_PATH = /^chunks\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.js$/;
-const SDK_ENTRY_PATHS = new Set(['manifest.json', 'viceme.min.js', 'danmaku.js', 'tip.js']);
+const EXACT_SDK_ENTRY_PATHS = new Set(['manifest.json', ...Object.keys(manifest.files)]);
 
 const MIME = new Map([
   ['.js', 'text/javascript; charset=utf-8'],
@@ -27,44 +25,30 @@ const MIME = new Map([
   ['.map', 'application/json; charset=utf-8'],
 ]);
 
-const shopPort = Number(process.env.PORT || 4173);
+const pagePort = Number(process.env.PORT || 4173);
 const s3Port = Number(process.env.S3_PORT || 4174);
+const s3Origin = `http://127.0.0.1:${s3Port}`;
+const exactSdkPrefix = `/viceme-sdk/${manifest.version}/`;
+const exactLoaderUrl = `${s3Origin}${exactSdkPrefix}viceme.min.js`;
 
 async function serve(req, res, topology) {
   try {
-    const port = topology === 'shop' ? shopPort : s3Port;
+    const port = topology === 'page' ? pagePort : s3Port;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     const path = decodeURIComponent(url.pathname);
 
-    if (topology === 'shop' && path === '/healthz') {
+    if (topology === 'page' && path === '/healthz') {
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end('ok');
       return;
     }
 
-    if (topology === 's3' && path === '/viceme-sdk/-/aliases/v1') {
-      res.writeHead(200, {
-        'content-type': 'text/plain; charset=utf-8',
-        'access-control-allow-origin': '*',
-        'cache-control': 'no-store',
-      });
-      res.end(manifest.version);
-      return;
-    }
-
     let file = null;
-    if (topology === 'shop' && path.startsWith('/pages/')) {
+    if (topology === 'page' && path.startsWith('/pages/')) {
       file = join(pagesDir, normalize(path.slice('/pages/'.length)));
-    } else if (topology === 's3' && path === '/viceme-sdk/v1/viceme.min.js') {
-      file = join(distDir, 'bootstrap.min.js');
-    } else if (topology === 'shop' && path.startsWith('/viceme-sdk/v1/')) {
-      const rest = path.slice('/viceme-sdk/v1/'.length);
-      if (SDK_ENTRY_PATHS.has(rest) || SDK_CHUNK_PATH.test(rest)) {
-        file = join(distDir, normalize(rest));
-      }
-    } else if (topology === 's3' && path.startsWith(`/viceme-sdk/${manifest.version}/`)) {
-      const rest = path.split('/').slice(3).join('/');
-      if (SDK_ENTRY_PATHS.has(rest) || SDK_CHUNK_PATH.test(rest)) {
+    } else if (topology === 's3' && path.startsWith(exactSdkPrefix)) {
+      const rest = path.slice(exactSdkPrefix.length);
+      if (EXACT_SDK_ENTRY_PATHS.has(rest)) {
         file = join(distDir, normalize(rest));
       }
     }
@@ -76,16 +60,19 @@ async function serve(req, res, topology) {
     }
 
     let body = await readFile(file);
-    if (topology === 'shop' && path === '/pages/bootstrap-nonce.html') {
+    if (topology === 'page' && file.endsWith('.html')) {
       body = Buffer.from(
-        body.toString('utf8').replaceAll('__VICEME_S3_ORIGIN__', `http://127.0.0.1:${s3Port}`),
+        body
+          .toString('utf8')
+          .replaceAll('__VICEME_S3_ORIGIN__', s3Origin)
+          .replaceAll('__VICEME_SDK_LOADER_URL__', exactLoaderUrl),
       );
     }
     res.writeHead(200, {
       'content-type':
         MIME.get(/^.*(\.[a-z]+)$/.exec(file)?.[1] ?? '') ?? 'application/octet-stream',
-      'access-control-allow-origin': '*',
-      'cache-control': 'no-store',
+      ...(topology === 's3' ? { 'access-control-allow-origin': '*' } : {}),
+      'cache-control': topology === 's3' ? 'public,max-age=31536000,immutable' : 'no-store',
     });
     res.end(body);
   } catch {
@@ -100,5 +87,5 @@ function listen(port, topology) {
   });
 }
 
-await Promise.all([listen(shopPort, 'shop'), listen(s3Port, 's3')]);
-console.log(`sdk test servers on http://127.0.0.1:${shopPort} and http://127.0.0.1:${s3Port}`);
+await Promise.all([listen(pagePort, 'page'), listen(s3Port, 's3')]);
+console.log(`sdk test servers on http://127.0.0.1:${pagePort} and ${s3Origin}`);

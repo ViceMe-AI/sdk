@@ -28,5 +28,5 @@ receipt within 5 business days.
 
 - Never paste secrets, API keys, tokens, cookies, raw payment provider
   payloads, or complete payment data into issues, PRs, or test fixtures.
-- Examples must use fictional work keys (`wrk_public_example`) and mock
+- Examples must use fictional work keys (`wrk_live_example`) and mock
   endpoints only.

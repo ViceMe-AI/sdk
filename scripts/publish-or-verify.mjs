@@ -20,6 +20,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as wait } from 'node:timers/promises';
+import './assert-release-license.mjs';
 import { decideMutableTagMove } from './lib/release-policy.mjs';
 
 const registry = 'https://registry.npmjs.org';
@@ -97,7 +98,6 @@ async function enforceDistTagPolicy() {
     // Monotonic forward move only: a stale rerun of an older release must
     // never pull the dist-tag backward past a newer release.
     const decision = decideMutableTagMove({
-      mode: 'promote',
       current: tags[distTag],
       target: packageDocument.version,
     });

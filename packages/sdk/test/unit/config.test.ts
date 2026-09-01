@@ -5,14 +5,16 @@ import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('validatePublicConfig', () => {
   it('accepts workKey, region, and an optional abort signal', () => {
-    expect(validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn' })).toEqual({
-      workKey: 'wrk_public_xxx',
-      region: 'cn',
-      signal: undefined,
-    });
+    for (const workKey of ['wrk_test_demo', 'wrk_live_demo']) {
+      expect(validatePublicConfig({ workKey, region: 'cn' })).toEqual({
+        workKey,
+        region: 'cn',
+        signal: undefined,
+      });
+    }
     const signal = new AbortController().signal;
-    expect(validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn', signal })).toEqual({
-      workKey: 'wrk_public_xxx',
+    expect(validatePublicConfig({ workKey: 'wrk_test_signal', region: 'cn', signal })).toEqual({
+      workKey: 'wrk_test_signal',
       region: 'cn',
       signal,
     });
@@ -27,7 +29,7 @@ describe('validatePublicConfig', () => {
     'rejects removed or internal field %s',
     (field) => {
       expect(() =>
-        validatePublicConfig({ workKey: 'wrk_test', region: 'cn', [field]: 'nope' }),
+        validatePublicConfig({ workKey: 'wrk_test_demo', region: 'cn', [field]: 'nope' }),
       ).toThrow(`Unknown configuration field "${field}"`);
     },
   );
@@ -35,11 +37,12 @@ describe('validatePublicConfig', () => {
   it('rejects malformed work keys', () => {
     expect(() => validatePublicConfig({ workKey: 'WRK_test', region: 'cn' })).toThrow();
     expect(() => validatePublicConfig({ workKey: 'wrk_', region: 'cn' })).toThrow();
+    expect(() => validatePublicConfig({ workKey: 'invalid-work-key', region: 'cn' })).toThrow();
     expect(() => validatePublicConfig({ region: 'cn' })).toThrow();
   });
 
   it('rejects invalid regions', () => {
-    expect(() => validatePublicConfig({ workKey: 'wrk_test', region: 'eu' })).toThrow();
-    expect(() => validatePublicConfig({ workKey: 'wrk_test' })).toThrow();
+    expect(() => validatePublicConfig({ workKey: 'wrk_test_demo', region: 'eu' })).toThrow();
+    expect(() => validatePublicConfig({ workKey: 'wrk_test_demo' })).toThrow();
   });
 });

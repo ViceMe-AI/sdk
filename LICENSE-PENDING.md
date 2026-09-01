@@ -6,7 +6,7 @@ pending company confirmation).
 Until the final license text is confirmed and committed as `LICENSE`:
 
 - No npm package may be published from this repository.
-- No CDN stable alias may be pointed at a build of this repository.
+- No CDN release may be published from this repository.
 - Source in this repository must not be copied into other projects under a
   different license.
 

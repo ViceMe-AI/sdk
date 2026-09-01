@@ -18,7 +18,11 @@ export type ViceMeErrorCode =
   | 'RATE_LIMITED'
   | 'NETWORK_TIMEOUT'
   | 'CHECKOUT_UNAVAILABLE'
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  | 'TIP_CONFIG_CREDENTIALS_NOT_ALLOWED'
+  | 'TIP_CONFIG_INVALID'
+  | 'TIP_OPEN_IN_PROGRESS'
+  | 'TIP_READY_TIMEOUT';
 
 export interface ViceMeErrorInit {
   code: ViceMeErrorCode;

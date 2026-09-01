@@ -1,6 +1,6 @@
 {
   "name": "@viceme-ai/sdk",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "ViceMe hosted engagement and Website Work access SDK for static HTML, ESM, React, and Agent-generated sites.",
   "type": "module",
   "repository": {
@@ -26,6 +26,10 @@
     "./tip": {
       "types": "./dist/tip/index.d.ts",
       "import": "./dist/tip.js"
+    },
+    "./tip/testing": {
+      "types": "./dist/tip/testing.d.ts",
+      "import": "./dist/tip/testing.js"
     }
   },
   "files": [
@@ -42,14 +46,14 @@
   },
   "scripts": {
     "clean": "node ../../scripts/rmrf.mjs dist",
-    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:bootstrap && pnpm build:types && pnpm build:manifest && pnpm build:license",
+    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:types && pnpm build:manifest && pnpm build:license",
     "build:esm": "vite build --config vite.config.esm.ts",
     "build:loader": "vite build --config vite.config.loader.ts",
-    "build:bootstrap": "vite build --config vite.config.bootstrap.ts",
     "build:types": "tsc -p tsconfig.build.json",
     "build:manifest": "node ../../scripts/build-manifest.mjs",
     "build:license": "node ../../scripts/sync-package-license.mjs",
     "lint": "eslint .",
+    "prepublishOnly": "node ../../scripts/assert-release-license.mjs && node ../../scripts/sync-package-license.mjs && node ../../scripts/assert-package-license.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:browser": "playwright test",

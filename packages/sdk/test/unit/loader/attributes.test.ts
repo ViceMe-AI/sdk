@@ -8,7 +8,7 @@ function script(attrs: Record<string, string>): HTMLScriptElement {
 }
 
 const VALID = {
-  'data-viceme-work': 'wrk_test',
+  'data-viceme-work': 'wrk_test_demo',
   'data-viceme-region': 'cn',
   'data-viceme-features': 'danmaku',
   'data-viceme-target': '#host',
@@ -18,12 +18,18 @@ describe('parseLoaderAttributes', () => {
   it('parses the valid shape with defaults', () => {
     const attrs = parseLoaderAttributes(script(VALID));
     expect(attrs).toMatchObject({
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       features: ['danmaku'],
       target: '#host',
       theme: 'auto',
     });
+  });
+
+  it('rejects non-canonical Work keys for Danmaku', () => {
+    expect(() =>
+      parseLoaderAttributes(script({ ...VALID, 'data-viceme-work': 'invalid-work-key' })),
+    ).toThrow();
   });
 
   it.each([

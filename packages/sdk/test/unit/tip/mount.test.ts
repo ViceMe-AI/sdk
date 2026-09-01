@@ -6,10 +6,11 @@ import { mountTip } from '../../../src/tip/index.ts';
 import { FRAME_READY_TIMEOUT_MS, mount } from '../../../src/tip/mount.ts';
 
 const WORK_ID = '00000000-0000-4000-8000-000000000001';
+const WORK = { id: WORK_ID, title: 'Test work' };
 const ORDER_NO = 'VT20260827010203abcdef123456';
 
 function client(region: 'cn' | 'global' = 'cn'): ViceMeClient {
-  return createViceMe({ workKey: 'wrk_test', region });
+  return createViceMe({ workKey: 'wrk_test_demo', region });
 }
 
 function setIframePageLoading(disabled: boolean): void {
@@ -36,6 +37,10 @@ function frameMessage(
   window.dispatchEvent(new MessageEvent('message', { origin, source, data }));
 }
 
+function resizeMessage(height: number, overrides: Record<string, unknown> = {}) {
+  return { type: 'viceme:widget-resize', workId: WORK_ID, work: WORK, height, ...overrides };
+}
+
 async function completeMount<T>(
   pending: Promise<T>,
   height = 420,
@@ -47,7 +52,7 @@ async function completeMount<T>(
     expect(document.querySelector('[data-viceme-tip="mounted"]')).not.toBeNull(),
   );
   const frame = mountedFrame();
-  frameMessage(frame, { type: 'viceme:widget-resize', workId: WORK_ID, height });
+  frameMessage(frame, resizeMessage(height));
   return { frame, handle: await pending };
 }
 
@@ -93,14 +98,14 @@ describe('tip mount', () => {
     sdkClient.destroy();
   });
 
-  it('mounts the registered-origin widget with payment-safe iframe attributes', async () => {
+  it('mounts the trusted widget with payment-safe iframe attributes', async () => {
     const { frame, handle } = await completeMount(
       mount(client(), { target: document.body, theme: 'dark' }),
       512,
     );
 
     expect(handle.capability).toBe('tip');
-    expect(frame.src).toBe('https://viceme.cn/widget/tip/wrk_test?appearance=dark');
+    expect(frame.src).toBe('https://viceme.cn/widget/tip/wrk_test_demo?appearance=dark');
     expect(frame.referrerPolicy).toBe('strict-origin');
     expect(frame.getAttribute('sandbox')).toBe(
       'allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts',
@@ -123,31 +128,25 @@ describe('tip mount', () => {
       resolved = true;
     });
 
-    frameMessage(
-      frame,
-      { type: 'viceme:widget-resize', workId: WORK_ID, height: 420 },
-      'https://attacker.example',
-    );
-    frameMessage(frame, { type: 'viceme:widget-resize', workId: WORK_ID, height: 0 });
-    frameMessage(
-      frame,
-      { type: 'viceme:widget-resize', workId: WORK_ID, height: 420 },
-      'https://viceme.cn',
-      {} as Window,
-    );
+    frameMessage(frame, resizeMessage(420), 'https://attacker.example');
+    frameMessage(frame, resizeMessage(0));
+    frameMessage(frame, resizeMessage(420), 'https://viceme.cn', {} as Window);
+    frameMessage(frame, resizeMessage(420, { work: { ...WORK, title: '' } }));
+    frameMessage(frame, { ...resizeMessage(420), accessToken: 'must-not-pass' });
     await Promise.resolve();
     expect(resolved).toBe(false);
     expect(frame.style.pointerEvents).toBe('none');
 
-    frameMessage(frame, { type: 'viceme:widget-resize', workId: WORK_ID, height: 420 });
+    frameMessage(frame, resizeMessage(420));
     const handle = await pending;
     expect(frame.style.pointerEvents).toBe('auto');
 
-    frameMessage(frame, {
-      type: 'viceme:widget-resize',
-      workId: '00000000-0000-4000-8000-000000000002',
-      height: 800,
-    });
+    frameMessage(
+      frame,
+      resizeMessage(800, {
+        workId: '00000000-0000-4000-8000-000000000002',
+      }),
+    );
     expect(frame.style.height).toBe('420px');
     handle.destroy();
   });
@@ -162,28 +161,49 @@ describe('tip mount', () => {
     );
 
     frameMessage(frame, { type: 'viceme:widget-close', workId: WORK_ID, token: 'secret' });
+    frameMessage(frame, { type: 'viceme:widget-close', workId: WORK_ID });
     frameMessage(frame, {
       type: 'viceme:tip-paid',
-      workId: WORK_ID,
+      workKey: 'wrk_test_demo',
+      work: { ...WORK, title: 'Wrong work' },
+      status: 'PAID',
+      amountCents: 520,
+      currency: 'CNY',
+    });
+    frameMessage(frame, {
+      type: 'viceme:tip-paid',
+      workKey: 'wrk_test_demo',
+      work: WORK,
       orderNo: ORDER_NO,
       status: 'PAID',
       amountCents: 520,
+      currency: 'CNY',
       accessToken: 'secret',
     });
     frameMessage(frame, {
       type: 'viceme:tip-paid',
-      workId: WORK_ID,
+      workKey: 'wrk_test_demo',
+      work: WORK,
+      status: 'PAID',
+      amountCents: 520,
+      currency: 'CNY',
+    });
+    frameMessage(frame, {
+      type: 'viceme:tip-paid',
+      workKey: 'wrk_test_demo',
+      work: WORK,
       orderNo: ORDER_NO,
       status: 'PENDING',
       amountCents: 520,
+      currency: 'CNY',
     });
 
     expect((close.mock.calls[0]![0] as CustomEvent).detail).toEqual({ workId: WORK_ID });
     expect((paid.mock.calls[0]![0] as CustomEvent).detail).toEqual({
-      workId: WORK_ID,
-      orderNo: ORDER_NO,
       status: 'PAID',
+      work: WORK,
       amountCents: 520,
+      currency: 'CNY',
     });
     expect(close).toHaveBeenCalledOnce();
     expect(paid).toHaveBeenCalledOnce();
@@ -278,24 +298,19 @@ describe('tip mount', () => {
     expect(document.querySelector('[data-viceme-tip="mounted"]')).toBeNull();
   });
 
-  it('uses the global widget origin and fails closed for an unsupported client', async () => {
-    const globalPending = mount(client('global'), { target: document.body, theme: 'light' });
-    await vi.waitFor(() =>
-      expect(document.querySelector('[data-viceme-tip="mounted"]')).not.toBeNull(),
-    );
-    const frame = mountedFrame();
-    frameMessage(
-      frame,
-      { type: 'viceme:widget-resize', workId: WORK_ID, height: 420 },
-      'https://viceme.ai',
-    );
-    const globalHandle = await globalPending;
-    expect(frame.src).toContain('https://viceme.ai/widget/tip/wrk_test');
-    globalHandle.destroy();
+  it('fails closed before mounting for GLOBAL and unsupported clients', async () => {
+    await expect(
+      mount(client('global'), { target: document.body, theme: 'light' }),
+    ).rejects.toMatchObject({
+      code: 'CAPABILITY_DISABLED',
+      retryable: false,
+      capability: 'tip',
+    });
+    expect(document.querySelector('[data-viceme-tip="mounted"]')).toBeNull();
 
     const unsupported = {
       version: '0.3.0',
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       state: 'READY',
       ready: vi.fn(async () => undefined),

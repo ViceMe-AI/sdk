@@ -8,15 +8,11 @@
  *       artifact: sha256, sri (sha384), bytes, content-type, and immutable
  *       cache headers for exact versions.
  *
- *   node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/v1/ --expect-version 1.2.3
- *       Alias mode: the stable-major manifest must resolve to the exact
- *       expected version, and alias artifacts must be byte-identical.
- *
  *   node scripts/verify-cdn.mjs --local packages/sdk/dist
  *       Self-check a local build directory against its own manifest.
  *
  * Exit code 0 = every check passed; any mismatch fails loudly — the SDK never
- * guesses at runtime and promotion never continues on a bad read-back.
+ * guesses at runtime and publication never continues on a bad read-back.
  */
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
@@ -29,7 +25,6 @@ function parseArgs(argv) {
     if (arg === '--base') args.base = argv[++i];
     else if (arg === '--expect-version') args.expectVersion = argv[++i];
     else if (arg === '--local') args.local = argv[++i];
-    else if (arg === '--allow-mutable-cache') args.allowMutableCache = true;
     else args._.push(arg);
   }
   return args;
@@ -103,51 +98,20 @@ async function fetchOrThrow(url) {
   return { response, buffer };
 }
 
-async function verifyRemote(base, { expectVersion, allowMutableCache }) {
-  if (expectVersion !== undefined && !allowMutableCache) {
-    // Alias verification on the S3 topology resolves the POINTER, then
-    // fully verifies the pointed-to exact version (the alias path itself
-    // holds no manifest copy).
-    const aliasBase = new URL(base.endsWith('/') ? base : `${base}/`);
-    if (!/^\/viceme-sdk\/\d+\.\d+\.\d+[^/]*\//.test(aliasBase.pathname)) {
-      return verifyAliasByPointer(aliasBase, expectVersion);
-    }
+async function verifyRemote(base, { expectVersion }) {
+  const exactBase = new URL(base.endsWith('/') ? base : `${base}/`);
+  const pathMatch = /^\/viceme-sdk\/(\d+\.\d+\.\d+)\/$/.exec(exactBase.pathname);
+  if (!pathMatch) {
+    throw new Error('remote base must be an exact-version /viceme-sdk/<semver>/ URL');
   }
-  return verifyExactVersion(base, { expectVersion, allowMutableCache });
+  const pathVersion = pathMatch[1];
+  if (expectVersion !== undefined && expectVersion !== pathVersion) {
+    throw new Error(`exact-version path is ${pathVersion}, expected ${expectVersion}`);
+  }
+  return verifyExactVersion(exactBase.toString(), expectVersion ?? pathVersion);
 }
 
-/** Alias mode: pointer must equal the expected version; then verify it. */
-async function verifyAliasByPointer(aliasBase, expectVersion) {
-  const pointerUrl = new URL('/viceme-sdk/-/aliases/v1', aliasBase);
-  const { buffer: pointerBuffer } = await fetchOrThrow(pointerUrl);
-  const pointerVersion = pointerBuffer.toString('utf8').trim();
-  check(
-    pointerVersion === expectVersion,
-    `alias pointer is '${pointerVersion}', expected '${expectVersion}'`,
-  );
-  console.log(`alias pointer verified -> ${pointerVersion}`);
-
-  // The alias loader is the FIXED bootstrap: its public bytes must EXACTLY
-  // match the pointed-to version's canonical bootstrap build — a 200 with
-  // corrupted content must fail.
-  const aliasLoader = await fetchOrThrow(new URL('viceme.min.js', aliasBase));
-  const canonical = await fetchOrThrow(
-    new URL(`/viceme-sdk/${expectVersion}/bootstrap.min.js`, aliasBase),
-  );
-  check(
-    aliasLoader.buffer.equals(canonical.buffer),
-    `alias loader bytes differ from ${expectVersion}/bootstrap.min.js (${aliasLoader.buffer.length}B vs ${canonical.buffer.length}B)`,
-  );
-  console.log('alias loader byte-verified against canonical bootstrap');
-
-  const exactBase = new URL(`/viceme-sdk/${expectVersion}/`, aliasBase);
-  return verifyExactVersion(exactBase.toString(), {
-    expectVersion,
-    allowMutableCache: false,
-  });
-}
-
-async function verifyExactVersion(base, { expectVersion, allowMutableCache }) {
+async function verifyExactVersion(base, expectVersion) {
   const manifestUrl = new URL('manifest.json', base.endsWith('/') ? base : `${base}/`);
   const { response: manifestResponse, buffer: manifestBuffer } = await fetchOrThrow(manifestUrl);
   const manifest = JSON.parse(manifestBuffer.toString('utf8'));
@@ -157,20 +121,20 @@ async function verifyExactVersion(base, { expectVersion, allowMutableCache }) {
     manifestContentType.includes('application/json'),
     `manifest.json: content-type is "${manifestContentType}"`,
   );
-  if (expectVersion !== undefined) {
-    check(
-      manifest.version === expectVersion,
-      `alias manifest version ${manifest.version} != expected ${expectVersion}`,
-    );
-  }
-  const isExactVersion = /^\/viceme-sdk\/\d+\.\d+\.\d+[^/]*\//.test(manifestUrl.pathname);
-  if (isExactVersion && !allowMutableCache) {
-    const cacheControl = manifestResponse.headers.get('cache-control') ?? '';
-    check(
-      /immutable|max-age=\d{9,}/.test(cacheControl),
-      `manifest.json: exact version must be immutable, cache-control is "${cacheControl}"`,
-    );
-  }
+  check(
+    manifest.version === expectVersion,
+    `manifest version ${manifest.version} != exact path version ${expectVersion}`,
+  );
+  const cacheControl = manifestResponse.headers.get('cache-control') ?? '';
+  check(
+    /immutable|max-age=\d{9,}/.test(cacheControl),
+    `manifest.json: exact version must be immutable, cache-control is "${cacheControl}"`,
+  );
+  const manifestCors = manifestResponse.headers.get('access-control-allow-origin');
+  check(
+    manifestCors === '*',
+    `manifest.json: access-control-allow-origin is "${manifestCors ?? ''}", expected "*"`,
+  );
 
   for (const [file, info] of Object.entries(manifest.files)) {
     const url = new URL(file, manifestUrl);
@@ -186,13 +150,11 @@ async function verifyExactVersion(base, { expectVersion, allowMutableCache }) {
         `${file}: content-type is "${contentType}"`,
       );
     }
-    if (isExactVersion && !allowMutableCache) {
-      const cacheControl = response.headers.get('cache-control') ?? '';
-      check(
-        /immutable|max-age=\d{9,}/.test(cacheControl),
-        `${file}: exact version must be immutable, cache-control is "${cacheControl}"`,
-      );
-    }
+    const cacheControl = response.headers.get('cache-control') ?? '';
+    check(
+      /immutable|max-age=\d{9,}/.test(cacheControl),
+      `${file}: exact version must be immutable, cache-control is "${cacheControl}"`,
+    );
     const cors = response.headers.get('access-control-allow-origin');
     check(cors === '*', `${file}: access-control-allow-origin is "${cors ?? ''}", expected "*"`);
   }
