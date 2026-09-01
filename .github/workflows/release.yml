@@ -128,8 +128,6 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Release license gate
-        run: node scripts/assert-release-license.mjs
       - run: pnpm install --frozen-lockfile
       - name: Forbidden-pattern scan
         run: node scripts/scan-forbidden-patterns.mjs

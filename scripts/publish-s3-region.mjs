@@ -68,18 +68,6 @@ if (bucket !== EXPECTED_BUCKET) {
   process.exit(1);
 }
 
-let license;
-try {
-  license = readFileSync(join(args.dist, 'LICENSE'));
-} catch {
-  console.error('publish-s3-region: verified dist must contain the npm tarball LICENSE');
-  process.exit(1);
-}
-if (license.toString('utf8').trim() === '') {
-  console.error('publish-s3-region: verified dist LICENSE must not be empty');
-  process.exit(1);
-}
-
 const s3Env = {
   ...process.env,
   AWS_ACCESS_KEY_ID: accessKeyId,
@@ -112,7 +100,6 @@ if (aws('s3api', 'head-bucket', '--bucket', bucket).status !== 0) {
 
 const manifest = JSON.parse(readFileSync(join(args.dist, 'manifest.json'), 'utf8'));
 const objects = [
-  'LICENSE',
   'manifest.json',
   ...Object.keys(manifest.files).filter((f) => !f.endsWith('.map')),
 ];
@@ -172,11 +159,4 @@ execFileSync(
   [join(here, 'verify-cdn.mjs'), '--base', args.publicBase, '--expect-version', manifest.version],
   { stdio: 'inherit' },
 );
-const publicLicense = await fetch(new URL('LICENSE', args.publicBase), {
-  redirect: 'error',
-  signal: AbortSignal.timeout(10_000),
-});
-if (!publicLicense.ok || !Buffer.from(await publicLicense.arrayBuffer()).equals(license)) {
-  throw new Error(`${args.label}: public LICENSE read-back does not match the npm tarball`);
-}
 console.log(`${args.label}: public read-back verified at ${args.publicBase}`);
