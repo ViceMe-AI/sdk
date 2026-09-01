@@ -1,14 +1,11 @@
 # License (pending)
 
-The ViceMe SDK is intended to be released under **Apache-2.0** (final decision
-pending company confirmation).
+The final license for the ViceMe SDK is pending company confirmation.
 
-Until the final license text is confirmed and committed as `LICENSE`:
+During the current preview stage, this pending decision does not block npm,
+GitHub Release Assets, or CDN/S3 publication. Published artifacts may omit a
+`LICENSE` file until the final license is approved.
 
-- No npm package may be published from this repository.
-- No CDN release may be published from this repository.
-- Source in this repository must not be copied into other projects under a
-  different license.
-
-This file must be replaced by the final `LICENSE` before the first public
-release. See `SECURITY.md` and `CONTRIBUTING.md` for governance details.
+Once the license is confirmed, commit the final text as `LICENSE` and update
+the package and release documentation prospectively. Existing npm versions and
+exact-version CDN artifacts remain immutable and must not be retrofitted.
