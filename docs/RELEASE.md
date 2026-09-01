@@ -59,9 +59,10 @@ as its baseline. Loader API major `v1` remains compatible, while the public
 HTTP snapshot uses its own `1.1.0` contract version.
 
 During the current preview stage, npm, GitHub asset, and S3 publication do not
-require a repository or package license file. Licensing will be finalized
-separately for a future release. Existing npm versions and exact-version CDN
-objects remain immutable and must never be retrofitted.
+require a repository or package license file. `LICENSE-PENDING.md` records the
+deferred decision but is not an executable release gate. Licensing will be
+finalized separately for a future release. Existing npm versions and
+exact-version CDN objects remain immutable and must never be retrofitted.
 
 1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
    `release-pr.yml` workflow selects the higher versioned baseline from the

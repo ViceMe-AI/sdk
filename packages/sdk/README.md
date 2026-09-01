@@ -4,7 +4,9 @@ ViceMe browser SDK for Shop-hosted engagement and origin-bound Website Work acce
 
 The release PR atomically owns the package version, runtime manifest, and
 changelog update. During the current preview stage, publication does not
-require a repository license file; licensing will be finalized separately.
+require a repository license file. The root `LICENSE-PENDING.md` records the
+deferred decision without blocking release; licensing will be finalized
+separately.
 
 ## Install
 

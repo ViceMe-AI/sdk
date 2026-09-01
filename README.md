@@ -21,7 +21,8 @@ transaction data to the host page.
 
 The source tree intentionally keeps package and runtime versions under the
 release workflow's control. During the current preview stage, publication does
-not require a repository license file; licensing will be finalized separately.
+not require a repository license file. `LICENSE-PENDING.md` records the deferred
+decision without blocking release; licensing will be finalized separately.
 
 ## Static HTML
 

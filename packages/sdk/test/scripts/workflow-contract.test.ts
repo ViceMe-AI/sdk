@@ -124,6 +124,7 @@ describe('workflow contracts', () => {
       readFileSync(join(root, 'packages', 'sdk', 'package.json'), 'utf8'),
     ) as { scripts?: Record<string, string> };
     expect(packageDocument.scripts?.prepublishOnly).toBeUndefined();
+    expect(readFileSync(join(root, 'LICENSE-PENDING.md'), 'utf8')).toContain('does not block npm');
     expect(workflow('release.yml')).not.toContain('assert-release-license');
     expect(workflow('release-assets.yml')).not.toContain('assert-release-license');
     expect(readFileSync(join(root, 'scripts', 'publish-or-verify.mjs'), 'utf8')).not.toContain(
