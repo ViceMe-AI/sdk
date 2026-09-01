@@ -226,7 +226,7 @@ describe('website access capabilities', () => {
       return 'acted';
     };
     const client = createTestViceMe({
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       transport: capabilityTransport(false, true),
       presenter,
