@@ -1,15 +1,7 @@
 // @vitest-environment node
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  chmodSync,
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -80,9 +72,7 @@ const loaderBody = Buffer.from('(function(){/* data-viceme */})();\n');
 const danmakuBody = Buffer.from('export const mount = () => {};\n');
 const tipBody = Buffer.from('export const mountTip = () => {};\n');
 const tipTestingBody = Buffer.from('export const createTestTip = () => {};\n');
-const licenseBody = Buffer.from('Test-only approved license fixture.\n');
 mkdirSync(distDir, { recursive: true });
-writeFileSync(join(distDir, 'LICENSE'), licenseBody);
 writeFileSync(join(distDir, 'index.js'), indexBody);
 writeFileSync(join(distDir, 'viceme.min.js'), loaderBody);
 writeFileSync(join(distDir, 'danmaku.js'), danmakuBody);
@@ -168,29 +158,6 @@ const REGION_ENV = {
 };
 
 describe('publish-s3-region.mjs', () => {
-  it('refuses verified dist bytes without the npm tarball license', async () => {
-    const unlicensedDist = join(tmpRoot, 'unlicensed-dist');
-    cpSync(distDir, unlicensedDist, { recursive: true });
-    rmSync(join(unlicensedDist, 'LICENSE'));
-
-    await expect(
-      runS3(
-        'publish-s3-region.mjs',
-        [
-          '--dist',
-          unlicensedDist,
-          '--prefix',
-          '0.1.0/',
-          '--public-base',
-          `${publicServer!.url}/viceme-sdk/0.1.0/`,
-          '--label',
-          'CN',
-        ],
-        REGION_ENV,
-      ),
-    ).rejects.toMatchObject({ code: 1 });
-  });
-
   it('fails closed when any credential is missing', async () => {
     for (const key of ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY']) {
       const env = { ...REGION_ENV };
@@ -246,11 +213,11 @@ describe('publish-s3-region.mjs', () => {
     ];
     // Empty region: everything uploads and the public read-back passes.
     const first = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(first.stdout).toContain('CN: 7 uploaded, 0 already identical');
+    expect(first.stdout).toContain('CN: 6 uploaded, 0 already identical');
 
     // Re-run: byte-identical objects are skipped.
     const second = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(second.stdout).toContain('CN: 0 uploaded, 7 already identical');
+    expect(second.stdout).toContain('CN: 0 uploaded, 6 already identical');
 
     // Tamper one object: the immutable violation fails closed.
     writeFileSync(join(storeRoot, '0.1.0/index.js'), 'tampered\n');

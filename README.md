@@ -19,11 +19,10 @@ Headless Tip is a separate credentialless boundary: it does not expose the
 Website Access token, user session, order, payment action, or provider
 transaction data to the host page.
 
-The source tree intentionally keeps `package.json` and `SDK_VERSION` at the
-published `0.4.0` development baseline. The independent release PR will
-atomically generate `0.5.0`, its runtime manifest, and changelog. That release
-also remains fail closed while `LICENSE-PENDING.md` exists and no approved root
-`LICENSE` has been committed.
+The source tree intentionally keeps package and runtime versions under the
+release workflow's control. During the current preview stage, publication does
+not require a repository license file. `LICENSE-PENDING.md` records the deferred
+decision without blocking release; licensing will be finalized separately.
 
 ## Static HTML
 

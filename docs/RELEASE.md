@@ -53,25 +53,24 @@ unless they come from the same repository's `dev` or `hotfix/*`.
 
 The release flow follows the same two-workflow state machine as the CLI:
 
-`0.4.0` is the immutable published baseline for this development cycle. It
-contains Website Access v2, the generic testing adapter, mounted Danmaku, and
-mounted Tip, but not Headless `createTip` or `tip/testing`. Feature branches
-intentionally keep package and runtime versions at `0.4.0`; they must never
-republish or retrofit that artifact.
+`0.4.0` is the latest immutable published baseline. It contains Website Access
+v2, the generic testing adapter, mounted Danmaku, and mounted Tip, but not
+Headless `createTip` or `tip/testing`. Feature branches do not edit package or
+runtime versions; release preparation owns those files. Published artifacts
+must never be republished or retrofitted.
 
-The `0.5.0` promotion metadata reached `main`, but publication stopped at the
-license gate before the immutable tag was created. Treat `0.5.0` as reserved
-and unpublished; never create its tag retroactively. Once the final license is
-approved, the next release preparation uses protected `main` at `0.5.0` as its
-baseline and advances the current additive changes to `0.6.0`. Loader API major
-`v1` remains compatible, while the public HTTP snapshot uses its own `1.1.0`
-contract version.
+The `0.5.0` and `0.6.0` promotion metadata reached `main`, but publication
+stopped at the former license gate before either immutable tag was created.
+Treat both versions as reserved and unpublished; never create their tags
+retroactively. The next release preparation uses protected `main` at `0.6.0`
+as its baseline. Loader API major `v1` remains compatible, while the public
+HTTP snapshot uses its own `1.1.0` contract version.
 
-The current tree still contains `LICENSE-PENDING.md` and no approved root
-`LICENSE`. `assert-release-license.mjs`, package prepublish, npm artifact
-recovery, and S3 publication therefore fail closed for `0.5.0`. The historical
-`0.4.0` artifact predates that gate and remains immutable; do not add or replace
-files under the same npm or CN/GLOBAL exact version.
+During the current preview stage, npm, GitHub asset, and S3 publication do not
+require a repository or package license file. `LICENSE-PENDING.md` records the
+deferred decision but is not an executable release gate. Licensing will be
+finalized separately for a future release. Existing npm versions and
+exact-version CDN objects remain immutable and must never be retrofitted.
 
 1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
    `release-pr.yml` workflow selects the higher versioned baseline from the

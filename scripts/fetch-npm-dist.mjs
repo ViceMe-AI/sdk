@@ -12,7 +12,7 @@
  * Verifies the extracted dist against its own manifest before exiting.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { cpSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -52,22 +52,10 @@ try {
   mkdirSync(extractDir, { recursive: true });
   execFileSync('tar', ['-xzf', join(tmp, tarball), '-C', extractDir], { stdio: 'inherit' });
 
-  const packageLicense = join(extractDir, 'package', 'LICENSE');
-  let licenseBytes;
-  try {
-    licenseBytes = readFileSync(packageLicense);
-  } catch {
-    throw new Error('published npm tarball is missing LICENSE');
-  }
-  if (licenseBytes.toString('utf8').trim() === '') {
-    throw new Error('published npm tarball contains an empty LICENSE');
-  }
-
   const dist = join(extractDir, 'package', 'dist');
   mkdirSync(args.out, { recursive: true });
   rmSync(args.out, { recursive: true, force: true });
   cpSync(dist, args.out, { recursive: true });
-  cpSync(packageLicense, join(args.out, 'LICENSE'));
 
   execFileSync(process.execPath, [join(here, 'verify-cdn.mjs'), '--local', args.out], {
     stdio: 'inherit',

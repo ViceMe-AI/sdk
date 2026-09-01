@@ -116,21 +116,25 @@ describe('workflow contracts', () => {
     expect(publication).toContain('PR_TITLE: ${{ steps.context.outputs.release_pr_title }}');
     expect(publication).not.toContain('skip: ${{ steps.context.outputs.skip }}');
     expect(publication).not.toContain('release:gate');
-    expect(jobBlock(publication, 'quality')).toContain('node scripts/assert-release-license.mjs');
     expect(jobBlock(publication, 'npm-publish')).toContain('node scripts/publish-or-verify.mjs');
-    expect(workflow('release-assets.yml')).toContain('node scripts/assert-release-license.mjs');
   });
 
-  it('binds npm and downstream publication to a shipped LICENSE', () => {
+  it('does not block preview publication on repository license files', () => {
     const packageDocument = JSON.parse(
       readFileSync(join(root, 'packages', 'sdk', 'package.json'), 'utf8'),
     ) as { scripts?: Record<string, string> };
-    expect(packageDocument.scripts?.prepublishOnly).toContain('assert-package-license.mjs');
-    expect(readFileSync(join(root, 'scripts', 'fetch-npm-dist.mjs'), 'utf8')).toContain(
-      'published npm tarball is missing LICENSE',
+    expect(packageDocument.scripts?.prepublishOnly).toBeUndefined();
+    expect(readFileSync(join(root, 'LICENSE-PENDING.md'), 'utf8')).toContain('does not block npm');
+    expect(workflow('release.yml')).not.toContain('assert-release-license');
+    expect(workflow('release-assets.yml')).not.toContain('assert-release-license');
+    expect(readFileSync(join(root, 'scripts', 'publish-or-verify.mjs'), 'utf8')).not.toContain(
+      'assert-release-license',
     );
-    expect(readFileSync(join(root, 'scripts', 'publish-s3-region.mjs'), 'utf8')).toContain(
-      "new URL('LICENSE', args.publicBase)",
+    expect(readFileSync(join(root, 'scripts', 'fetch-npm-dist.mjs'), 'utf8')).not.toContain(
+      'LICENSE',
+    );
+    expect(readFileSync(join(root, 'scripts', 'publish-s3-region.mjs'), 'utf8')).not.toContain(
+      'LICENSE',
     );
   });
 
