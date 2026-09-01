@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 1.1.0, sha256 05292778fd6242db…)
+ * (contractVersion 1.1.0, sha256 1d19338a632407d7…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -130,6 +130,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Public opaque test or live Work key. */
         WorkKey: string;
         CreateWorkSessionRequest: {
             workKey: components["schemas"]["WorkKey"];
@@ -199,8 +200,6 @@ export interface components {
             checkoutUrl: string;
             alreadyOwned: boolean;
         };
-        /** @description Public opaque test or live key issued for Tip. */
-        TipWorkKey: string;
         /** @enum {string} */
         TipEnvironment: "SANDBOX" | "PRODUCTION";
         /** @enum {string} */
@@ -222,7 +221,7 @@ export interface components {
         };
         TipConfig: {
             work: components["schemas"]["TipWork"];
-            workKey: components["schemas"]["TipWorkKey"];
+            workKey: components["schemas"]["WorkKey"];
             environment: components["schemas"]["TipEnvironment"];
             currency: components["schemas"]["TipCurrency"];
             amount: components["schemas"]["TipAmount"];
@@ -501,7 +500,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                workKey: components["schemas"]["TipWorkKey"];
+                workKey: components["schemas"]["WorkKey"];
             };
             cookie?: never;
         };

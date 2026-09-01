@@ -105,7 +105,7 @@ describe('tip mount', () => {
     );
 
     expect(handle.capability).toBe('tip');
-    expect(frame.src).toBe('https://viceme.cn/widget/tip/wrk_test_demo?protocol=2&appearance=dark');
+    expect(frame.src).toBe('https://viceme.cn/widget/tip/wrk_test_demo?appearance=dark');
     expect(frame.referrerPolicy).toBe('strict-origin');
     expect(frame.getAttribute('sandbox')).toBe(
       'allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts',
@@ -320,16 +320,5 @@ describe('tip mount', () => {
     await expect(
       mount(unsupported, { target: document.body, theme: 'auto' }),
     ).rejects.toMatchObject({ code: 'CAPABILITY_DISABLED', capability: 'tip' });
-  });
-
-  it('rejects a legacy Work key only at the Tip capability boundary', async () => {
-    const legacyClient = createViceMe({ workKey: 'wrk_public_demo', region: 'cn' });
-
-    await expect(
-      mountTip(legacyClient, { target: document.body, theme: 'light' }),
-    ).rejects.toMatchObject({ code: 'CAPABILITY_DISABLED', capability: 'tip' });
-    expect(document.querySelector('[data-viceme-tip="mounted"]')).toBeNull();
-
-    legacyClient.destroy();
   });
 });

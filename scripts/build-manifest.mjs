@@ -85,7 +85,6 @@ for (const file of files.sort()) {
 for (const required of [
   'index.js',
   'viceme.min.js',
-  'bootstrap.min.js',
   'danmaku.js',
   'testing.js',
   'tip.js',

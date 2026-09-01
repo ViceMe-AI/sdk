@@ -116,7 +116,7 @@ export interface CreateTestViceMeOptions {
  */
 export function createTestViceMe(options: CreateTestViceMeOptions): ViceMeClient {
   if (!isValidWorkKey(options.workKey)) {
-    throw configInvalid('Test client requires a valid workKey ("wrk_…").');
+    throw configInvalid('Test client requires a "wrk_test_" or "wrk_live_" workKey.');
   }
   if (!isValidRegion(options.region)) {
     throw configInvalid('Test client requires region "cn" or "global".');
@@ -138,7 +138,7 @@ export function createTestViceMe(options: CreateTestViceMeOptions): ViceMeClient
 
 /** Standard fixture work used across repo tests and examples. */
 export const FIXTURE_WORK: MemoryTransportWorkFixture = {
-  key: 'wrk_test',
+  key: 'wrk_test_demo',
   capabilities: ['fixture'],
   token: 'test-session-token',
 };

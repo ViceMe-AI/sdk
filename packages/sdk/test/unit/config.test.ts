@@ -5,7 +5,7 @@ import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('validatePublicConfig', () => {
   it('accepts workKey, region, and an optional abort signal', () => {
-    for (const workKey of ['wrk_test_demo', 'wrk_live_demo', 'wrk_public_demo']) {
+    for (const workKey of ['wrk_test_demo', 'wrk_live_demo']) {
       expect(validatePublicConfig({ workKey, region: 'cn' })).toEqual({
         workKey,
         region: 'cn',
@@ -13,8 +13,8 @@ describe('validatePublicConfig', () => {
       });
     }
     const signal = new AbortController().signal;
-    expect(validatePublicConfig({ workKey: 'wrk_public_xxx', region: 'cn', signal })).toEqual({
-      workKey: 'wrk_public_xxx',
+    expect(validatePublicConfig({ workKey: 'wrk_test_signal', region: 'cn', signal })).toEqual({
+      workKey: 'wrk_test_signal',
       region: 'cn',
       signal,
     });
@@ -37,6 +37,7 @@ describe('validatePublicConfig', () => {
   it('rejects malformed work keys', () => {
     expect(() => validatePublicConfig({ workKey: 'WRK_test', region: 'cn' })).toThrow();
     expect(() => validatePublicConfig({ workKey: 'wrk_', region: 'cn' })).toThrow();
+    expect(() => validatePublicConfig({ workKey: 'invalid-work-key', region: 'cn' })).toThrow();
     expect(() => validatePublicConfig({ region: 'cn' })).toThrow();
   });
 

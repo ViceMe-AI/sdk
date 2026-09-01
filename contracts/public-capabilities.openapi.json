@@ -195,7 +195,7 @@
             "name": "workKey",
             "in": "path",
             "required": true,
-            "schema": { "$ref": "#/components/schemas/TipWorkKey" }
+            "schema": { "$ref": "#/components/schemas/WorkKey" }
           }
         ],
         "responses": {
@@ -219,7 +219,11 @@
       "workSession": { "type": "http", "scheme": "bearer" }
     },
     "schemas": {
-      "WorkKey": { "type": "string", "pattern": "^wrk_[A-Za-z0-9_-]{4,124}$" },
+      "WorkKey": {
+        "type": "string",
+        "pattern": "^wrk_(?:test|live)_[A-Za-z0-9_-]{4,119}$",
+        "description": "Public opaque test or live Work key."
+      },
       "CreateWorkSessionRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -370,11 +374,6 @@
           "alreadyOwned": { "type": "boolean" }
         }
       },
-      "TipWorkKey": {
-        "type": "string",
-        "pattern": "^wrk_(?:test|live)_[A-Za-z0-9_-]{4,119}$",
-        "description": "Public opaque test or live key issued for Tip."
-      },
       "TipEnvironment": {
         "type": "string",
         "enum": ["SANDBOX", "PRODUCTION"]
@@ -412,7 +411,7 @@
         "additionalProperties": false,
         "properties": {
           "work": { "$ref": "#/components/schemas/TipWork" },
-          "workKey": { "$ref": "#/components/schemas/TipWorkKey" },
+          "workKey": { "$ref": "#/components/schemas/WorkKey" },
           "environment": { "$ref": "#/components/schemas/TipEnvironment" },
           "currency": { "$ref": "#/components/schemas/TipCurrency" },
           "amount": { "$ref": "#/components/schemas/TipAmount" },

@@ -1,6 +1,6 @@
 /**
- * Release policy primitives shared by publish-or-verify and the alias
- * pointer writer. Kept dependency-free and unit-testable.
+ * Release policy primitives for publish-or-verify. Kept dependency-free and
+ * unit-testable.
  */
 
 /**
@@ -26,49 +26,17 @@ function parse(version) {
 }
 
 /**
- * Decide whether a mutable npm dist-tag / CDN pointer may move from
- * `current` to `target` under the given mode.
- *
- *   promote  : only monotonic forward moves (stale reruns of older releases
- *              must never pull the tag backward);
- *   rollback : only an explicitly authorized backward move — the caller
- *              must declare the exact `expectedCurrent` it expects to move
- *              away from, and the live value must match (stale-job guard).
+ * Decide whether a mutable npm dist-tag may move from `current` to `target`.
+ * Only monotonic forward moves are allowed, so stale reruns of older releases
+ * can never pull the tag backward.
  *
  * Returns { allowed, converged, reason }. `converged: true` means the
  * live value already equals the target: the caller must VERIFY the
  * existing objects and continue (idempotent recovery), never fail.
  */
-export function decideMutableTagMove({ mode, current, target, expectedCurrent }) {
-  if (mode === 'rollback') {
-    if (expectedCurrent === undefined || expectedCurrent === '') {
-      return {
-        allowed: false,
-        reason: 'rollback requires expectedCurrent (the version being rolled back FROM)',
-      };
-    }
-    if (current !== expectedCurrent) {
-      return {
-        allowed: false,
-        converged: false,
-        reason: `rollback expected current '${expectedCurrent}' but live value is '${current ?? 'unset'}' (stale or concurrent move?)`,
-      };
-    }
-    if (compareSemver(target, current) >= 0) {
-      return {
-        allowed: false,
-        reason: `rollback target ${target} must be older than current ${current}`,
-      };
-    }
-    return {
-      allowed: true,
-      converged: false,
-      reason: `authorized rollback ${current} -> ${target}`,
-    };
-  }
-  // promote
+export function decideMutableTagMove({ current, target }) {
   if (current === undefined || current === null || current === '') {
-    return { allowed: true, converged: false, reason: `pointer unset; promoting to ${target}` };
+    return { allowed: true, converged: false, reason: `tag unset; moving to ${target}` };
   }
   const ordering = compareSemver(target, current);
   if (ordering > 0) {
@@ -78,12 +46,12 @@ export function decideMutableTagMove({ mode, current, target, expectedCurrent })
     return {
       allowed: false,
       converged: true,
-      reason: `pointer already at ${target} (region converged)`,
+      reason: `tag already at ${target}`,
     };
   }
   return {
     allowed: false,
     converged: false,
-    reason: `refusing to move pointer backward ${current} -> ${target}; use explicit rollback mode`,
+    reason: `refusing to move tag backward ${current} -> ${target}`,
   };
 }

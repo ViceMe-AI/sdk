@@ -26,10 +26,10 @@ describe('parseLoaderAttributes', () => {
     });
   });
 
-  it('keeps legacy public Work keys valid for Danmaku', () => {
-    expect(
-      parseLoaderAttributes(script({ ...VALID, 'data-viceme-work': 'wrk_public_demo' })),
-    ).toMatchObject({ workKey: 'wrk_public_demo', features: ['danmaku'] });
+  it('rejects non-canonical Work keys for Danmaku', () => {
+    expect(() =>
+      parseLoaderAttributes(script({ ...VALID, 'data-viceme-work': 'invalid-work-key' })),
+    ).toThrow();
   });
 
   it.each([

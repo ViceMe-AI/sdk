@@ -24,7 +24,7 @@ function capabilityTransport(
         return {
           status: 201,
           body: {
-            workKey: 'wrk_test',
+            workKey: 'wrk_test_demo',
             capabilities: ['access', 'follow', 'checkout'],
             token: 'anonymous-work-token',
             expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -110,7 +110,7 @@ function capabilityTransport(
 describe('website access capabilities', () => {
   it('reads server-authoritative policy and price presentation', async () => {
     const client = createTestViceMe({
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       transport: capabilityTransport(),
     });
@@ -127,7 +127,7 @@ describe('website access capabilities', () => {
 
   it('keeps the anonymous Work token separate from user authorization', async () => {
     const transport = capabilityTransport();
-    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport });
+    const client = createTestViceMe({ workKey: 'wrk_test_demo', region: 'cn', transport });
     await client.access.check('followed');
     expect(transport.requests.at(-1)).toMatchObject({ authorization: 'anonymous-work-token' });
     expect(transport.requests.at(-1)?.userAuthorization).toBeUndefined();
@@ -146,7 +146,7 @@ describe('website access capabilities', () => {
             origin: 'https://viceme.cn',
             data: {
               type: 'viceme:auth:complete',
-              workKey: 'wrk_test',
+              workKey: 'wrk_test_demo',
               channel: url.searchParams.get('channel'),
               userToken: 'work-bound-user-token',
               user: {
@@ -162,7 +162,12 @@ describe('website access capabilities', () => {
       return 'acted';
     };
     const transport = capabilityTransport();
-    const client = createTestViceMe({ workKey: 'wrk_test', region: 'cn', transport, presenter });
+    const client = createTestViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      transport,
+      presenter,
+    });
     await expect(client.access.require('followed')).resolves.toMatchObject({
       allowed: true,
       reason: 'FOLLOWING',
@@ -176,7 +181,7 @@ describe('website access capabilities', () => {
       return 'acted';
     };
     const client = createTestViceMe({
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       transport: capabilityTransport(true),
       presenter,
@@ -199,7 +204,7 @@ describe('website access capabilities', () => {
       return 'acted';
     };
     const client = createTestViceMe({
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       transport: capabilityTransport(false),
       presenter,
@@ -246,7 +251,7 @@ describe('website access capabilities', () => {
           source: frame as unknown as WindowProxy,
           data: {
             type: 'viceme:auth:ready',
-            workKey: 'wrk_test',
+            workKey: 'wrk_test_demo',
             channel: url.searchParams.get('channel'),
           },
         }),
@@ -254,7 +259,7 @@ describe('website access capabilities', () => {
       expect(frame.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'viceme:auth:init',
-          workKey: 'wrk_test',
+          workKey: 'wrk_test_demo',
           workSessionToken: 'anonymous-work-token',
         }),
         'https://viceme.cn',
@@ -264,7 +269,7 @@ describe('website access capabilities', () => {
           origin: 'https://viceme.cn',
           data: {
             type: 'viceme:auth:complete',
-            workKey: 'wrk_test',
+            workKey: 'wrk_test_demo',
             channel: url.searchParams.get('channel'),
             userToken: 'work-bound-user-token',
             user: {
@@ -279,7 +284,7 @@ describe('website access capabilities', () => {
       return 'acted';
     };
     const client = createTestViceMe({
-      workKey: 'wrk_test',
+      workKey: 'wrk_test_demo',
       region: 'cn',
       transport: capabilityTransport(),
       presenter,

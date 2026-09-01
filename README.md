@@ -27,13 +27,14 @@ also remains fail closed while `LICENSE-PENDING.md` exists and no approved root
 
 ## Static HTML
 
-Use the complete snippet returned by ViceMe for the selected Shop region:
+Use the complete snippet returned by ViceMe for the selected region and exact
+SDK release:
 
 ```html
 <div id="viceme-engagement"></div>
 <script
   defer
-  src="https://viceme.cn/viceme-sdk/v1/viceme.min.js"
+  src="https://s3.viceme.cn/viceme-sdk/0.5.0/viceme.min.js"
   data-viceme-work="wrk_live_demo"
   data-viceme-region="cn"
   data-viceme-features="danmaku,tip"
@@ -52,23 +53,21 @@ The loader reads its same-release `manifest.json`, loads only the requested
 each capability independently. Repeating the same work, feature, and target
 reuses the existing client and mount.
 
-`https://viceme.cn/viceme-sdk/v1/*` is the Shop asset proxy, not the mutable S3
-alias directory. Shop configures that proxy to one exact release and directly
-serves the complete loader, manifest, capability entries, and hashed chunks.
-Direct storage has a separate topology:
+Static CDN entry points always include the exact immutable SDK version:
 
 ```text
-https://s3.viceme.cn/viceme-sdk/v1/viceme.min.js       fixed bootstrap
-https://s3.viceme.cn/viceme-sdk/-/aliases/v1           version pointer
-https://s3.viceme.cn/viceme-sdk/<version>/...           exact ESM release
+https://s3.viceme.cn/viceme-sdk/<version>/...   (region cn)
+https://s3.viceme.ai/viceme-sdk/<version>/...   (region global)
 ```
 
+The `0.5.0` URL above is the current source target and remains unavailable until
+that exact release is published and verified. GLOBAL snippets use the `.ai` S3
+host and `data-viceme-region="global"`.
+
 For a nonce-based CSP, preserve the host's existing directives and allow only
-the exact regional Shop origin used by the snippet in `script-src`,
-`connect-src`, and `frame-src`. Keep `object-src 'none'`; do not add `*` or a
-ViceMe subdomain wildcard. A page using the direct S3 alias instead allows the
-exact S3 origin in `script-src` and `connect-src`, while `frame-src` remains the
-Shop origin.
+the exact regional S3 origin in `script-src` and `connect-src`, and the exact
+regional Shop origin in `frame-src`. Keep `object-src 'none'`; do not add `*` or
+a ViceMe subdomain wildcard.
 
 ## npm / Bundlers
 
@@ -106,8 +105,7 @@ pages entering the back/forward cache.
 `createViceMe({ workKey, region })` validates configuration and initializes a
 local lifecycle only. It performs no network request. Use the selected public
 pair member: `keys.test` has a `wrk_test_...` value and `keys.live` has a
-`wrk_live_...` value. Legacy `wrk_...` keys remain valid for Danmaku
-compatibility, but the Tip capability rejects them locally.
+`wrk_live_...` value. Other Work key shapes are rejected locally.
 
 ## Headless Tip
 
@@ -216,7 +214,7 @@ publish flow first. Host code only consumes the returned `workKey` and feature
 keys:
 
 ```ts
-const client = createViceMe({ workKey: 'wrk_public_xxx', region: 'cn' });
+const client = createViceMe({ workKey: 'wrk_live_example', region: 'cn' });
 const features = await client.access.getFeatures();
 const memberFeature = features.find((feature) => feature.featureKey === 'member-content');
 
