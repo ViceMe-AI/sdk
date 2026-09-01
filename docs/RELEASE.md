@@ -51,12 +51,13 @@ mounted Tip, but not Headless `createTip` or `tip/testing`. Feature branches
 intentionally keep package and runtime versions at `0.4.0`; they must never
 republish or retrofit that artifact.
 
-Headless Tip is an additive feature, so the next independent release
-preparation PR must atomically advance package version, runtime version, and
-changelog to `0.5.0` before the `dev -> main` promotion. It must preserve the
-existing `0.4.0` changelog and tag provenance. Loader API major `v1` remains
-compatible, while the public HTTP snapshot uses its own `1.1.0` contract
-version.
+The `0.5.0` promotion metadata reached `main`, but publication stopped at the
+license gate before the immutable tag was created. Treat `0.5.0` as reserved
+and unpublished; never create its tag retroactively. Once the final license is
+approved, the next release preparation uses protected `main` at `0.5.0` as its
+baseline and advances the current additive changes to `0.6.0`. Loader API major
+`v1` remains compatible, while the public HTTP snapshot uses its own `1.1.0`
+contract version.
 
 The current tree still contains `LICENSE-PENDING.md` and no approved root
 `LICENSE`. `assert-release-license.mjs`, package prepublish, npm artifact
@@ -65,10 +66,12 @@ recovery, and S3 publication therefore fail closed for `0.5.0`. The historical
 files under the same npm or CN/GLOBAL exact version.
 
 1. **Release preparation PR**: open the reviewed `dev -> main` PR. The
-   `release-pr.yml` workflow uses the same stable-version algorithm as the CLI:
-   Conventional Commits since the latest reachable release tag select major,
-   minor, or patch; the workflow then generates the package version, runtime
-   version, and changelog. It runs the full SDK quality gate and uses the
+   `release-pr.yml` workflow selects the higher versioned baseline from the
+   latest stable tag and protected `main`. This preserves immutable tag
+   provenance while allowing a failed publication to reserve a version on
+   `main`. Conventional Commits after that baseline select major, minor, or
+   patch; the workflow then generates the package version, runtime version, and
+   changelog. It runs the full SDK quality gate and uses the
    Release App (Contents write only) to commit those generated files back to
    protected `dev`. It then
    uses `GITHUB_TOKEN` to update the same PR title and body. No additional
