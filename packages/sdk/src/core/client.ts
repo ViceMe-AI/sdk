@@ -89,6 +89,7 @@ export class ViceMeClientImpl implements ViceMeClient {
       session: this.#session,
       workKey: deps.config.workKey,
       widgetOrigin: BUILD_WIDGET_ORIGINS[deps.config.region],
+      now: deps.now ?? (() => Date.now()),
       presenter: deps.presenter,
       ready: () => this.#readyAccess(),
     });

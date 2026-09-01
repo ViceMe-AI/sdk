@@ -60,6 +60,7 @@ export interface CheckoutOptions {
 export interface CheckoutResult {
   checkoutUrl: string;
   alreadyOwned: boolean;
+  expiresAt: string | null;
 }
 
 export interface AuthCapability {
@@ -90,6 +91,7 @@ interface CapabilityDeps {
   session: SessionManager;
   workKey: string;
   widgetOrigin: string;
+  now: () => number;
   presenter?: AccessPresenter;
   ready: () => Promise<void>;
 }
@@ -434,22 +436,39 @@ export function createCapabilities(deps: CapabilityDeps): {
         })
       ).body,
     );
-    if (typeof response.checkoutUrl !== 'string' || typeof response.alreadyOwned !== 'boolean') {
+    if (
+      typeof response.checkoutUrl !== 'string' ||
+      typeof response.alreadyOwned !== 'boolean' ||
+      !(
+        response.expiresAt === null ||
+        (typeof response.expiresAt === 'string' && !Number.isNaN(Date.parse(response.expiresAt)))
+      ) ||
+      response.alreadyOwned !== (response.expiresAt === null)
+    ) {
       throw malformedResponse();
     }
+    let checkoutUrl: URL;
     try {
-      new URL(response.checkoutUrl as string);
+      checkoutUrl = new URL(response.checkoutUrl);
     } catch {
+      throw malformedResponse();
+    }
+    if (
+      !response.alreadyOwned &&
+      (checkoutUrl.protocol !== 'https:' || checkoutUrl.origin !== deps.widgetOrigin)
+    ) {
       throw malformedResponse();
     }
     return {
       checkoutUrl: response.checkoutUrl,
       alreadyOwned: response.alreadyOwned,
+      expiresAt: response.expiresAt,
     };
   };
 
   const openCheckout = (result: CheckoutResult, featureKey: string): AccessActionResult => {
     if (result.alreadyOwned) return { type: 'completed' };
+    const expiresAt = Date.parse(result.expiresAt!);
     if (typeof window === 'undefined') {
       throw new ViceMeError({
         code: 'CONFIG_INVALID',
@@ -459,13 +478,40 @@ export function createCapabilities(deps: CapabilityDeps): {
     }
 
     let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    let expiryTimer: ReturnType<typeof setTimeout> | undefined;
     let settle!: () => void;
     let fail!: (error: unknown) => void;
     const completion = new Promise<void>((resolve, reject) => {
       settle = resolve;
       fail = reject;
     });
+    const cleanup = () => {
+      if (pollTimer) clearTimeout(pollTimer);
+      if (expiryTimer) clearTimeout(expiryTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+    const expire = () => {
+      if (!active) return;
+      active = false;
+      cleanup();
+      fail(
+        new ViceMeError({
+          code: 'SESSION_EXPIRED',
+          message: 'Hosted checkout session expired.',
+          retryable: true,
+        }),
+      );
+    };
+    const schedule = () => {
+      if (!active || document.visibilityState === 'hidden') return;
+      const remaining = expiresAt - deps.now();
+      if (remaining <= 0) {
+        expire();
+        return;
+      }
+      pollTimer = setTimeout(() => void poll(), Math.min(1_500, remaining));
+    };
     const poll = async () => {
       if (!active) return;
       try {
@@ -473,16 +519,33 @@ export function createCapabilities(deps: CapabilityDeps): {
         if (!decision) throw malformedResponse();
         if (decision.allowed) {
           active = false;
+          cleanup();
           settle();
           return;
         }
-        timer = setTimeout(() => void poll(), 1_500);
+        schedule();
       } catch (error) {
         active = false;
+        cleanup();
         fail(error);
       }
     };
-    timer = setTimeout(() => void poll(), 1_500);
+    function handleVisibilityChange() {
+      if (!active) return;
+      if (document.visibilityState === 'hidden') {
+        if (pollTimer) clearTimeout(pollTimer);
+        pollTimer = undefined;
+        return;
+      }
+      schedule();
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const remaining = expiresAt - deps.now();
+    if (remaining <= 0) expire();
+    else {
+      expiryTimer = setTimeout(expire, remaining);
+      schedule();
+    }
     return {
       type: 'frame',
       url: result.checkoutUrl,
@@ -490,7 +553,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       cancel() {
         if (!active) return;
         active = false;
-        if (timer) clearTimeout(timer);
+        cleanup();
         settle();
       },
     };

@@ -12,6 +12,8 @@ import type {
 function capabilityTransport(
   alreadyOwned = true,
   unlocksAfterCheckout = false,
+  checkoutUrl = 'https://viceme.cn/sdk/checkout/session-id',
+  checkoutTtlMs = 60_000,
 ): Transport & { requests: TransportRequest[] } {
   const requests: TransportRequest[] = [];
   let following = false;
@@ -97,8 +99,9 @@ function capabilityTransport(
         return {
           status: 200,
           body: {
-            checkoutUrl: 'https://viceme.cn/hosted-checkout/session-id',
+            checkoutUrl,
             alreadyOwned,
+            expiresAt: alreadyOwned ? null : new Date(Date.now() + checkoutTtlMs).toISOString(),
           },
         };
       }
@@ -187,8 +190,9 @@ describe('website access capabilities', () => {
       presenter,
     });
     await expect(client.checkout.open({ featureKey: 'paid' })).resolves.toEqual({
-      checkoutUrl: 'https://viceme.cn/hosted-checkout/session-id',
+      checkoutUrl: 'https://viceme.cn/sdk/checkout/session-id',
       alreadyOwned: true,
+      expiresAt: null,
     });
   });
 
@@ -198,7 +202,7 @@ describe('website access capabilities', () => {
       const action = await interaction.perform();
       expect(action.type).toBe('frame');
       if (action.type !== 'frame') throw new Error('expected checkout frame');
-      expect(action.url).toBe('https://viceme.cn/hosted-checkout/session-id');
+      expect(action.url).toBe('https://viceme.cn/sdk/checkout/session-id');
       action.cancel();
       await action.completion;
       return 'acted';
@@ -236,6 +240,79 @@ describe('website access capabilities', () => {
       alreadyOwned: false,
     });
     vi.useRealTimers();
+  });
+
+  it('rejects a checkout URL outside the configured platform origin', async () => {
+    const client = createTestViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      transport: capabilityTransport(false, false, 'https://evil.example/sdk/checkout/session-id'),
+    });
+
+    await expect(client.checkout.open({ featureKey: 'paid' })).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+    });
+  });
+
+  it('stops polling when the checkout session expires', async () => {
+    vi.useFakeTimers();
+    try {
+      const presenter: AccessPresenter = async (interaction) => {
+        const action = await interaction.perform();
+        if (action.type !== 'frame') throw new Error('expected checkout frame');
+        const completion = expect(action.completion).rejects.toMatchObject({
+          code: 'SESSION_EXPIRED',
+        });
+        await vi.advanceTimersByTimeAsync(1_000);
+        await completion;
+        return 'acted';
+      };
+      const tested = createTestViceMe({
+        workKey: 'wrk_test_demo',
+        region: 'cn',
+        transport: capabilityTransport(false, false, undefined, 1_000),
+        presenter,
+      });
+
+      await tested.checkout.open({ featureKey: 'paid' });
+      tested.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('pauses checkout polling while the host document is hidden', async () => {
+    vi.useFakeTimers();
+    let visibility: DocumentVisibilityState = 'hidden';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
+    const transport = capabilityTransport(false, true);
+    try {
+      const presenter: AccessPresenter = async (interaction) => {
+        const action = await interaction.perform();
+        if (action.type !== 'frame') throw new Error('expected checkout frame');
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(
+          transport.requests.filter((request) => request.path.endsWith('/access/check')),
+        ).toHaveLength(0);
+        visibility = 'visible';
+        document.dispatchEvent(new Event('visibilitychange'));
+        await vi.advanceTimersByTimeAsync(1_500);
+        await action.completion;
+        return 'acted';
+      };
+      const client = createTestViceMe({
+        workKey: 'wrk_test_demo',
+        region: 'cn',
+        transport,
+        presenter,
+      });
+
+      await client.checkout.open({ featureKey: 'paid' });
+      client.destroy();
+    } finally {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
   });
 
   it('accepts the platform-origin login completion for this Work and channel', async () => {

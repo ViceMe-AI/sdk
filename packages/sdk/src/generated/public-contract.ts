@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 1.1.0, sha256 1d19338a632407d7…)
+ * (contractVersion 1.1.0, sha256 f0401296acb1aa2e…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -199,6 +199,8 @@ export interface components {
             /** Format: uri */
             checkoutUrl: string;
             alreadyOwned: boolean;
+            /** Format: date-time */
+            expiresAt: string | null;
         };
         /** @enum {string} */
         TipEnvironment: "SANDBOX" | "PRODUCTION";
