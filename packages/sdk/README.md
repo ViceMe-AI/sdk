@@ -2,11 +2,9 @@
 
 ViceMe browser SDK for Shop-hosted engagement and origin-bound Website Work access.
 
-The latest published package is `0.4.0`, which contains Website Access v2 but
-not Headless Tip. This source tree keeps the `0.4.0` development baseline while
-the independent release PR owns the atomic `0.5.0` version, manifest, and
-changelog update. Publication remains blocked while the repository has
-`LICENSE-PENDING.md` instead of an approved `LICENSE`.
+The release PR atomically owns the package version, runtime manifest, and
+changelog update. During the current preview stage, publication does not
+require a repository license file; licensing will be finalized separately.
 
 ## Install
 

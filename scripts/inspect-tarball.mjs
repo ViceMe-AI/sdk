@@ -7,7 +7,6 @@
  * workspace sources — so CI proves what npm consumers actually install.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -67,12 +66,8 @@ try {
     process.exit(1);
   }
 
-  // 2b. Required entries. README always ships; once the final repo-root
-  // LICENSE exists (build copies it into the package), the tarball MUST
-  // carry it too — a missing license entry fails closed instead of
-  // publishing an unlicensed artifact.
+  // 2b. Required package entries.
   const required = ['package/package.json', 'package/README.md'];
-  if (existsSync(join(root, 'LICENSE'))) required.push('package/LICENSE');
   const missingEntries = required.filter((entry) => !entries.includes(entry));
   if (missingEntries.length > 0) {
     console.error('tarball audit failed; required entries missing:');

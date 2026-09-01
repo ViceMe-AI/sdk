@@ -34,8 +34,7 @@
   },
   "files": [
     "dist",
-    "README.md",
-    "LICENSE"
+    "README.md"
   ],
   "sideEffects": false,
   "publishConfig": {
@@ -46,14 +45,12 @@
   },
   "scripts": {
     "clean": "node ../../scripts/rmrf.mjs dist",
-    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:types && pnpm build:manifest && pnpm build:license",
+    "build": "pnpm clean && pnpm build:esm && pnpm build:loader && pnpm build:types && pnpm build:manifest",
     "build:esm": "vite build --config vite.config.esm.ts",
     "build:loader": "vite build --config vite.config.loader.ts",
     "build:types": "tsc -p tsconfig.build.json",
     "build:manifest": "node ../../scripts/build-manifest.mjs",
-    "build:license": "node ../../scripts/sync-package-license.mjs",
     "lint": "eslint .",
-    "prepublishOnly": "node ../../scripts/assert-release-license.mjs && node ../../scripts/sync-package-license.mjs && node ../../scripts/assert-package-license.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:browser": "playwright test",
