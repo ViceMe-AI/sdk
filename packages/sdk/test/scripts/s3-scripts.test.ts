@@ -77,7 +77,6 @@ const digest = (body: Buffer) => ({
 });
 const indexBody = Buffer.from('export const SDK_VERSION = "0.1.0";\n');
 const loaderBody = Buffer.from('(function(){/* data-viceme */})();\n');
-const bootstrapBody = Buffer.from('(function(){/* fixed alias bootstrap */})();\n');
 const danmakuBody = Buffer.from('export const mount = () => {};\n');
 const tipBody = Buffer.from('export const mountTip = () => {};\n');
 const tipTestingBody = Buffer.from('export const createTestTip = () => {};\n');
@@ -86,7 +85,6 @@ mkdirSync(distDir, { recursive: true });
 writeFileSync(join(distDir, 'LICENSE'), licenseBody);
 writeFileSync(join(distDir, 'index.js'), indexBody);
 writeFileSync(join(distDir, 'viceme.min.js'), loaderBody);
-writeFileSync(join(distDir, 'bootstrap.min.js'), bootstrapBody);
 writeFileSync(join(distDir, 'danmaku.js'), danmakuBody);
 writeFileSync(join(distDir, 'tip.js'), tipBody);
 mkdirSync(join(distDir, 'tip'));
@@ -102,7 +100,6 @@ writeFileSync(
       files: {
         'index.js': digest(indexBody),
         'viceme.min.js': digest(loaderBody),
-        'bootstrap.min.js': digest(bootstrapBody),
         'danmaku.js': digest(danmakuBody),
         'tip.js': digest(tipBody),
         'tip/testing.js': digest(tipTestingBody),
@@ -112,17 +109,6 @@ writeFileSync(
     2,
   )}\n`,
 );
-
-function seedReleaseMetadata(version: string): void {
-  const releaseDir = join(storeRoot, version);
-  mkdirSync(releaseDir, { recursive: true });
-  writeFileSync(join(releaseDir, 'LICENSE'), licenseBody);
-  const manifest = JSON.parse(readFileSync(join(distDir, 'manifest.json'), 'utf8')) as {
-    version: string;
-  };
-  manifest.version = version;
-  writeFileSync(join(releaseDir, 'manifest.json'), `${JSON.stringify(manifest)}\n`);
-}
 
 let publicServer: { url: string; close: () => Promise<void> } | undefined;
 
@@ -137,7 +123,7 @@ beforeAll(async () => {
         ? 'application/json; charset=utf-8'
         : 'text/javascript; charset=utf-8';
       res.writeHead(200, {
-        'content-type': path === '-/aliases/v1' ? 'text/plain; charset=utf-8' : type,
+        'content-type': type,
         'cache-control': 'public,max-age=31536000,immutable',
         ...(req.headers.origin === 'https://example.com'
           ? { 'access-control-allow-origin': '*' }
@@ -260,11 +246,11 @@ describe('publish-s3-region.mjs', () => {
     ];
     // Empty region: everything uploads and the public read-back passes.
     const first = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(first.stdout).toContain('CN: 8 uploaded, 0 already identical');
+    expect(first.stdout).toContain('CN: 7 uploaded, 0 already identical');
 
     // Re-run: byte-identical objects are skipped.
     const second = await runS3('publish-s3-region.mjs', args, REGION_ENV);
-    expect(second.stdout).toContain('CN: 0 uploaded, 8 already identical');
+    expect(second.stdout).toContain('CN: 0 uploaded, 7 already identical');
 
     // Tamper one object: the immutable violation fails closed.
     writeFileSync(join(storeRoot, '0.1.0/index.js'), 'tampered\n');
@@ -272,287 +258,5 @@ describe('publish-s3-region.mjs', () => {
       code: 1,
     });
     writeFileSync(join(storeRoot, '0.1.0/index.js'), indexBody);
-  });
-});
-
-describe('s3-alias-pointer.mjs', () => {
-  const ALIAS_ENV = {
-    S3_ENDPOINT_CN: 'https://fake.cn',
-    S3_BUCKET_CN: 'viceme-sdk',
-    S3_ACCESS_KEY_ID_CN: 'test-key',
-    S3_SECRET_ACCESS_KEY_CN: 'test-secret',
-    CN_S3_HTTPS_PROXY: 'http://127.0.0.1:9',
-    S3_ENDPOINT_GLOBAL: 'https://fake.global',
-    S3_BUCKET_GLOBAL: 'viceme-sdk',
-    S3_ACCESS_KEY_ID_GLOBAL: 'test-key',
-    S3_SECRET_ACCESS_KEY_GLOBAL: 'test-secret',
-  };
-
-  function aliasArgs(extra: string[]) {
-    return [
-      '--version',
-      '0.1.0',
-      '--regions',
-      'cn',
-      '--public-base-cn',
-      publicServer!.url,
-      '--converge-timeout-ms',
-      '5000',
-      ...extra,
-    ];
-  }
-
-  it('fails closed when region configuration is incomplete', async () => {
-    const env: Record<string, string> = { ...ALIAS_ENV };
-    delete env.CN_S3_HTTPS_PROXY;
-    await expect(runS3('s3-alias-pointer.mjs', aliasArgs([]), env)).rejects.toMatchObject({
-      code: 1,
-    });
-  });
-
-  it('requires the exact version objects before promoting the alias', async () => {
-    // 9.9.9 was never published to the store: the alias must not move.
-    await expect(
-      runS3(
-        's3-alias-pointer.mjs',
-        [
-          '--version',
-          '9.9.9',
-          '--regions',
-          'cn',
-          '--public-base-cn',
-          publicServer!.url,
-          '--converge-timeout-ms',
-          '5000',
-        ],
-        ALIAS_ENV,
-      ),
-    ).rejects.toMatchObject({ code: 1 });
-  });
-
-  it('refuses an exact version without a license before moving its alias', async () => {
-    const releaseDir = join(storeRoot, '0.1.1');
-    mkdirSync(releaseDir, { recursive: true });
-    const manifest = JSON.parse(readFileSync(join(distDir, 'manifest.json'), 'utf8')) as {
-      version: string;
-    };
-    manifest.version = '0.1.1';
-    writeFileSync(join(releaseDir, 'manifest.json'), `${JSON.stringify(manifest)}\n`);
-    writeFileSync(join(releaseDir, 'bootstrap.min.js'), bootstrapBody);
-
-    await expect(
-      runS3(
-        's3-alias-pointer.mjs',
-        [
-          '--version',
-          '0.1.1',
-          '--regions',
-          'cn',
-          '--public-base-cn',
-          publicServer!.url,
-          '--converge-timeout-ms',
-          '5000',
-        ],
-        ALIAS_ENV,
-      ),
-    ).rejects.toMatchObject({ code: 1 });
-  });
-
-  it('a partial-success rerun converges remaining regions (same version = converged)', async () => {
-    // CN fully at 0.2.0 (previous run wrote loader + pointer), GLOBAL unset
-    // (previous run failed midway). The rerun must treat CN as converged
-    // and finish GLOBAL.
-    seedReleaseMetadata('0.2.0');
-    writeFileSync(join(storeRoot, '0.2.0', 'viceme.min.js'), loaderBody);
-    writeFileSync(join(storeRoot, '0.2.0', 'bootstrap.min.js'), bootstrapBody);
-    mkdirSync(join(storeRoot, 'v1'), { recursive: true });
-    writeFileSync(join(storeRoot, 'v1', 'viceme.min.js'), bootstrapBody);
-    mkdirSync(join(storeRoot, '-', 'aliases'), { recursive: true });
-    writeFileSync(join(storeRoot, '-', 'aliases', 'v1'), '0.2.0');
-
-    const rerun = await exec(
-      'node',
-      [
-        join(scriptsDir, 's3-alias-pointer.mjs'),
-        '--version',
-        '0.2.0',
-        '--regions',
-        'cn,global',
-        '--public-base-cn',
-        publicServer!.url,
-        '--public-base-global',
-        publicServer!.url,
-        '--converge-timeout-ms',
-        '5000',
-      ],
-      {
-        env: {
-          ...process.env,
-          AWS_BIN: fakeAws,
-          FAKE_AWS_STORE: storeRoot,
-          EXPECT_BUCKET: 'viceme-sdk',
-          ...ALIAS_ENV,
-        },
-      },
-    );
-    expect(rerun.stdout).toContain('pointer already at 0.2.0 (region converged)');
-    expect(rerun.stdout).toContain('alias written and verified in 2 region(s)');
-  });
-
-  it('fails closed when the live pointer read errors (no unset fallback)', async () => {
-    // A pointer endpoint returning 503 must NOT be treated as "unset":
-    // an older-version rerun could otherwise overwrite a newer pointer.
-    const failing = createServer((_req, res) => {
-      res.writeHead(503);
-      res.end('unavailable');
-    });
-    await new Promise<void>((resolve) => failing.listen(0, '127.0.0.1', resolve));
-    const failingAddress = failing.address();
-    if (failingAddress === null || typeof failingAddress === 'string') throw new Error('bind');
-    const failingUrl = `http://127.0.0.1:${failingAddress.port}`;
-    try {
-      const result = await exec(
-        'node',
-        [
-          join(scriptsDir, 's3-alias-pointer.mjs'),
-          '--version',
-          '0.1.0',
-          '--regions',
-          'cn',
-          '--public-base-cn',
-          failingUrl,
-          '--converge-timeout-ms',
-          '5000',
-        ],
-        {
-          env: {
-            ...process.env,
-            AWS_BIN: fakeAws,
-            FAKE_AWS_STORE: storeRoot,
-            EXPECT_BUCKET: 'viceme-sdk',
-            ...ALIAS_ENV,
-          },
-        },
-      ).catch((error: { code?: number; stderr?: string }) => error);
-      expect(result).toMatchObject({ code: 1 });
-      expect(String((result as { stderr?: string }).stderr)).toContain('failing closed');
-    } finally {
-      await new Promise<void>((done) => failing.close(() => done()));
-    }
-  });
-
-  it('a hung pointer response cannot stall the bounded wait (per-request timeout)', async () => {
-    // Server accepts the connection but never responds: every fetch must
-    // hit its own timeout so the run fails within the budget.
-    const hung = createServer(() => {
-      /* deliberately never respond */
-    });
-    await new Promise<void>((resolve) => hung.listen(0, '127.0.0.1', resolve));
-    const hungAddress = hung.address();
-    if (hungAddress === null || typeof hungAddress === 'string') throw new Error('bind');
-    const hungUrl = `http://127.0.0.1:${hungAddress.port}`;
-    try {
-      const result = await exec(
-        'node',
-        [
-          join(scriptsDir, 's3-alias-pointer.mjs'),
-          '--version',
-          '0.1.0',
-          '--regions',
-          'cn',
-          '--public-base-cn',
-          hungUrl,
-          '--converge-timeout-ms',
-          '8000',
-        ],
-        {
-          env: {
-            ...process.env,
-            AWS_BIN: fakeAws,
-            FAKE_AWS_STORE: storeRoot,
-            EXPECT_BUCKET: 'viceme-sdk',
-            ...ALIAS_ENV,
-          },
-        },
-      ).catch((error: { code?: number }) => error);
-      expect(result).toMatchObject({ code: 1 });
-    } finally {
-      await new Promise<void>((done) => hung.close(() => done()));
-    }
-  }, 30_000);
-
-  it('promotes forward after the exact version exists, then refuses a backward promote', async () => {
-    // Isolate the pointer for this scenario's lifecycle.
-    rmSync(join(storeRoot, '-', 'aliases', 'v1'), { force: true });
-    rmSync(join(storeRoot, 'v1', 'viceme.min.js'), { force: true });
-    seedReleaseMetadata('0.2.0');
-    writeFileSync(join(storeRoot, '0.2.0', 'viceme.min.js'), loaderBody);
-
-    const promote = await runS3(
-      's3-alias-pointer.mjs',
-      [
-        '--version',
-        '0.1.0',
-        '--regions',
-        'cn',
-        '--public-base-cn',
-        publicServer!.url,
-        '--converge-timeout-ms',
-        '5000',
-      ],
-      ALIAS_ENV,
-    );
-    expect(promote.stdout).toContain('pointer unset; promoting to 0.1.0');
-    expect(readFileSync(join(storeRoot, '-', 'aliases', 'v1'), 'utf8')).toBe('0.1.0');
-    expect(readFileSync(join(storeRoot, 'v1/viceme.min.js'), 'utf8')).toBe(
-      bootstrapBody.toString('utf8'),
-    );
-
-    // Forward promote to 0.2.0 succeeds.
-    const forward = await runS3(
-      's3-alias-pointer.mjs',
-      [
-        '--version',
-        '0.2.0',
-        '--regions',
-        'cn',
-        '--public-base-cn',
-        publicServer!.url,
-        '--converge-timeout-ms',
-        '5000',
-      ],
-      ALIAS_ENV,
-    );
-    expect(forward.stdout).toContain('forward move 0.1.0 -> 0.2.0');
-
-    // Backward promote is refused and the pointer is untouched.
-    const failure = await exec(
-      'node',
-      [
-        join(scriptsDir, 's3-alias-pointer.mjs'),
-        '--version',
-        '0.1.0',
-        '--regions',
-        'cn',
-        '--public-base-cn',
-        publicServer!.url,
-        '--converge-timeout-ms',
-        '5000',
-      ],
-      {
-        env: {
-          ...process.env,
-          AWS_BIN: fakeAws,
-          FAKE_AWS_STORE: storeRoot,
-          EXPECT_BUCKET: 'viceme-sdk',
-          ...ALIAS_ENV,
-        },
-      },
-    ).catch((error: { code?: number; stderr?: string }) => error);
-    expect(failure).toMatchObject({ code: 1 });
-    expect(String((failure as { stderr?: string }).stderr)).toContain(
-      'refusing to move pointer backward',
-    );
-    expect(readFileSync(join(storeRoot, '-', 'aliases', 'v1'), 'utf8')).toBe('0.2.0');
   });
 });

@@ -36,13 +36,10 @@ https://s3.viceme.cn/viceme-sdk/<version>/...   (region cn)
 https://s3.viceme.ai/viceme-sdk/<version>/...   (region global)
 ```
 
-On the direct S3 hosts, `/viceme-sdk/v1` is an alias, NOT a copy of a version:
-its fixed bootstrap reads the single version pointer at
-`viceme-sdk/-/aliases/v1`, then injects the exact-version full loader. The Shop
-`/viceme-sdk/v1/*` route is a separately configured exact-release proxy and
-never follows that pointer at request time. If a CDN edge (`cdn.viceme.cn` /
-`cdn.viceme.ai`) is introduced later, keep these exact paths and add edge
-caching in front — the URL contract must not change.
+Each static loader, manifest, ESM entry, and chunk is consumed from one of those
+exact-version directories. If a CDN edge (`cdn.viceme.cn` / `cdn.viceme.ai`) is
+introduced later, keep the exact-version path contract and add edge caching in
+front.
 
 ## Releasing a stable npm version
 
@@ -119,45 +116,12 @@ Drill: delete the `dist-<version>.zip` release asset, re-run recovery, and
 confirm the byte-identical asset is restored (`attach-release-assets.mjs
 --dry-run` stages and digest-verifies without GitHub API calls).
 
-## Moving the stable alias (`/viceme-sdk/v1`)
-
-The **Promote CDN** workflow only manages the alias pointer (exact-version
-delivery is automatic in Release Package):
-
-- `aliasAction=promote` (default): forward-only move. The live pointer is
-  read first and the shared policy refuses backward or same-version moves,
-  so a stale rerun can never roll the alias back.
-- `aliasAction=rollback` + `aliasExpectedCurrent=<exact current version>`:
-  the only path allowed to move backward. The live pointer must equal the
-  declared value (stale/concurrent guard) and the target must be older.
-
-Mechanics per region (credentials via the fixed S3 secret names, dedicated
-`viceme-sdk` bucket, CN through its HTTPS proxy):
-
-1. `v1/viceme.min.js` carries the **fixed bootstrap** (canonical bytes:
-   `<version>/bootstrap.min.js` from this release build). The bootstrap is
-   byte-stable for the whole API major — it only reads the pointer and
-   injects `<version>/viceme.min.js` (the full loader, which may change
-   every release). `v1/viceme.min.js` is an alias object like the pointer:
-   re-written on every promote and verified by an exact public byte
-   read-back against the canonical build, so it can never be locked to one
-   release's bytes nor serve corrupted content silently.
-2. The single pointer object `-/aliases/v1` is written (`text/plain`,
-   short TTL) and polled until the public read matches.
-3. `verify-cdn --expect-version` byte-verifies the alias loader against
-   the pointed version's bootstrap in addition to the full exact-version
-   verification; the workflow smoke covers both regions.
-
-Reads are origin-fresh on the S3 entries (no edge cache yet); when a CDN
-edge is introduced, add edge caching without changing the URL contract.
-
 ## Verification tooling
 
 ```bash
 node scripts/validate-release-inputs.mjs --version 1.2.3 --regions cn,global
 node scripts/verify-cdn.mjs --local packages/sdk/dist
-node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/1.2.3/
-node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/v1/ --expect-version 1.2.3
+node scripts/verify-cdn.mjs --base https://s3.viceme.cn/viceme-sdk/1.2.3/ --expect-version 1.2.3
 node scripts/fetch-npm-dist.mjs --version 1.2.3 --out verified-dist
 node scripts/attach-release-assets.mjs --version 1.2.3 --dry-run
 node scripts/verify-npm-dist-tag.mjs --version 1.2.3 --tag latest

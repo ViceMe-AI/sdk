@@ -27,7 +27,7 @@ describe('ensureNamespace', () => {
 
   it('whenReady rejects for unknown client keys', async () => {
     const ns = ensureNamespace('0.1.0');
-    await expect(ns.whenReady('v1+cn+wrk_nope')).rejects.toSatisfy((e: unknown) => {
+    await expect(ns.whenReady('v1+cn+wrk_test_nope')).rejects.toSatisfy((e: unknown) => {
       return (e as { code?: string }).code === 'CONFIG_INVALID';
     });
   });
@@ -36,6 +36,6 @@ describe('ensureNamespace', () => {
     const ns = ensureNamespace('0.1.0');
     expect(ns.getInstance('nope')).toBeUndefined();
     expect(() => ns.destroyInstance('nope')).not.toThrow();
-    expect(() => ns.destroyClient('v1+cn+wrk_nope')).not.toThrow();
+    expect(() => ns.destroyClient('v1+cn+wrk_test_nope')).not.toThrow();
   });
 });

@@ -76,8 +76,7 @@ describe('Shop public contract snapshot', () => {
 
   it('snapshots only sanitized Tip configuration fields', () => {
     const schemas = snapshot.components.schemas;
-    expect(schemas.WorkKey?.pattern).toBe('^wrk_[A-Za-z0-9_-]{4,124}$');
-    expect(schemas.TipWorkKey?.pattern).toBe('^wrk_(?:test|live)_[A-Za-z0-9_-]{4,119}$');
+    expect(schemas.WorkKey?.pattern).toBe('^wrk_(?:test|live)_[A-Za-z0-9_-]{4,119}$');
     expect(Object.keys(schemas.TipConfig?.properties ?? {}).sort()).toEqual([
       'amount',
       'currency',
