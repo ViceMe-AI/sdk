@@ -153,6 +153,39 @@ describe('default access presenter', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it('cancels an action that becomes active after lifecycle abort closes the layer', async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    let resolvePerform!: (action: {
+      type: 'external';
+      completion: Promise<void>;
+      cancel(): void;
+    }) => void;
+    const presented = defaultAccessPresenter({
+      featureKey: 'emperor',
+      reason: 'PURCHASE_REQUIRED',
+      action: 'CHECKOUT',
+      signal: controller.signal,
+      perform: () =>
+        new Promise((resolve) => {
+          resolvePerform = resolve;
+        }),
+    });
+    const layer = document.querySelector('viceme-access-layer')!;
+    (layer.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+
+    controller.abort();
+    await expect(presented).resolves.toBe('dismissed');
+    resolvePerform({
+      type: 'external',
+      completion: new Promise<void>(() => undefined),
+      cancel,
+    });
+
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    expect(document.querySelector('viceme-access-layer')).toBeNull();
+  });
+
   it('shows immediate progress after the first interactive click', async () => {
     let finish!: () => void;
     const perform = vi.fn(

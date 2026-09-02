@@ -130,4 +130,152 @@ describe('SessionManager', () => {
     expect(sessionCount).toBe(2);
     expect(authorizations).toEqual(['stale-token', 'fresh-token']);
   });
+
+  it('never restores a session snapshot from a transport that settles after destroy', async () => {
+    let resolveRequest!: (response: {
+      status: number;
+      body: { workKey: string; capabilities: string[]; token: string };
+    }) => void;
+    const transport = {
+      request() {
+        return new Promise<{
+          status: number;
+          body: { workKey: string; capabilities: string[]; token: string };
+        }>((resolve) => {
+          resolveRequest = resolve;
+        });
+      },
+    };
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport });
+    const pending = session.establish();
+    const rejection = expect(pending).rejects.toMatchObject({ code: 'CLIENT_DESTROYED' });
+
+    session.destroy();
+    resolveRequest({
+      status: 201,
+      body: {
+        workKey: 'wrk_test_demo',
+        capabilities: ['access'],
+        token: 'must-not-survive-destroy',
+      },
+    });
+
+    await rejection;
+    expect(session.snapshot).toBeUndefined();
+    await expect(session.establish()).rejects.toMatchObject({ code: 'CLIENT_DESTROYED' });
+  });
+
+  it('supersedes an invalidated in-flight establishment without stale writeback', async () => {
+    const resolvers: Array<
+      (response: {
+        status: number;
+        body: { workKey: string; capabilities: string[]; token: string };
+      }) => void
+    > = [];
+    const transport = {
+      request() {
+        return new Promise<{
+          status: number;
+          body: { workKey: string; capabilities: string[]; token: string };
+        }>((resolve) => resolvers.push(resolve));
+      },
+    };
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport });
+    const stale = session.establish();
+    const staleRejection = expect(stale).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
+
+    session.invalidate();
+    const fresh = session.establish();
+    expect(resolvers).toHaveLength(2);
+    resolvers[0]!({
+      status: 201,
+      body: {
+        workKey: 'wrk_test_demo',
+        capabilities: ['access'],
+        token: 'stale-token',
+      },
+    });
+    await staleRejection;
+    expect(session.snapshot).toBeUndefined();
+
+    resolvers[1]!({
+      status: 201,
+      body: {
+        workKey: 'wrk_test_demo',
+        capabilities: ['access'],
+        token: 'fresh-token',
+      },
+    });
+    await expect(fresh).resolves.toMatchObject({ token: 'fresh-token' });
+    expect(session.snapshot?.token).toBe('fresh-token');
+  });
+
+  it('maps a late capability response to CLIENT_DESTROYED even when transport ignores abort', async () => {
+    let resolveCapability!: (response: { status: number; body: { ok: boolean } }) => void;
+    const transport = {
+      request(request: { path: string }) {
+        if (request.path === '/v1/public/work-sdk/sessions') {
+          return Promise.resolve({
+            status: 201,
+            body: {
+              workKey: 'wrk_test_demo',
+              capabilities: ['access'],
+              token: 'work-token',
+            },
+          });
+        }
+        return new Promise<{ status: number; body: { ok: boolean } }>((resolve) => {
+          resolveCapability = resolve;
+        });
+      },
+    };
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport });
+    await session.establish();
+    const pending = session.request({ method: 'GET', path: '/v1/public/work-sdk/access/features' });
+    const rejection = expect(pending).rejects.toMatchObject({ code: 'CLIENT_DESTROYED' });
+    await Promise.resolve();
+
+    session.destroy();
+    resolveCapability({ status: 200, body: { ok: true } });
+
+    await rejection;
+    expect(session.snapshot).toBeUndefined();
+  });
+
+  it('does not replay a successful capability request after a concurrent session refresh', async () => {
+    let sessionCount = 0;
+    let resolveCapability!: (response: { status: number; body: { ok: boolean } }) => void;
+    const authorizations: Array<string | undefined> = [];
+    const transport = {
+      request(request: { path: string; authorization?: string }) {
+        if (request.path === '/v1/public/work-sdk/sessions') {
+          sessionCount += 1;
+          return Promise.resolve({
+            status: 201,
+            body: {
+              workKey: 'wrk_test_demo',
+              capabilities: ['access'],
+              token: sessionCount === 1 ? 'original-token' : 'refreshed-token',
+            },
+          });
+        }
+        authorizations.push(request.authorization);
+        return new Promise<{ status: number; body: { ok: boolean } }>((resolve) => {
+          resolveCapability = resolve;
+        });
+      },
+    };
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport });
+    await session.establish();
+    const pending = session.request({ method: 'PUT', path: '/v1/public/work-sdk/follow' });
+    await Promise.resolve();
+
+    session.invalidate();
+    await session.establish();
+    resolveCapability({ status: 200, body: { ok: true } });
+
+    await expect(pending).resolves.toMatchObject({ status: 200 });
+    expect(authorizations).toEqual(['original-token']);
+    expect(session.snapshot?.token).toBe('refreshed-token');
+  });
 });

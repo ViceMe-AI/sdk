@@ -371,4 +371,62 @@ describe('website access capabilities', () => {
       user: { nickname: 'Visitor' },
     });
   });
+
+  it('destroy closes an active sign-in surface and rejects the caller as destroyed', async () => {
+    const iframeSrc = vi
+      .spyOn(HTMLIFrameElement.prototype, 'src', 'set')
+      .mockImplementation(function (this: HTMLIFrameElement, value: string) {
+        this.dataset.testSrc = value;
+      });
+    const client = createTestViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      transport: capabilityTransport(),
+    });
+    try {
+      const pending = client.auth.signIn();
+      const rejection = expect(pending).rejects.toMatchObject({
+        code: 'CLIENT_DESTROYED',
+        retryable: false,
+      });
+
+      await vi.waitFor(() => {
+        expect(document.querySelector('viceme-access-layer')).not.toBeNull();
+      });
+      const layer = document.querySelector('viceme-access-layer')!;
+      (layer.shadowRoot?.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
+      await vi.waitFor(() => {
+        expect(layer.shadowRoot?.querySelector('iframe')?.getAttribute('data-test-src')).toContain(
+          '/sdk/login',
+        );
+      });
+
+      client.destroy();
+
+      await rejection;
+      await vi.waitFor(() => {
+        expect(document.querySelector('viceme-access-layer')).toBeNull();
+      });
+    } finally {
+      iframeSrc.mockRestore();
+      client.destroy();
+    }
+  });
+
+  it('maps an immediate destroy/presentation race to CLIENT_DESTROYED', async () => {
+    const client = createTestViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      transport: capabilityTransport(),
+    });
+
+    const pending = client.auth.signIn();
+    client.destroy();
+
+    await expect(pending).rejects.toMatchObject({
+      code: 'CLIENT_DESTROYED',
+      retryable: false,
+    });
+    expect(document.querySelector('viceme-access-layer')).toBeNull();
+  });
 });

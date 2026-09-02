@@ -201,21 +201,32 @@ function whenDomReady(): Promise<void> {
 async function fetchReleaseManifest(
   manifestUrl: URL,
 ): Promise<{ manifest: ReleaseManifest; baseUrl: URL }> {
-  let response: Response;
+  // Bound both headers and JSON-body parsing on every supported browser.
+  // `AbortSignal.timeout()` is absent in older engines; without this manual
+  // controller, one stalled manifest blocks the serialized loader queue.
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS);
   try {
-    response = await fetchWithTimeout(manifestUrl);
-  } catch {
-    response = { ok: false, status: 0 } as Response;
+    let response: Response;
+    try {
+      response = await fetch(manifestUrl, {
+        credentials: 'omit',
+        signal: controller.signal,
+      });
+    } catch {
+      if (controller.signal.aborted) {
+        throw new ViceMeError({
+          code: 'INTERNAL_ERROR',
+          message: 'Release manifest request timed out.',
+          retryable: true,
+        });
+      }
+      response = { ok: false, status: 0 } as Response;
+    }
+    return { manifest: await parseManifest(response), baseUrl: manifestUrl };
+  } finally {
+    globalThis.clearTimeout(timeout);
   }
-  return { manifest: await parseManifest(response), baseUrl: manifestUrl };
-}
-
-function fetchWithTimeout(url: URL): Promise<Response> {
-  const signal =
-    typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-      ? AbortSignal.timeout(MANIFEST_TIMEOUT_MS)
-      : undefined;
-  return fetch(url, { credentials: 'omit', signal });
 }
 
 async function parseManifest(response: Response): Promise<ReleaseManifest> {
