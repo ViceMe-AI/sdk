@@ -12,7 +12,7 @@
  * credential.
  */
 
-import { ViceMeError } from '../core/errors.ts';
+import { clientDestroyed, ViceMeError } from '../core/errors.ts';
 import type { Transport, TransportRequest, TransportResponse } from '../transport/transport.ts';
 export interface CreateWorkSessionRequestDto {
   workKey: string;
@@ -91,11 +91,21 @@ function malformedSessionResponse(): ViceMeError {
   });
 }
 
+function sessionInvalidated(): ViceMeError {
+  return new ViceMeError({
+    code: 'SESSION_EXPIRED',
+    message: 'The work session was invalidated before it completed.',
+    retryable: true,
+  });
+}
+
 export class SessionManager {
   readonly #options: SessionManagerOptions;
   readonly #now: () => number;
   #snapshot: WorkSessionSnapshot | undefined;
   #pending: Promise<WorkSessionSnapshot> | undefined;
+  #generation = 0;
+  #destroyed = false;
 
   constructor(options: SessionManagerOptions) {
     this.#options = options;
@@ -120,11 +130,14 @@ export class SessionManager {
    * in-flight request (single flight).
    */
   establish(): Promise<WorkSessionSnapshot> {
+    if (this.#destroyed) return Promise.reject(clientDestroyed());
     if (this.#snapshot) {
       if (!this.#isExpired()) return Promise.resolve(this.#snapshot);
       this.#snapshot = undefined;
     }
-    this.#pending ??= this.#options.transport
+    if (this.#pending) return this.#pending;
+    const generation = this.#generation;
+    const pending = this.#options.transport
       .request({
         method: 'POST',
         path: '/v1/public/work-sdk/sessions',
@@ -133,14 +146,17 @@ export class SessionManager {
         timeoutMs: this.#options.timeoutMs,
       })
       .then((response) => {
+        this.#assertCurrent(generation);
         const snapshot = parseSessionResponse(response.body, this.#options.workKey);
+        this.#assertCurrent(generation);
         this.#snapshot = snapshot;
         return snapshot;
       })
       .finally(() => {
-        this.#pending = undefined;
+        if (this.#pending === pending) this.#pending = undefined;
       });
-    return this.#pending;
+    this.#pending = pending;
+    return pending;
   }
 
   async request(
@@ -149,27 +165,19 @@ export class SessionManager {
     const snapshot = await this.establish();
     if (!snapshot.token) throw malformedSessionResponse();
     try {
-      return await this.#options.transport.request({
-        ...request,
-        authorization: snapshot.token,
-        userAuthorization: snapshot.userToken,
-        signal: this.#options.signal,
-      });
+      return await this.#requestWithSnapshot(request, snapshot);
     } catch (error) {
+      if (this.#destroyed) throw clientDestroyed();
       if (!(error instanceof ViceMeError) || error.code !== 'SESSION_EXPIRED') throw error;
       if (this.#snapshot === snapshot) this.invalidate();
       const refreshed = await this.establish();
       if (!refreshed.token) throw malformedSessionResponse();
-      return this.#options.transport.request({
-        ...request,
-        authorization: refreshed.token,
-        userAuthorization: refreshed.userToken,
-        signal: this.#options.signal,
-      });
+      return this.#requestWithSnapshot(request, refreshed);
     }
   }
 
   authenticate(input: { userToken: string; user: WorkUser }): void {
+    this.#assertAlive();
     if (!this.#snapshot) throw malformedSessionResponse();
     this.#snapshot = {
       ...this.#snapshot,
@@ -179,18 +187,53 @@ export class SessionManager {
   }
 
   async signOut(): Promise<void> {
+    this.#assertAlive();
     this.invalidate();
     await this.establish();
   }
 
   /** Drop the token; next `establish()` re-authenticates. */
   invalidate(): void {
+    this.#generation += 1;
     this.#snapshot = undefined;
+    this.#pending = undefined;
   }
 
   /** Hard cleanup: forget the token and pending work. */
   destroy(): void {
-    this.invalidate();
+    if (this.#destroyed) return;
+    this.#destroyed = true;
+    this.#generation += 1;
+    this.#snapshot = undefined;
     this.#pending = undefined;
+  }
+
+  #assertAlive(): void {
+    if (this.#destroyed) throw clientDestroyed();
+  }
+
+  #assertCurrent(generation: number): void {
+    this.#assertAlive();
+    if (generation !== this.#generation) throw sessionInvalidated();
+  }
+
+  async #requestWithSnapshot(
+    request: Omit<TransportRequest, 'authorization' | 'userAuthorization' | 'signal'>,
+    snapshot: WorkSessionSnapshot,
+  ): Promise<TransportResponse> {
+    this.#assertAlive();
+    try {
+      const response = await this.#options.transport.request({
+        ...request,
+        authorization: snapshot.token,
+        userAuthorization: snapshot.userToken,
+        signal: this.#options.signal,
+      });
+      this.#assertAlive();
+      return response;
+    } catch (error) {
+      if (this.#destroyed) throw clientDestroyed();
+      throw error;
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { ViceMeError } from './errors.ts';
+import { clientDestroyed, ViceMeError } from './errors.ts';
 import {
   defaultAccessPresenter,
   type AccessActionResult,
@@ -93,6 +93,7 @@ interface CapabilityDeps {
   widgetOrigin: string;
   now: () => number;
   presenter?: AccessPresenter;
+  signal: AbortSignal;
   ready: () => Promise<void>;
 }
 
@@ -251,6 +252,35 @@ export function createCapabilities(deps: CapabilityDeps): {
       retryable: false,
     });
 
+  const present = (
+    interaction: Omit<Parameters<AccessPresenter>[0], 'signal'>,
+  ): ReturnType<AccessPresenter> => {
+    if (deps.signal.aborted) return Promise.reject(clientDestroyed());
+    let onAbort: (() => void) | undefined;
+    const cancellation = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(clientDestroyed());
+      deps.signal.addEventListener('abort', onAbort, { once: true });
+      if (deps.signal.aborted) onAbort();
+    });
+    let presentation: ReturnType<AccessPresenter>;
+    try {
+      presentation = (deps.presenter ?? defaultAccessPresenter)({
+        ...interaction,
+        signal: deps.signal,
+      });
+    } catch (error) {
+      presentation = Promise.reject(error);
+    }
+    return Promise.race([presentation, cancellation])
+      .then((result) => {
+        if (deps.signal.aborted) throw clientDestroyed();
+        return result;
+      })
+      .finally(() => {
+        if (onAbort) deps.signal.removeEventListener('abort', onAbort);
+      });
+  };
+
   const embeddedFrame = (
     url: string,
     completionOrigin: string,
@@ -373,8 +403,7 @@ export function createCapabilities(deps: CapabilityDeps): {
       return { authenticated: user !== null, user };
     },
     async signIn() {
-      const presenter = deps.presenter ?? defaultAccessPresenter;
-      const result = await presenter({
+      const result = await present({
         featureKey: 'auth',
         reason: 'AUTH_REQUIRED',
         action: 'SIGN_IN',
@@ -563,8 +592,7 @@ export function createCapabilities(deps: CapabilityDeps): {
     async open(options) {
       const checkoutResult = await createCheckout(options.featureKey, options);
       if (checkoutResult.alreadyOwned) return checkoutResult;
-      const presenter = deps.presenter ?? defaultAccessPresenter;
-      const presented = await presenter({
+      const presented = await present({
         featureKey: options.featureKey,
         reason: 'PURCHASE_REQUIRED',
         action: 'CHECKOUT',
@@ -600,7 +628,6 @@ export function createCapabilities(deps: CapabilityDeps): {
     checkMany,
     async require(featureKey) {
       let decision = await this.check(featureKey);
-      const presenter = deps.presenter ?? defaultAccessPresenter;
       for (
         let attempts = 0;
         !decision.allowed && decision.nextAction && attempts < 3;
@@ -614,7 +641,7 @@ export function createCapabilities(deps: CapabilityDeps): {
           decision = await this.check(featureKey);
           continue;
         }
-        const result = await presenter({
+        const result = await present({
           featureKey,
           reason: decision.reason,
           action: nextAction,

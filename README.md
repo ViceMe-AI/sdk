@@ -11,10 +11,12 @@ published creator website.
 - **Latest published package**: `0.4.0` with Website Access v2; it does not contain Headless Tip
 - **Current source target**: `0.5.0`, adding Headless Tip through a separate release PR
 
-Shop resolves `workKey` through `WorkSdkAccess`; the Work, verified embedding
-Origin, and requested feature must be active. Website access establishes
-short-lived in-memory Work and user sessions. Login never follows a creator
-automatically, and payment return parameters never grant access.
+Shop resolves `workKey` through `WorkSdkAccess`; the published Work and requested
+feature must be active. The current Website Access release does not require DNS
+verification or a registered embedding Origin. It establishes short-lived
+in-memory Work and user sessions bound to the Origin that requested them. Login
+never follows a creator automatically, and payment return parameters never
+grant access.
 Headless Tip is a separate credentialless boundary: it does not expose the
 Website Access token, user session, order, payment action, or provider
 transaction data to the host page.
@@ -228,6 +230,10 @@ async function openProtectedContent() {
 consent, or open Hosted Checkout. It rechecks server state before returning an
 allowed decision. Creator consent UI shows identity and published work count,
 but does not request or render recent work covers.
+
+`client.destroy()` cancels in-flight Website Access requests, closes an active
+SDK-owned sign-in or checkout layer, and rejects the interrupted call with
+`CLIENT_DESTROYED`; no late session response can restore the in-memory token.
 
 ## Public Surface
 

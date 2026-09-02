@@ -1,6 +1,6 @@
 # @viceme-ai/sdk
 
-ViceMe browser SDK for Shop-hosted engagement and origin-bound Website Work access.
+ViceMe browser SDK for Shop-hosted engagement and Website Work access.
 
 The release PR atomically owns the package version, runtime manifest, and
 changelog update. During the current preview stage, publication does not
@@ -86,6 +86,16 @@ use. They expose `client.auth`, `client.access`, and `client.checkout`; login,
 explicit follow, and hosted checkout remain ViceMe-owned UI. The host never
 receives a general ViceMe session or payment credential. Tests can inject a
 deterministic transport and presenter through `@viceme-ai/sdk/testing`.
+Calling `client.destroy()` cancels in-flight access requests, closes the active
+SDK-owned sign-in or checkout layer, and rejects the interrupted call with
+`CLIENT_DESTROYED`; late responses cannot restore the in-memory Work token.
+
+The current Website Access release accepts any valid HTTP(S) host Origin and
+does not require DNS TXT verification. Session tokens remain bound to the
+Origin observed when they were issued, but that Origin is not compared with a
+registered allowlist. The hosted checkout iframe likewise has no parent-Origin
+`frame-ancestors` restriction; its signed launch context, expiry, official
+Shop URL, and server-authoritative entitlement checks remain enforced.
 
 Website access login renders the work-bound WeChat QR code directly in the SDK
 layer. Paid access keeps desktop QR payment and WeChat JSAPI in that layer;
