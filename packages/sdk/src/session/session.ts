@@ -176,9 +176,15 @@ export class SessionManager {
     }
   }
 
-  authenticate(input: { userToken: string; user: WorkUser }): void {
+  authenticate(
+    input: { userToken: string; user: WorkUser },
+    expectedSession: WorkSessionSnapshot,
+  ): void {
     this.#assertAlive();
-    if (!this.#snapshot) throw malformedSessionResponse();
+    // An interactive login belongs to the snapshot that initialized its frame.
+    // Sign-out, refresh, or another login must supersede that action even when
+    // the server happens to reissue the same Work token string.
+    if (this.#snapshot !== expectedSession || this.#isExpired()) throw sessionInvalidated();
     this.#snapshot = {
       ...this.#snapshot,
       userToken: input.userToken,
