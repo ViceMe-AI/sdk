@@ -229,6 +229,10 @@ consent, or open Hosted Checkout. It rechecks server state before returning an
 allowed decision. Creator consent UI shows identity and published work count,
 but does not request or render recent work covers.
 
+`client.destroy()` cancels in-flight Website Access requests, closes an active
+SDK-owned sign-in or checkout layer, and rejects the interrupted call with
+`CLIENT_DESTROYED`; no late session response can restore the in-memory token.
+
 ## Public Surface
 
 ```ts

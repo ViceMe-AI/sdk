@@ -8,6 +8,8 @@ export interface AccessInteraction {
   reason: string;
   action: AccessInteractionAction;
   followTarget?: FollowTarget;
+  /** Client-owned lifecycle signal; abort closes any active hosted surface. */
+  signal?: AbortSignal;
   perform(): Promise<AccessActionResult>;
 }
 
@@ -361,13 +363,19 @@ function ensureAccessLayerElement(): void {
       }
 
       let activeAction: AccessFrameAction | AccessExternalAction | null = null;
+      let closed = false;
       const close = (result: AccessPresentationResult) => {
+        if (closed) return;
+        closed = true;
+        this.interaction.signal?.removeEventListener('abort', dismissLayer);
         this.dispatchEvent(new CustomEvent('viceme:access-layer-close', { detail: result }));
       };
       const dismissLayer = () => {
         activeAction?.cancel();
         close('dismissed');
       };
+      this.interaction.signal?.addEventListener('abort', dismissLayer, { once: true });
+      if (this.interaction.signal?.aborted) queueMicrotask(dismissLayer);
       backdrop.addEventListener('click', dismissLayer);
       closeAction.addEventListener('click', dismissLayer);
       this.addEventListener('keydown', (event) => {
@@ -393,6 +401,13 @@ function ensureAccessLayerElement(): void {
         error.textContent = '';
         try {
           const result = await this.interaction.perform();
+          // The layer may close while an async action is still being created.
+          // Cancel that late action immediately so its timers/listeners cannot
+          // outlive the client-owned presentation surface.
+          if (closed || this.interaction.signal?.aborted) {
+            if (result.type !== 'completed') result.cancel();
+            return;
+          }
           if (result.type === 'frame') {
             activeAction = result;
             panel.dataset.frame = 'true';
@@ -405,6 +420,7 @@ function ensureAccessLayerElement(): void {
           }
           close('acted');
         } catch (caught) {
+          if (closed) return;
           activeAction?.cancel();
           activeAction = null;
           panel.dataset.frame = 'false';
@@ -429,6 +445,7 @@ export const defaultAccessPresenter: AccessPresenter = async (interaction) => {
   if (typeof document === 'undefined' || typeof customElements === 'undefined') {
     return 'dismissed';
   }
+  if (interaction.signal?.aborted) return 'dismissed';
   ensureAccessLayerElement();
   const element = document.createElement(ELEMENT_NAME) as AccessLayerElement;
   element.interaction = interaction;

@@ -86,6 +86,9 @@ use. They expose `client.auth`, `client.access`, and `client.checkout`; login,
 explicit follow, and hosted checkout remain ViceMe-owned UI. The host never
 receives a general ViceMe session or payment credential. Tests can inject a
 deterministic transport and presenter through `@viceme-ai/sdk/testing`.
+Calling `client.destroy()` cancels in-flight access requests, closes the active
+SDK-owned sign-in or checkout layer, and rejects the interrupted call with
+`CLIENT_DESTROYED`; late responses cannot restore the in-memory Work token.
 
 Website access login renders the work-bound WeChat QR code directly in the SDK
 layer. Paid access keeps desktop QR payment and WeChat JSAPI in that layer;

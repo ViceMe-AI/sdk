@@ -91,6 +91,7 @@ export class ViceMeClientImpl implements ViceMeClient {
       widgetOrigin: BUILD_WIDGET_ORIGINS[deps.config.region],
       now: deps.now ?? (() => Date.now()),
       presenter: deps.presenter,
+      signal: this.#internalSignal.signal,
       ready: () => this.#readyAccess(),
     });
     this.auth = capabilities.auth;
