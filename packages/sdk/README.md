@@ -92,6 +92,11 @@ deterministic transport and presenter through `@viceme-ai/sdk/testing`.
 Calling `client.destroy()` cancels in-flight access requests, closes the active
 SDK-owned sign-in or checkout layer, and rejects the interrupted call with
 `CLIENT_DESTROYED`; late responses cannot restore the in-memory Work token.
+Request cancellation and timeouts remain effective until the parsed response is
+delivered. Cancelling the client's optional `signal` preserves the caller's
+`Error` reason; a request timeout rejects with retryable `NETWORK_TIMEOUT`.
+A cancelled response cannot establish a Work session even if its body has
+already finished parsing.
 
 The current Website Access release accepts any valid HTTP(S) host Origin and
 does not require DNS TXT verification. Session tokens remain bound to the
