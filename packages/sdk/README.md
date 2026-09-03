@@ -58,7 +58,7 @@ if (!target) throw new Error('ViceMe target missing');
 
 const results = await Promise.allSettled([
   mountDanmaku(client, { target, theme: 'auto' }),
-  mountTip(client, { target, theme: 'auto' }),
+  mountTip(client, { target, theme: 'auto', presentation: 'integrated' }),
 ]);
 const mounted = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
 
@@ -68,6 +68,9 @@ client.destroy();
 
 Run those cleanup calls from the owning component's unmount path or another
 explicit lifecycle boundary, not from `pagehide` (which also covers bfcache).
+The integrated presentation uses the danmaku bar as its only visible launcher
+and opens the official Tip dialog. Standalone `mountTip()` remains inline by
+default.
 
 `createViceMe` and `ready()` are purely local and never contact Shop. A live client reports
 build support for `danmaku` and `tip`; Shop remains authoritative for whether a
@@ -120,10 +123,12 @@ scroll bucket, and sends only the opaque anchor to the hosted iframe. Destroying
 the mount removes its nodes, listeners, debounce timer, and location poll.
 
 The Tip mount sends no amount, provider, token, or application ID. It enables
-interaction only after a trusted resize handshake. Shop resets its hosted
-payment surface on Escape before sending close; the SDK forwards sanitized
-close and paid notifications, and removes its iframe, timer, media listener,
-and message listener on destroy.
+interaction only after a trusted resize handshake. In integrated mode it also
+accepts open requests only from the matching trusted danmaku controls, then
+restores focus there after close. Shop resets its hosted payment surface on
+Escape before sending close; the SDK forwards sanitized close and paid
+notifications, and removes its iframe, timer, media listener, and message
+listener on destroy.
 
 ## Headless Tip
 

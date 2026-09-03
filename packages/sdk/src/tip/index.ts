@@ -49,6 +49,8 @@ export interface TipClient {
 export interface TipMountOptions {
   target: Element;
   theme: 'light' | 'dark' | 'auto';
+  /** Keep Tip hidden until the matching danmaku bar opens its official dialog. */
+  presentation?: 'inline' | 'integrated';
   signal?: AbortSignal;
 }
 

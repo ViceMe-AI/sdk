@@ -3,6 +3,11 @@ import { BUILD_WIDGET_ORIGINS } from '../core/build-endpoints.ts';
 import { clientDestroyed, ViceMeError } from '../core/errors.ts';
 import type { CapabilityMountHandle, CapabilityMountOptions } from '../capability-mount.ts';
 import { SDK_VERSION } from '../version.ts';
+import {
+  hasIntegratedTip,
+  openIntegratedTip,
+  registerIntegratedDanmaku,
+} from '../engagement/integration.ts';
 import { readDanmakuPageAnchor, type DanmakuPageAnchor } from './anchor.ts';
 
 type DanmakuFrameMode = 'stage' | 'controls' | 'modal';
@@ -14,15 +19,25 @@ interface DanmakuBridgeMessage {
   mode?: unknown;
   width?: unknown;
   height?: unknown;
+  workKey?: unknown;
 }
 
 const CONTROLS_MIN_SIZE = 32;
+const CONTROLS_BOTTOM_GAP = 12;
 const CONTROLS_BAR_HEIGHT = 56;
 const CONTROLS_MAX_HEIGHT = 360;
-const CONTROLS_MAX_WIDTH = 480;
+const CONTROLS_LEGACY_MORE_HEIGHT = 328;
+const CONTROLS_MORE_HEIGHT = 340;
 const ANCHOR_DEBOUNCE_MS = 120;
 const LOCATION_POLL_MS = 1_000;
 export const FRAME_READY_TIMEOUT_MS = 8_000;
+const ENGAGEMENT_REQUEST_KEYS = ['source', 'action', 'workKey'];
+
+function isStrictRecord(value: unknown, keys: string[]): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const actualKeys = Object.keys(value);
+  return actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key));
+}
 
 export async function mount(
   client: ViceMeClient,
@@ -63,6 +78,7 @@ export async function mount(
   let modalAttempt = 0;
   let modalFrameToken = '';
   let modalReady = false;
+  let unregisterIntegration: (() => void) | undefined;
   const loadedFrames = new WeakSet<HTMLIFrameElement>();
   const readyModes = new Set<DanmakuFrameMode>();
 
@@ -138,16 +154,15 @@ export async function mount(
   );
   controls.style.left = '50%';
   controls.style.bottom = 'env(safe-area-inset-bottom, 0px)';
-  controls.style.maxWidth = `${CONTROLS_MAX_WIDTH}px`;
   controls.style.transform = 'translateX(-50%)';
-  let controlsRequestedWidth = CONTROLS_MAX_WIDTH;
+  let controlsCompact = false;
   let controlsRequestedHeight = CONTROLS_BAR_HEIGHT;
   const applyControlsSize = (): void => {
     const viewportWidth = Math.max(
       CONTROLS_MIN_SIZE,
-      Math.floor(windowObject.innerWidth || CONTROLS_MAX_WIDTH),
+      Math.floor(windowObject.innerWidth || CONTROLS_MIN_SIZE),
     );
-    controls.style.width = `${Math.min(controlsRequestedWidth, viewportWidth)}px`;
+    controls.style.width = `${controlsCompact ? CONTROLS_MIN_SIZE : viewportWidth}px`;
     controls.style.height = `${controlsRequestedHeight}px`;
   };
   applyControlsSize();
@@ -177,6 +192,17 @@ export async function mount(
     postAnchor(stage);
     postAnchor(controls);
     if (modal.getAttribute('src') !== 'about:blank') postAnchor(modal);
+  };
+  const postTipAvailability = (available: boolean): void => {
+    controls.contentWindow?.postMessage(
+      {
+        source: 'viceme-engagement',
+        action: 'tip-availability',
+        available,
+        workKey: client.workKey,
+      },
+      widgetOrigin,
+    );
   };
 
   const refreshAnchor = (): DanmakuPageAnchor => {
@@ -247,6 +273,19 @@ export async function mount(
     if (!fromStage && !fromControls && !fromModal) return;
 
     const message = event.data as DanmakuBridgeMessage | null;
+    if (
+      fromControls &&
+      isStrictRecord(message, ENGAGEMENT_REQUEST_KEYS) &&
+      message.source === 'viceme-engagement' &&
+      message.workKey === client.workKey
+    ) {
+      if (message.action === 'request-tip-availability') {
+        postTipAvailability(hasIntegratedTip(client, options.target));
+      } else if (message.action === 'open-tip' && initialFramesReady) {
+        openIntegratedTip(client, options.target);
+      }
+      return;
+    }
     if (!message || message.source !== 'viceme-danmaku') return;
 
     const sourceMode: DanmakuFrameMode = fromModal ? 'modal' : fromStage ? 'stage' : 'controls';
@@ -277,18 +316,25 @@ export async function mount(
     if (message.action === 'resize-controls' && fromControls) {
       if (
         typeof message.width !== 'number' ||
-        !Number.isInteger(message.width) ||
+        !Number.isSafeInteger(message.width) ||
         message.width < CONTROLS_MIN_SIZE ||
-        message.width > CONTROLS_MAX_WIDTH ||
         typeof message.height !== 'number' ||
-        !Number.isInteger(message.height) ||
+        !Number.isSafeInteger(message.height) ||
         message.height < CONTROLS_MIN_SIZE ||
         message.height > CONTROLS_MAX_HEIGHT
       ) {
         return;
       }
-      controlsRequestedWidth = message.width;
-      controlsRequestedHeight = message.height;
+      const compact =
+        message.width === CONTROLS_MIN_SIZE &&
+        message.height <= CONTROLS_MIN_SIZE + CONTROLS_BOTTOM_GAP;
+      if (!compact && message.height < CONTROLS_BAR_HEIGHT) return;
+      controlsCompact = compact;
+      controlsRequestedHeight = compact
+        ? CONTROLS_MIN_SIZE + CONTROLS_BOTTOM_GAP
+        : message.height === CONTROLS_LEGACY_MORE_HEIGHT
+          ? CONTROLS_MORE_HEIGHT
+          : message.height;
       applyControlsSize();
     }
     if (message.action === 'request-anchor') {
@@ -335,6 +381,8 @@ export async function mount(
     stage.removeEventListener('load', frameLoaded);
     controls.removeEventListener('load', frameLoaded);
     modal.removeEventListener('load', frameLoaded);
+    unregisterIntegration?.();
+    unregisterIntegration = undefined;
     options.signal?.removeEventListener('abort', onAbort);
     portal.remove();
   };
@@ -350,6 +398,11 @@ export async function mount(
     options.target.appendChild(portal);
     postAnchorToMountedFrames();
     await initialFrameReadiness;
+    if (destroyed || options.signal?.aborted) throw clientDestroyed();
+    unregisterIntegration = registerIntegratedDanmaku(client, options.target, {
+      focus: () => controls.focus(),
+      setTipAvailable: postTipAvailability,
+    });
   } catch (error) {
     cleanup();
     throw error;
