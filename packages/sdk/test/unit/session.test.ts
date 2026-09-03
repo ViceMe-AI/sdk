@@ -53,6 +53,57 @@ describe('SessionManager', () => {
     expect(transport.requests).toHaveLength(2);
   });
 
+  it.each(['invalidated', 'refreshed', 'expired', 'authenticated', 'destroyed'] as const)(
+    'rejects a login for a session that has been %s without overwriting its successor',
+    async (change) => {
+      let clock = 1_000;
+      const transport = createMemoryTransport({
+        work: { ...FIXTURE_WORK, expiresAt: 2_000 },
+      });
+      const session = new SessionManager({
+        workKey: 'wrk_test_demo',
+        transport,
+        now: () => clock,
+      });
+      const original = await session.establish();
+      const currentUser = {
+        userToken: 'current-user-token',
+        user: { subject: 'current-user', nickname: null, avatarUrl: null },
+      };
+      if (change === 'invalidated') session.invalidate();
+      if (change === 'refreshed') {
+        session.invalidate();
+        const refreshed = await session.establish();
+        // Equal token strings must not make different sessions interchangeable.
+        expect(refreshed.token).toBe(original.token);
+        session.authenticate(currentUser, refreshed);
+      }
+      if (change === 'expired') clock = 2_000;
+      if (change === 'authenticated') session.authenticate(currentUser, original);
+      if (change === 'destroyed') session.destroy();
+      const successor = session.snapshot;
+
+      expect(() =>
+        session.authenticate(
+          {
+            userToken: 'stale-user-token',
+            user: { subject: 'stale-user', nickname: null, avatarUrl: null },
+          },
+          original,
+        ),
+      ).toThrowError(
+        expect.objectContaining({
+          code: change === 'destroyed' ? 'CLIENT_DESTROYED' : 'SESSION_EXPIRED',
+        }),
+      );
+      expect(session.snapshot).toBe(successor);
+      if (change === 'refreshed' || change === 'authenticated') {
+        expect(session.snapshot).toMatchObject(currentUser);
+      }
+      session.destroy();
+    },
+  );
+
   it('reuses a snapshot that has not expired', async () => {
     let clock = 1_000_000;
     const transport = createMemoryTransport({

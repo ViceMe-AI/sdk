@@ -365,8 +365,9 @@ export function createCapabilities(deps: CapabilityDeps): {
       parentOrigin: window.location.origin,
       locale: resolveLocale(),
     }).toString();
-    const workSessionToken = deps.session.snapshot?.token;
-    if (!workSessionToken) throw malformedResponse();
+    const workSession = deps.session.snapshot;
+    const workSessionToken = workSession?.token;
+    if (!workSession || !workSessionToken) throw malformedResponse();
     return embeddedFrame(
       authorizationUrl.toString(),
       deps.widgetOrigin,
@@ -377,7 +378,10 @@ export function createCapabilities(deps: CapabilityDeps): {
         if (typeof data.userToken !== 'string') {
           throw malformedResponse();
         }
-        deps.session.authenticate({ userToken: data.userToken, user: parseUser(data.user) });
+        deps.session.authenticate(
+          { userToken: data.userToken, user: parseUser(data.user) },
+          workSession,
+        );
       },
     );
   };

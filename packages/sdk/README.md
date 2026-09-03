@@ -93,6 +93,11 @@ Calling `client.destroy()` cancels in-flight access requests, closes the active
 SDK-owned sign-in or checkout layer, and rejects the interrupted call with
 `CLIENT_DESTROYED`; late responses cannot restore the in-memory Work token.
 
+Login completion belongs to the Work session that opened its frame. After
+sign-out, expiry, refresh, or another completed login replaces that session,
+the old action reports retryable `SESSION_EXPIRED` and preserves the current
+user. The access layer permits a new sign-in action to retry.
+
 The current Website Access release accepts any valid HTTP(S) host Origin and
 does not require DNS TXT verification. Session tokens remain bound to the
 Origin observed when they were issued, but that Origin is not compared with a

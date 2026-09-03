@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { createTestViceMe } from '../../src/testing.ts';
-import type { AccessPresenter } from '../../src/core/presentation.ts';
+import type { AccessFrameAction, AccessPresenter } from '../../src/core/presentation.ts';
 import type {
   Transport,
   TransportRequest,
@@ -370,6 +370,59 @@ describe('website access capabilities', () => {
       authenticated: true,
       user: { nickname: 'Visitor' },
     });
+  });
+
+  it('does not restore user authorization from a login completed after sign-out', async () => {
+    let loginFrame!: AccessFrameAction;
+    const presenter: AccessPresenter = async (interaction) => {
+      const action = await interaction.perform();
+      if (action.type !== 'frame') throw new Error('expected sign-in frame');
+      loginFrame = action;
+      await action.completion;
+      return 'acted';
+    };
+    const transport = capabilityTransport();
+    const client = createTestViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      transport,
+      presenter,
+    });
+    const login = client.auth.signIn();
+    // Attach before delivering the late completion so rejection stays handled.
+    const result = login.then(
+      (state) => state,
+      (error: unknown) => error,
+    );
+    try {
+      await vi.waitFor(() => expect(loginFrame).toBeDefined());
+      await client.auth.signOut();
+      // The transport deliberately reissues the same token string: ownership
+      // belongs to the session instance, not equality of credential bytes.
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: 'https://viceme.cn',
+          data: {
+            type: 'viceme:auth:complete',
+            workKey: 'wrk_test_demo',
+            channel: new URL(loginFrame.url).searchParams.get('channel'),
+            userToken: 'stale-user-token',
+            user: { id: 'old-user', displayName: 'Old visitor', avatarUrl: null },
+          },
+        }),
+      );
+
+      expect(await result).toMatchObject({ code: 'SESSION_EXPIRED', retryable: true });
+      await expect(client.auth.getState()).resolves.toEqual({ authenticated: false, user: null });
+      await expect(client.access.check('followed')).resolves.toMatchObject({
+        allowed: false,
+        reason: 'AUTH_REQUIRED',
+      });
+      expect(transport.requests.at(-1)?.userAuthorization).toBeUndefined();
+    } finally {
+      loginFrame?.cancel();
+      client.destroy();
+    }
   });
 
   it('destroy closes an active sign-in surface and rejects the caller as destroyed', async () => {
