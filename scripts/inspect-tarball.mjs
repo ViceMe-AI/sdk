@@ -153,6 +153,8 @@ try {
   if (!manifest.files['testing.js']?.sha256) throw new Error('manifest missing testing.js digest');
   if (manifest.features?.danmaku !== 'danmaku.js' || manifest.features?.tip !== 'tip.js')
     throw new Error('manifest missing hosted features');
+  if (manifest.integrations?.engagement !== 'danmaku-tip-v1')
+    throw new Error('manifest missing integrated engagement support');
 
   console.log(`tarball audit passed (${entries.length} entries, ${output.trim()})`);
 } finally {

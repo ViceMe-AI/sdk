@@ -4,6 +4,8 @@ export interface CapabilityMountOptions {
   /** Mount host element; the capability owns its Shadow DOM subtree. */
   target: Element;
   theme: 'light' | 'dark' | 'auto';
+  /** Use the shared danmaku controls as the visible Tip launcher. */
+  presentation?: 'inline' | 'integrated';
   /** Abort a mount that has not completed and destroy it after completion. */
   signal?: AbortSignal;
 }

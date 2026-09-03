@@ -458,6 +458,9 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
           target: host,
           theme: attributes.theme,
           signal: controller.signal,
+          ...(capability === 'tip' && attributes.features.includes('danmaku')
+            ? { presentation: 'integrated' as const }
+            : {}),
         })) as CapabilityMountHandle;
       })();
       const raw = await withCapabilityDeadline(operation, controller, capability);

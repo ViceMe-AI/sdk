@@ -4,6 +4,7 @@ import { clientDestroyed, ViceMeError } from '../core/errors.ts';
 import { dispatchViceMeEvent } from '../browser-events.ts';
 import type { CapabilityMountHandle, CapabilityMountOptions } from '../capability-mount.ts';
 import { isValidTipWorkTitle } from './validation.ts';
+import { focusIntegratedDanmaku, registerIntegratedTip } from '../engagement/integration.ts';
 
 type WidgetAppearance = 'light' | 'dark';
 
@@ -58,6 +59,7 @@ export async function mount(
   }
 
   const widgetOrigin = BUILD_WIDGET_ORIGINS[client.region];
+  const integrated = options.presentation === 'integrated';
   const mediaQuery =
     options.theme === 'auto' ? windowObject.matchMedia('(prefers-color-scheme: dark)') : undefined;
   let appearance: WidgetAppearance =
@@ -65,19 +67,29 @@ export async function mount(
   let destroyed = false;
   let readyTimer: number | undefined;
   let boundWork: { id: string; title: string } | undefined;
+  let opened = false;
+  let unregisterIntegration: (() => void) | undefined;
 
   const portal = documentObject.createElement('div');
   portal.dataset.vicemeTip = 'mounted';
   portal.style.all = 'initial';
-  portal.style.display = 'block';
+  portal.style.display = integrated ? 'none' : 'block';
   portal.style.width = '100%';
   portal.style.maxWidth = '100%';
-  portal.style.contain = 'layout style';
+  portal.style.contain = integrated ? 'layout style size' : 'layout style';
+  if (integrated) {
+    portal.style.position = 'fixed';
+    portal.style.inset = '0';
+    portal.style.height = '100%';
+    portal.style.pointerEvents = 'none';
+    portal.style.zIndex = '2147483001';
+  }
 
   const shadow = portal.attachShadow({ mode: 'open' });
   const frame = documentObject.createElement('iframe');
   const frameUrl = new URL(`/widget/tip/${encodeURIComponent(client.workKey)}`, widgetOrigin);
   frameUrl.searchParams.set('appearance', appearance);
+  if (integrated) frameUrl.searchParams.set('mode', 'dialog');
   frame.title = 'ViceMe Tip';
   frame.src = frameUrl.toString();
   frame.loading = 'eager';
@@ -90,13 +102,35 @@ export async function mount(
   frame.style.boxSizing = 'border-box';
   frame.style.display = 'block';
   frame.style.width = '100%';
-  frame.style.height = '0px';
+  frame.style.height = integrated ? '100%' : '0px';
   frame.style.margin = '0';
   frame.style.border = '0';
   frame.style.background = 'transparent';
   frame.style.colorScheme = appearance;
   frame.style.pointerEvents = 'none';
   shadow.append(frame);
+
+  const openIntegrated = (): void => {
+    if (destroyed || !boundWork) return;
+    opened = true;
+    portal.style.display = 'block';
+    portal.style.pointerEvents = 'auto';
+    frame.style.pointerEvents = 'auto';
+    frame.contentWindow?.postMessage(
+      { type: 'viceme:widget-open', workId: boundWork.id },
+      widgetOrigin,
+    );
+  };
+
+  const hideIntegrated = (restoreFocus: boolean): void => {
+    if (!integrated) return;
+    const wasOpen = opened;
+    opened = false;
+    portal.style.display = 'none';
+    portal.style.pointerEvents = 'none';
+    frame.style.pointerEvents = 'none';
+    if (restoreFocus && wasOpen) focusIntegratedDanmaku(client, options.target);
+  };
 
   let resolveReady: (() => void) | undefined;
   let rejectReady: ((error: ViceMeError) => void) | undefined;
@@ -136,10 +170,10 @@ export async function mount(
       ) {
         return;
       }
-      frame.style.height = `${message.height}px`;
+      if (!integrated) frame.style.height = `${message.height}px`;
       if (boundWork === undefined) {
         boundWork = { id: message.workId, title: message.work.title };
-        frame.style.pointerEvents = 'auto';
+        if (!integrated) frame.style.pointerEvents = 'auto';
         if (readyTimer !== undefined) {
           windowObject.clearTimeout(readyTimer);
           readyTimer = undefined;
@@ -151,6 +185,7 @@ export async function mount(
 
     if (isStrictRecord(message, CLOSE_MESSAGE_KEYS) && message.type === 'viceme:widget-close') {
       if (typeof message.workId !== 'string' || message.workId !== boundWork?.id) return;
+      hideIntegrated(true);
       dispatchViceMeEvent(options.target, 'viceme:widget-close', { workId: message.workId });
       return;
     }
@@ -200,6 +235,11 @@ export async function mount(
     if (readyTimer !== undefined) windowObject.clearTimeout(readyTimer);
     windowObject.removeEventListener('message', onMessage);
     removeAppearanceListener?.();
+    const restoreFocus = opened;
+    hideIntegrated(false);
+    unregisterIntegration?.();
+    unregisterIntegration = undefined;
+    if (restoreFocus) focusIntegratedDanmaku(client, options.target);
     options.signal?.removeEventListener('abort', onAbort);
     portal.remove();
   };
@@ -220,6 +260,12 @@ export async function mount(
     if (options.signal?.aborted) throw clientDestroyed();
     options.target.appendChild(portal);
     await readiness;
+    if (destroyed || options.signal?.aborted) throw clientDestroyed();
+    if (integrated) {
+      unregisterIntegration = registerIntegratedTip(client, options.target, {
+        open: openIntegrated,
+      });
+    }
   } catch (error) {
     cleanup();
     throw error;

@@ -185,6 +185,10 @@ check(
     JSON.stringify({ danmaku: 'danmaku.js', tip: 'tip.js' }),
   'production manifest must declare exactly danmaku.js and tip.js',
 );
+check(
+  manifest.integrations?.engagement === 'danmaku-tip-v1',
+  'production manifest must declare integrated danmaku and Tip support',
+);
 
 const loaderSource = await readFile(join(distDir, 'viceme.min.js'), 'utf8');
 check(!loaderSource.includes('index.js'), 'loader must inline core instead of requesting index.js');
