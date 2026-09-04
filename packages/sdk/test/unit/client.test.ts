@@ -4,10 +4,45 @@ import { createViceMe } from '../../src/index.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('ViceMeClient', () => {
+  it('does not cache a Work session cancelled after its body parsed', async () => {
+    const controller = new AbortController();
+    const reason = new Error('Route disposed');
+    const response = new Response(
+      JSON.stringify({
+        workKey: 'wrk_test_demo',
+        token: 'test-session-token',
+        capabilities: ['checkout'],
+      }),
+    );
+    const readJson = response.json.bind(response);
+    vi.spyOn(response, 'json').mockImplementation(() => {
+      const parsed = readJson();
+      void parsed.then(() => controller.abort(reason));
+      return parsed;
+    });
+    const fetchMock = vi.fn(async () => response);
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      signal: controller.signal,
+    });
+
+    try {
+      await expect(client.auth.getState()).rejects.toBe(reason);
+      expect(client.hasCapability('checkout')).toBe(false);
+      await expect(client.auth.getState()).rejects.toBe(reason);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      client.destroy();
+    }
+  });
+
   it('initializes locally without reaching the network', async () => {
     const fetchMock = vi.fn(() => {
       throw new Error('unexpected network request');

@@ -58,6 +58,7 @@ const manifest = {
   apiMajor: readApiMajor(sdkDir),
   loader: 'viceme.min.js',
   features: {},
+  integrations: { engagement: 'danmaku-tip-v1' },
   files: {},
 };
 

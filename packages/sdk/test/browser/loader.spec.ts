@@ -112,7 +112,8 @@ async function mockHostedDanmaku(page: Page, options: HostedDanmakuOptions = {})
             <button id="interact" type="button">interact</button>
             <button id="collapse" type="button">collapse</button>
             <button id="expand" type="button">expand</button>
-            <button id="more" type="button">more</button>
+             <button id="more" type="button">more</button>
+             <button id="tip" type="button" hidden>tip</button>
           </div>
           <script>
             const mode = ${JSON.stringify(mode)};
@@ -130,6 +131,15 @@ async function mockHostedDanmaku(page: Page, options: HostedDanmakuOptions = {})
               matchMedia('(prefers-reduced-motion: reduce)').matches,
             );
             window.addEventListener('message', (event) => {
+              if (
+                event.data?.source === 'viceme-engagement' &&
+                event.data.action === 'tip-availability' &&
+                event.data.workKey === 'wrk_test_demo' &&
+                typeof event.data.available === 'boolean'
+              ) {
+                document.querySelector('#tip').hidden = !event.data.available;
+                return;
+              }
               if (event.data?.source !== 'viceme-danmaku') return;
               if (event.data.action === 'anchor-change') {
                 document.body.dataset.anchor = event.data.anchorKey;
@@ -146,6 +156,13 @@ async function mockHostedDanmaku(page: Page, options: HostedDanmakuOptions = {})
             document.querySelector('#more')?.addEventListener('click', () => {
               setState(document.body.dataset.state === 'more' ? 'expanded' : 'more');
             });
+            document.querySelector('#tip')?.addEventListener('click', () => {
+              parent.postMessage({
+                source: 'viceme-engagement',
+                action: 'open-tip',
+                workKey: 'wrk_test_demo',
+              }, '*');
+            });
             window.addEventListener('keydown', (event) => {
               if (event.key === 'Escape') {
                 emit({ action: 'close-modal' });
@@ -159,6 +176,13 @@ async function mockHostedDanmaku(page: Page, options: HostedDanmakuOptions = {})
                 mode,
                 ...(mode === 'modal' ? { frameToken: ${JSON.stringify(frameToken)} } : {}),
               });
+              if (mode === 'controls') {
+                parent.postMessage({
+                  source: 'viceme-engagement',
+                  action: 'request-tip-availability',
+                  workKey: 'wrk_test_demo',
+                }, '*');
+              }
             };
             if (${JSON.stringify(sendsReady)}) {
               setTimeout(announceReady, ${JSON.stringify(options.readyDelayMs ?? 0)});
@@ -251,13 +275,19 @@ async function mockHostedTip(page: Page, options: HostedTipOptions = {}) {
 }
 
 function releaseManifest(
-  overrides: Partial<{ version: string; apiMajor: number; features: Record<string, string> }> = {},
+  overrides: Partial<{
+    version: string;
+    apiMajor: number;
+    features: Record<string, string>;
+    integrations: Record<string, string>;
+  }> = {},
 ): string {
   return JSON.stringify({
     version: SDK_VERSION,
     apiMajor: API_MAJOR,
     loader: 'viceme.min.js',
     features: { danmaku: 'danmaku.js', tip: 'tip.js' },
+    integrations: { engagement: 'danmaku-tip-v1' },
     ...overrides,
   });
 }
@@ -455,7 +485,7 @@ test.describe('PUBLIC-only hosted danmaku loader', () => {
 });
 
 test.describe('hosted engagement loader', () => {
-  test('mounts danmaku and Tip independently from one normalized declaration', async ({ page }) => {
+  test('mounts danmaku and Tip as one integrated interaction bar', async ({ page }) => {
     const requests = recordRequests(page);
     const danmaku = await mockHostedDanmaku(page);
     const tip = await mockHostedTip(page);
@@ -486,12 +516,16 @@ test.describe('hosted engagement loader', () => {
       .frames()
       .find((frame) => new URL(frame.url(), page.url()).pathname.startsWith('/widget/tip/'));
     if (!tipFrame) throw new TypeError('Tip frame missing');
-    expect(new URL(tipFrame.url()).searchParams.get('mode')).toBeNull();
+    expect(new URL(tipFrame.url()).searchParams.get('mode')).toBe('dialog');
+    const controls = await waitForFrameMode(page, 'controls');
+    await controls.locator('#tip').click();
+    await expect(page.locator('[data-viceme-tip="mounted"]')).toHaveCSS('display', 'block');
     await tipFrame.locator('#open').click();
     await expect(tipFrame.locator('#payment-surface')).toBeVisible();
     await tipFrame.locator('#paid').click();
     await tipFrame.locator('body').press('Escape');
     await expect(tipFrame.locator('#payment-surface')).toBeHidden();
+    await expect(page.locator('[data-viceme-tip="mounted"]')).toHaveCSS('display', 'none');
     await waitForEvent(page, 'viceme:tip-paid');
     const paidEvents = await waitForEvent(page, 'viceme:widget-close');
     expect(paidEvents.find((event) => event.type === 'viceme:tip-paid')?.detail).toEqual({
@@ -1004,9 +1038,7 @@ test.describe('host interaction, anchors, and hosted accessibility boundary', ()
       .toBe('auto');
   });
 
-  test('uses tight collapsed, expanded, and more hit regions without blocking the old rectangle', async ({
-    page,
-  }) => {
+  test('fills the bottom bar and keeps collapsed and more controls unclipped', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await mockHostedDanmaku(page);
     await page.goto('/pages/loader-static.html');
@@ -1016,7 +1048,7 @@ test.describe('host interaction, anchors, and hosted accessibility boundary', ()
     const controlsElement = page.locator(
       '[data-viceme-danmaku="mounted"] iframe[data-mode="controls"]',
     );
-    await expectFrameSize(controlsElement, 480, 56);
+    await expectFrameSize(controlsElement, 1280, 56);
 
     await controls.locator('#interact').click();
     await expect(controls.locator('body')).toHaveAttribute('data-interacted', 'true');
@@ -1035,13 +1067,13 @@ test.describe('host interaction, anchors, and hosted accessibility boundary', ()
     await expect(page.locator('#host-through-status')).toHaveText('clicked');
 
     await controls.locator('#collapse').click();
-    await expectFrameSize(controlsElement, 32, 32);
+    await expectFrameSize(controlsElement, 32, 44);
     await controls.locator('#expand').press('Enter');
-    await expectFrameSize(controlsElement, 480, 56);
+    await expectFrameSize(controlsElement, 1280, 56);
     await controls.locator('#more').click();
-    await expectFrameSize(controlsElement, 352, 328);
+    await expectFrameSize(controlsElement, 1280, 340);
     await controls.locator('#more').click();
-    await expectFrameSize(controlsElement, 480, 56);
+    await expectFrameSize(controlsElement, 1280, 56);
 
     await page.setViewportSize({ width: 375, height: 720 });
     await expectFrameSize(controlsElement, 375, 56);

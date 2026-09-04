@@ -145,7 +145,8 @@ describe('danmaku mount', () => {
     expect(frames[0]?.referrerPolicy).toBe('no-referrer');
     expect(frames[1]?.title).toBe('ViceMe Danmaku controls');
     expect(frames[1]?.style.pointerEvents).toBe('auto');
-    expect(frames[1]?.style.maxWidth).toBe('480px');
+    expect(frames[1]?.style.maxWidth).toBe('');
+    expect(frames[1]?.style.width).toBe(`${window.innerWidth}px`);
     expect(frames[1]?.style.height).toBe('56px');
     expect(frames[2]?.getAttribute('src')).toBe('about:blank');
     expect(frames[2]?.dataset.src).toContain('mode=modal');
@@ -227,7 +228,7 @@ describe('danmaku mount', () => {
     handle.destroy();
   });
 
-  it('opens, resizes, and closes the hosted modal only for validated frame messages', async () => {
+  it('fills the viewport, preserves collapsed clearance, and opens the hosted modal', async () => {
     const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
     vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (
       this: HTMLIFrameElement,
@@ -270,11 +271,19 @@ describe('danmaku mount', () => {
 
     frameMessage(controls, {
       action: 'resize-controls',
+      width: 32,
+      height: 32,
+    });
+    expect(controls.style.width).toBe('32px');
+    expect(controls.style.height).toBe('44px');
+
+    frameMessage(controls, {
+      action: 'resize-controls',
       width: 352,
       height: 328,
     });
-    expect(controls.style.width).toBe('352px');
-    expect(controls.style.height).toBe('328px');
+    expect(controls.style.width).toBe(`${window.innerWidth}px`);
+    expect(controls.style.height).toBe('340px');
 
     window.dispatchEvent(
       new MessageEvent('message', {

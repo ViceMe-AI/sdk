@@ -1,6 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFetchTransport } from '../../src/transport/transport.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 function fakeResponse(init: { status?: number; body?: unknown; headers?: Record<string, string> }) {
   return {
@@ -14,6 +19,59 @@ function fakeResponse(init: { status?: number; body?: unknown; headers?: Record<
 }
 
 describe('FetchTransport', () => {
+  it.each([200, 401])(
+    'honors caller cancellation after an HTTP %i body has already parsed',
+    async (status) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const reason = new Error('Host stopped waiting');
+      const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+      const response = new Response(JSON.stringify({ ok: true }), { status });
+      const readJson = response.json.bind(response);
+      vi.spyOn(response, 'json').mockImplementation(() => {
+        const parsed = readJson();
+        // Parsing can finish before the transport's await continuation runs.
+        // Aborting at that boundary cannot reject the already fulfilled body.
+        void parsed.then(() => controller.abort(reason));
+        return parsed;
+      });
+      const transport = createFetchTransport({
+        apiBaseUrl: 'https://api.viceme.cn',
+        fetchImpl: vi.fn(async () => response),
+      });
+
+      await expect(
+        transport.request({ method: 'GET', path: '/test', signal: controller.signal }),
+      ).rejects.toBe(reason);
+      expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('honors a deadline reached after parsing but before delivering the response', async () => {
+    vi.useFakeTimers();
+    const response = new Response(JSON.stringify({ ok: true }));
+    const readJson = response.json.bind(response);
+    vi.spyOn(response, 'json').mockImplementation(() => {
+      const parsed = readJson();
+      void parsed.then(() => vi.advanceTimersByTime(10));
+      return parsed;
+    });
+    const transport = createFetchTransport({
+      apiBaseUrl: 'https://api.viceme.cn',
+      fetchImpl: vi.fn(async () => response),
+      defaultTimeoutMs: 10,
+      generateRequestId: () => 'deadline-request',
+    });
+
+    await expect(transport.request({ method: 'GET', path: '/test' })).rejects.toMatchObject({
+      code: 'NETWORK_TIMEOUT',
+      retryable: true,
+      requestId: 'deadline-request',
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('sends a JSON POST with client request id and omits credentials', async () => {
     const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) =>
       fakeResponse({ status: 200, body: { ok: true } }),

@@ -3,6 +3,7 @@ import {
   defaultAccessPresenter,
   type AccessActionResult,
   type AccessFrameAction,
+  type AccessInteraction,
   type AccessPresenter,
 } from './presentation.ts';
 import type { SessionManager, WorkUser } from '../session/session.ts';
@@ -396,6 +397,24 @@ export function createCapabilities(deps: CapabilityDeps): {
     );
   };
 
+  const signInPresentation = (): Pick<AccessInteraction, 'followTarget' | 'work'> => {
+    const descriptor = deps.session.snapshot?.work;
+    return {
+      ...(descriptor?.creator
+        ? {
+            followTarget: {
+              kind: 'CREATOR' as const,
+              displayName: descriptor.creator.displayName,
+              avatarUrl: descriptor.creator.avatarUrl,
+              description: null,
+              workCount: descriptor.creator.publishedWorkCount,
+            },
+          }
+        : {}),
+      ...(descriptor?.details ? { work: descriptor.details } : {}),
+    };
+  };
+
   const auth: AuthCapability = {
     async getState() {
       await deps.ready();
@@ -403,10 +422,12 @@ export function createCapabilities(deps: CapabilityDeps): {
       return { authenticated: user !== null, user };
     },
     async signIn() {
+      await deps.ready();
       const result = await present({
         featureKey: 'auth',
         reason: 'AUTH_REQUIRED',
         action: 'SIGN_IN',
+        ...signInPresentation(),
         perform: startSignIn,
       });
       if (result === 'dismissed') throw cancelled();
@@ -645,7 +666,11 @@ export function createCapabilities(deps: CapabilityDeps): {
           featureKey,
           reason: decision.reason,
           action: nextAction,
-          ...(followTarget ? { followTarget } : {}),
+          ...(nextAction === 'SIGN_IN'
+            ? signInPresentation()
+            : followTarget
+              ? { followTarget }
+              : {}),
           perform: async () => {
             if (nextAction === 'SIGN_IN') {
               return startSignIn();

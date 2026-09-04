@@ -51,8 +51,10 @@ fail closed without mounting.
 
 The loader reads its same-release `manifest.json`, loads only the requested
 `danmaku.js` and/or `tip.js` plus manifest-referenced `chunks/*.js`, then mounts
-each capability independently. Repeating the same work, feature, and target
-reuses the existing client and mount.
+each capability independently. When both features share one target, Tip stays
+inside the danmaku interaction bar and opens the official full-screen dialog;
+no second inline Tip card is rendered. Repeating the same work, feature, and
+target reuses the existing client and mount.
 
 Static CDN entry points always include the exact immutable SDK version:
 
@@ -89,7 +91,7 @@ if (!target) throw new Error('ViceMe target missing');
 
 const results = await Promise.allSettled([
   mountDanmaku(client, { target, theme: 'auto' }),
-  mountTip(client, { target, theme: 'auto' }),
+  mountTip(client, { target, theme: 'auto', presentation: 'integrated' }),
 ]);
 const mounted = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
 
@@ -102,6 +104,10 @@ function unmountViceMe() {
 Call `unmountViceMe()` when the owning component unmounts or an explicit widget
 lifecycle ends. Do not bind cleanup to `pagehide`; that event also fires for
 pages entering the back/forward cache.
+
+`presentation: 'integrated'` requires the same client and exact target used by
+`mountDanmaku()`. The default `mountTip()` presentation remains inline for a
+standalone Tip. Destroying either handle does not destroy the other capability.
 
 `createViceMe({ workKey, region })` validates configuration and initializes a
 local lifecycle only. It performs no network request. Use the selected public
@@ -234,6 +240,11 @@ but does not request or render recent work covers.
 `client.destroy()` cancels in-flight Website Access requests, closes an active
 SDK-owned sign-in or checkout layer, and rejects the interrupted call with
 `CLIENT_DESTROYED`; no late session response can restore the in-memory token.
+Request cancellation and timeouts remain effective until the parsed response is
+delivered. Cancelling the client's optional `signal` preserves the caller's
+`Error` reason; a request timeout rejects with retryable `NETWORK_TIMEOUT`.
+A cancelled response cannot establish a Work session even if its body has
+already finished parsing.
 
 ## Public Surface
 
@@ -287,11 +298,13 @@ Website Access transports and presenters; the scoped Tip entry is an isolated
   endpoint directly.
 - The Tip mount uses `strict-origin` referrer policy and stays non-interactive
   until `/widget/tip/<workKey>` proves its Work identity through a trusted resize
-  message. Shop owns confirmation, payment, risk, provider, amount, and Escape
-  close state; it resets the hosted payment surface before emitting close. The
-  observed parent Origin is attribution, not a payment gate. The SDK validates
-  and redispatches that close notification but does not require a host-page
-  listener for the default close behavior.
+  message. Integrated Tip stays hidden until the matching trusted danmaku
+  controls request it, and restores focus to those controls after close. Shop
+  owns confirmation, payment, risk, provider, amount, and Escape close state; it
+  resets the hosted payment surface before emitting close. The observed parent
+  Origin is attribution, not a payment gate. The SDK validates and redispatches
+  that close notification but does not require a host-page listener for the
+  default close behavior.
 
 ## Development
 

@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 1.1.0, sha256 f0401296acb1aa2e…)
+ * (contractVersion 1.1.0, sha256 3d47b98df66dbbb8…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -141,6 +141,20 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
             capabilities: ("danmaku" | "tip" | "access" | "follow" | "checkout")[];
+            creator: components["schemas"]["AccessCreator"];
+            work: components["schemas"]["AccessWork"];
+        };
+        AccessCreator: {
+            displayName: string;
+            /** Format: uri */
+            avatarUrl: string | null;
+            publishedWorkCount: number;
+        };
+        AccessWork: {
+            title: string;
+            summary: string;
+            /** Format: uri */
+            coverUrl: string | null;
         };
         Creator: {
             /** Format: uuid */

@@ -181,6 +181,11 @@ export class FetchTransport implements Transport {
         body = undefined;
       }
 
+      // A fulfilled body promise cannot be rejected by abort(). Recheck before
+      // delivering it so cancellation between parsing and this continuation
+      // cannot turn into a successful request or a cached Work session.
+      if (controller.signal.aborted) throw controller.signal.reason;
+
       const serverRequestId = response.headers.get('x-request-id') ?? undefined;
       if (!response.ok) {
         const parsed = parseErrorBody(body);
