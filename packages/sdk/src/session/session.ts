@@ -22,6 +22,20 @@ export interface WorkDescriptor {
   key: string;
   /** Capability names enabled for this work. */
   capabilities: string[];
+  creator?: WorkCreatorDescriptor;
+  details?: WorkPresentationDescriptor;
+}
+
+export interface WorkCreatorDescriptor {
+  displayName: string;
+  avatarUrl: string | null;
+  publishedWorkCount: number;
+}
+
+export interface WorkPresentationDescriptor {
+  title: string;
+  summary: string;
+  coverUrl: string | null;
 }
 
 export interface WorkSessionSnapshot {
@@ -74,6 +88,33 @@ function parseSessionResponse(body: unknown, workKey: string): WorkSessionSnapsh
       capabilities: raw.capabilities as string[],
     },
   };
+  if (raw.creator !== undefined || raw.work !== undefined) {
+    const creator = record(raw.creator);
+    const work = record(raw.work);
+    if (
+      typeof creator.displayName !== 'string' ||
+      creator.displayName.length === 0 ||
+      !nullableUrl(creator.avatarUrl) ||
+      !Number.isInteger(creator.publishedWorkCount) ||
+      (creator.publishedWorkCount as number) < 0 ||
+      typeof work.title !== 'string' ||
+      work.title.length === 0 ||
+      typeof work.summary !== 'string' ||
+      !nullableUrl(work.coverUrl)
+    ) {
+      throw malformedSessionResponse();
+    }
+    snapshot.work.creator = {
+      displayName: creator.displayName,
+      avatarUrl: creator.avatarUrl as string | null,
+      publishedWorkCount: creator.publishedWorkCount as number,
+    };
+    snapshot.work.details = {
+      title: work.title,
+      summary: work.summary,
+      coverUrl: work.coverUrl as string | null,
+    };
+  }
   // Unknown extra fields are allowed and ignored (forward compatibility).
   if (typeof raw.token === 'string') snapshot.token = raw.token;
   if (typeof raw.expiresAt === 'string') {
@@ -81,6 +122,22 @@ function parseSessionResponse(body: unknown, workKey: string): WorkSessionSnapsh
     if (!Number.isNaN(expiresAt)) snapshot.expiresAt = expiresAt;
   }
   return snapshot;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) throw malformedSessionResponse();
+  return value as Record<string, unknown>;
+}
+
+function nullableUrl(value: unknown): value is string | null {
+  if (value === null) return true;
+  if (typeof value !== 'string') return false;
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function malformedSessionResponse(): ViceMeError {

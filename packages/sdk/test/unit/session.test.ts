@@ -29,6 +29,38 @@ describe('SessionManager', () => {
     void transport;
   });
 
+  it('keeps creator and current Work presentation from the session response', async () => {
+    const transport = {
+      async request() {
+        return {
+          status: 201,
+          body: {
+            workKey: 'wrk_test_demo',
+            capabilities: ['access'],
+            creator: {
+              displayName: '归藏',
+              avatarUrl: 'https://cdn.example.com/avatar.jpg',
+              publishedWorkCount: 12,
+            },
+            work: {
+              title: 'AI 创作工具',
+              summary: '帮助创作者构建高质量内容。',
+              coverUrl: null,
+            },
+          },
+        };
+      },
+    };
+    const session = new SessionManager({ workKey: 'wrk_test_demo', transport });
+
+    await expect(session.establish()).resolves.toMatchObject({
+      work: {
+        creator: { displayName: '归藏', publishedWorkCount: 12 },
+        details: { title: 'AI 创作工具', coverUrl: null },
+      },
+    });
+  });
+
   it('rejects when response work key differs from requested', async () => {
     const mismatched = {
       async request() {

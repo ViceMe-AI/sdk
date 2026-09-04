@@ -30,6 +30,16 @@ function capabilityTransport(
             capabilities: ['access', 'follow', 'checkout'],
             token: 'anonymous-work-token',
             expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            creator: {
+              displayName: '归藏',
+              avatarUrl: 'https://cdn.example.com/creator.jpg',
+              publishedWorkCount: 2,
+            },
+            work: {
+              title: 'AI 创作工具',
+              summary: '帮助创作者构建高质量内容。',
+              coverUrl: 'https://cdn.example.com/work.jpg',
+            },
           },
         };
       }
@@ -142,6 +152,15 @@ describe('website access capabilities', () => {
       actions.push(interaction.action);
       const action = await interaction.perform();
       if (interaction.action === 'SIGN_IN') {
+        expect(interaction.followTarget).toMatchObject({
+          displayName: '归藏',
+          workCount: 2,
+        });
+        expect(interaction.work).toEqual({
+          title: 'AI 创作工具',
+          summary: '帮助创作者构建高质量内容。',
+          coverUrl: 'https://cdn.example.com/work.jpg',
+        });
         if (action.type !== 'frame') throw new Error('expected sign-in frame');
         const url = new URL(action.url);
         window.dispatchEvent(

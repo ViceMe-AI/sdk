@@ -109,7 +109,9 @@ Website access login renders the work-bound WeChat QR code directly in the SDK
 layer. Paid access keeps desktop QR payment and WeChat JSAPI in that layer;
 mobile H5/WAP payment may open a provider page or app. The original page polls
 the server-authoritative access decision and closes the layer after entitlement
-is active. This behavior does not change the separate Tip Widget flow.
+is active. Before login, the consent layer shows only the creator avatar,
+display name, published Work count, and the current Work title, summary, and
+cover. This behavior does not change the separate Tip Widget flow.
 
 ```ts
 const decisions = await client.access.checkMany(['members', 'pro-tools']);

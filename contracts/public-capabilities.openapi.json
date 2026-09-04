@@ -233,7 +233,7 @@
       "WorkSession": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["workKey", "token", "expiresAt", "capabilities"],
+        "required": ["workKey", "token", "expiresAt", "capabilities", "creator", "work"],
         "properties": {
           "workKey": { "$ref": "#/components/schemas/WorkKey" },
           "token": { "type": "string" },
@@ -244,7 +244,29 @@
               "type": "string",
               "enum": ["danmaku", "tip", "access", "follow", "checkout"]
             }
-          }
+          },
+          "creator": { "$ref": "#/components/schemas/AccessCreator" },
+          "work": { "$ref": "#/components/schemas/AccessWork" }
+        }
+      },
+      "AccessCreator": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["displayName", "avatarUrl", "publishedWorkCount"],
+        "properties": {
+          "displayName": { "type": "string" },
+          "avatarUrl": { "type": ["string", "null"], "format": "uri" },
+          "publishedWorkCount": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "AccessWork": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "summary", "coverUrl"],
+        "properties": {
+          "title": { "type": "string" },
+          "summary": { "type": "string" },
+          "coverUrl": { "type": ["string", "null"], "format": "uri" }
         }
       },
       "Creator": {

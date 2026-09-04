@@ -24,6 +24,54 @@ test.beforeAll(async () => {
   presentationBundle = chunk.code;
 });
 
+test('sign-in layer shows creator and current Work details on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/test/presentation.js', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/javascript; charset=utf-8',
+      headers: { 'access-control-allow-origin': '*' },
+      body: presentationBundle,
+    }),
+  );
+  await page.goto('/pages/health.html');
+  await page.addScriptTag({
+    type: 'module',
+    content: `
+      import { defaultAccessPresenter } from "/test/presentation.js";
+      window.__presentation = defaultAccessPresenter({
+        featureKey: "members",
+        reason: "AUTH_REQUIRED",
+        action: "SIGN_IN",
+        followTarget: {
+          kind: "CREATOR",
+          displayName: "归藏",
+          avatarUrl: null,
+          description: null,
+          workCount: 12,
+        },
+        work: {
+          title: "AI 创作工具",
+          summary: "帮助创作者构建高质量内容。",
+          coverUrl: null,
+        },
+        perform: async () => ({ type: "completed" }),
+      });
+    `,
+  });
+
+  const layer = page.locator('viceme-access-layer');
+  await expect(layer.locator("[data-viceme='profile-name']")).toHaveText('归藏');
+  await expect(layer.locator("[data-viceme='profile-stats']")).toHaveText('12 个作品');
+  await expect(layer.locator("[data-viceme='work-title']")).toHaveText('AI 创作工具');
+  await expect(layer.locator("[data-viceme='work-summary']")).toHaveText(
+    '帮助创作者构建高质量内容。',
+  );
+  await expect(layer.getByRole('button', { name: '授权' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(layer).toHaveCount(0);
+});
+
 test('checkout action loads inside the SDK layer without an external popup', async ({ page }) => {
   await page.route('**/test/presentation.js', (route) =>
     route.fulfill({
