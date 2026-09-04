@@ -8,6 +8,11 @@ export interface AccessInteraction {
   reason: string;
   action: AccessInteractionAction;
   followTarget?: FollowTarget;
+  work?: {
+    title: string;
+    summary: string;
+    coverUrl: string | null;
+  };
   /** Client-owned lifecycle signal; abort closes any active hosted surface. */
   signal?: AbortSignal;
   perform(): Promise<AccessActionResult>;
@@ -213,8 +218,43 @@ function ensureAccessLayerElement(): void {
             font-size: 1.125rem;
           }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='profile-description'] {
-            margin-top: 0.75rem;
-            line-height: 1.625;
+            display: none;
+          }
+          [data-viceme='work'] {
+            display: none;
+            overflow: hidden;
+            margin-top: 1.25rem;
+            border: 1px solid #e4e4e7;
+            border-radius: 1rem;
+            background: #fafafa;
+            text-align: left;
+          }
+          [data-viceme='work'][data-visible='true'] { display: block; }
+          [data-viceme='work-cover'] {
+            display: block;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            object-fit: cover;
+            background: #f4f4f5;
+          }
+          [data-viceme='work-cover'][hidden] { display: none; }
+          [data-viceme='work-copy'] { padding: 1rem; }
+          [data-viceme='work-title'] {
+            margin: 0;
+            color: #18181b;
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1.5;
+          }
+          [data-viceme='work-summary'] {
+            display: -webkit-box;
+            overflow: hidden;
+            margin: 0.375rem 0 0;
+            color: #71717a;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
           }
           [data-viceme='panel'][data-action='SIGN_IN'] [data-viceme='action'] {
             width: 100%;
@@ -301,6 +341,13 @@ function ensureAccessLayerElement(): void {
               </div>
               <p data-viceme="profile-description"></p>
             </section>
+            <article data-viceme="work">
+              <img data-viceme="work-cover" hidden />
+              <div data-viceme="work-copy">
+                <p data-viceme="work-title"></p>
+                <p data-viceme="work-summary"></p>
+              </div>
+            </article>
             <p data-viceme="error" role="alert" aria-live="polite"></p>
             <div data-viceme="actions">
               <button data-viceme="action" type="button"></button>
@@ -328,6 +375,10 @@ function ensureAccessLayerElement(): void {
         "[data-viceme='profile-description']",
       )!;
       const profileStats = shadow.querySelector<HTMLElement>("[data-viceme='profile-stats']")!;
+      const work = shadow.querySelector<HTMLElement>("[data-viceme='work']")!;
+      const workCover = shadow.querySelector<HTMLImageElement>("[data-viceme='work-cover']")!;
+      const workTitle = shadow.querySelector<HTMLElement>("[data-viceme='work-title']")!;
+      const workSummary = shadow.querySelector<HTMLElement>("[data-viceme='work-summary']")!;
       action.textContent = copy.label;
       action.hidden = false;
       mainActions.dataset.single = 'true';
@@ -359,6 +410,17 @@ function ensureAccessLayerElement(): void {
           avatar.alt = `${target.displayName}的头像`;
           avatar.hidden = false;
           avatarFallback.hidden = true;
+        }
+      }
+      const workDetails = this.interaction.work;
+      if (workDetails) {
+        work.dataset.visible = 'true';
+        workTitle.textContent = workDetails.title;
+        workSummary.textContent = workDetails.summary;
+        if (workDetails.coverUrl) {
+          workCover.src = workDetails.coverUrl;
+          workCover.alt = workDetails.title;
+          workCover.hidden = false;
         }
       }
 

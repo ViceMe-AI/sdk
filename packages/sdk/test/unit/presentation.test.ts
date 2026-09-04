@@ -5,6 +5,44 @@ import { defaultAccessPresenter } from '../../src/core/presentation.ts';
 import { ViceMeError } from '../../src/core/errors.ts';
 
 describe('default access presenter', () => {
+  it('shows only creator identity, work count, and current Work details for sign-in', async () => {
+    const presented = defaultAccessPresenter({
+      featureKey: 'members',
+      reason: 'AUTH_REQUIRED',
+      action: 'SIGN_IN',
+      followTarget: {
+        kind: 'CREATOR',
+        displayName: '归藏',
+        avatarUrl: 'https://cdn.example.com/creator.jpg',
+        description: null,
+        workCount: 12,
+      },
+      work: {
+        title: 'AI 创作工具',
+        summary: '帮助创作者构建高质量内容。',
+        coverUrl: 'https://cdn.example.com/work.jpg',
+      },
+      perform: vi.fn(async () => ({ type: 'completed' as const })),
+    });
+    const shadow = document.querySelector('viceme-access-layer')!.shadowRoot!;
+
+    expect(shadow.querySelector("[data-viceme='profile-name']")?.textContent).toBe('归藏');
+    expect(shadow.querySelector("[data-viceme='profile-stats']")?.textContent).toBe('12 个作品');
+    expect(shadow.querySelector("[data-viceme='work']")?.getAttribute('data-visible')).toBe('true');
+    expect(shadow.querySelector("[data-viceme='work-title']")?.textContent).toBe('AI 创作工具');
+    expect(shadow.querySelector("[data-viceme='work-summary']")?.textContent).toBe(
+      '帮助创作者构建高质量内容。',
+    );
+    expect(shadow.querySelector("[data-viceme='work-cover']")?.getAttribute('src')).toBe(
+      'https://cdn.example.com/work.jpg',
+    );
+    expect(shadow.querySelector("[data-viceme='profile-description']")?.textContent).toBe('');
+    expect(shadow.querySelector("[data-viceme='action']")?.textContent).toBe('授权');
+
+    (shadow.querySelector("[data-viceme='close']") as HTMLButtonElement).click();
+    await expect(presented).resolves.toBe('dismissed');
+  });
+
   it('shows creator information without recent work covers in the follow consent layer', async () => {
     const fullDescription = '专注于 AI 创作工具与智能体工作流。'.repeat(4);
     const perform = vi.fn(async () => ({ type: 'completed' as const }));
