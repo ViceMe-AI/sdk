@@ -67,7 +67,8 @@ Shop changes a public SDK API
   namespace, or hosted mount semantics become incompatible. This snapshot is
   not the loader namespace. Tip is additive to the published `v1` surface:
   npm `0.4.0` exported mounted Tip but not `createTip` or `tip/testing`;
-  Headless is therefore an additive `0.5.0` public capability.
+  Headless entered the source contract at reserved version `0.5.0` and first
+  shipped as an immutable package in `0.6.1`.
 
 ## Commands
 

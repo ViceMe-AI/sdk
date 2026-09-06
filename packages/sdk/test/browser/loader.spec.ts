@@ -868,6 +868,38 @@ test.describe('deduplication and namespace lifecycle', () => {
     expect((state.v2 as { marker?: string }).marker).toBe('keep-me');
   });
 
+  test('a second exact release of v1 fails closed before loading feature chunks', async ({
+    page,
+  }) => {
+    const requests = recordRequests(page);
+    const hosted = await mockHostedDanmaku(page);
+    await page.goto(cfgUrl(VALID_ATTRS, { presetV1Version: '0.6.2' }));
+
+    const events = await waitForEvent(page, 'viceme:error');
+    expect(events.find((event) => event.type === 'viceme:error')?.detail).toMatchObject({
+      clientKey: 'v1+cn+wrk_test_demo',
+      code: 'CONFIG_INVALID',
+      retryable: false,
+    });
+    expect(await page.locator('[data-viceme-danmaku="mounted"]').count()).toBe(0);
+    expect(hosted.hits).toBe(0);
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              ViceMe: { versions: { v1: { version: string } } };
+            }
+          ).ViceMe.versions.v1.version,
+      ),
+    ).toBe('0.6.2');
+    const sdkPaths = requests
+      .filter((url) => new URL(url).origin === S3_ORIGIN)
+      .map((url) => new URL(url).pathname);
+    expect(sdkPaths).toContain(`${EXACT_SDK_PREFIX}manifest.json`);
+    expect(sdkPaths).not.toContain(`${EXACT_SDK_PREFIX}danmaku.js`);
+  });
+
   test('a danmaku chunk failure degrades the local client without touching the host', async ({
     page,
   }) => {

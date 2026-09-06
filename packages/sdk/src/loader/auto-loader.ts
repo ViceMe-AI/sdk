@@ -154,7 +154,14 @@ export function ensureNamespace(version: string): ViceMeLoaderNamespaceV1 {
     defineHidden(global, 'versions', versions);
   }
   const existing = versions[`v${API_MAJOR}`];
-  if (existing) return existing;
+  if (existing) {
+    if (existing.version !== version) {
+      throw configInvalid(
+        `Loader API major v${API_MAJOR} is already owned by exact SDK release ${existing.version}.`,
+      );
+    }
+    return existing;
+  }
 
   const namespace: ViceMeLoaderNamespaceV1 = {
     version,
@@ -387,7 +394,12 @@ export async function runAutoLoader(script: HTMLScriptElement): Promise<void> {
   }
 
   const clientKey = clientKeyOf(manifest.apiMajor, attributes.region, attributes.workKey);
-  ensureNamespace(manifest.version);
+  try {
+    ensureNamespace(manifest.version);
+  } catch (error) {
+    emitError(host, error, { clientKey });
+    return;
+  }
 
   // Shared core client per (major, region, workKey).
   let entry = sharedState().registry.getClient(clientKey);

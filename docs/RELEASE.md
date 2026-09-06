@@ -53,18 +53,20 @@ unless they come from the same repository's `dev` or `hotfix/*`.
 
 The release flow follows the same two-workflow state machine as the CLI:
 
-`0.4.0` is the latest immutable published baseline. It contains Website Access
-v2, the generic testing adapter, mounted Danmaku, and mounted Tip, but not
-Headless `createTip` or `tip/testing`. Feature branches do not edit package or
-runtime versions; release preparation owns those files. Published artifacts
-must never be republished or retrofitted.
+`0.7.0` is the latest immutable published baseline. It contains Website Access
+v2, the generic testing adapter, mounted Danmaku and Tip, Headless `createTip`
+and `tip/testing`, and the current creator/Work presentation contract. Feature
+branches do not edit package or runtime versions; release preparation owns
+those files. Published artifacts must never be republished or retrofitted.
 
 The `0.5.0` and `0.6.0` promotion metadata reached `main`, but publication
 stopped at the former license gate before either immutable tag was created.
 Treat both versions as reserved and unpublished; never create their tags
-retroactively. The next release preparation uses protected `main` at `0.6.0`
-as its baseline. Loader API major `v1` remains compatible, while the public
-HTTP snapshot uses its own `1.1.0` contract version.
+retroactively. Recovery continued with published `0.6.1`, `0.6.2`, and `0.7.0`
+releases. The next release preparation selects the higher versioned baseline
+from the latest stable tag and protected `main`, currently `0.7.0`. Loader API
+major `v1` remains compatible, while the public HTTP snapshot uses its own
+`1.1.0` contract version.
 
 During the current preview stage, npm, GitHub asset, and S3 publication do not
 require a repository or package license file. `LICENSE-PENDING.md` records the

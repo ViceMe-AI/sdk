@@ -528,6 +528,7 @@ export function createCapabilities(deps: CapabilityDeps): {
     }
 
     let active = true;
+    let polling = false;
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
     let expiryTimer: ReturnType<typeof setTimeout> | undefined;
     let settle!: () => void;
@@ -539,6 +540,8 @@ export function createCapabilities(deps: CapabilityDeps): {
     const cleanup = () => {
       if (pollTimer) clearTimeout(pollTimer);
       if (expiryTimer) clearTimeout(expiryTimer);
+      pollTimer = undefined;
+      expiryTimer = undefined;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
     const expire = () => {
@@ -554,16 +557,25 @@ export function createCapabilities(deps: CapabilityDeps): {
       );
     };
     const schedule = () => {
-      if (!active || document.visibilityState === 'hidden') return;
+      if (!active || polling || pollTimer !== undefined || document.visibilityState === 'hidden') {
+        return;
+      }
       const remaining = expiresAt - deps.now();
       if (remaining <= 0) {
         expire();
         return;
       }
-      pollTimer = setTimeout(() => void poll(), Math.min(1_500, remaining));
+      pollTimer = setTimeout(
+        () => {
+          pollTimer = undefined;
+          void poll();
+        },
+        Math.min(1_500, remaining),
+      );
     };
     const poll = async () => {
-      if (!active) return;
+      if (!active || polling) return;
+      polling = true;
       try {
         const decision = (await checkMany([featureKey]))[featureKey];
         if (!decision) throw malformedResponse();
@@ -573,11 +585,13 @@ export function createCapabilities(deps: CapabilityDeps): {
           settle();
           return;
         }
-        schedule();
       } catch (error) {
         active = false;
         cleanup();
         fail(error);
+      } finally {
+        polling = false;
+        schedule();
       }
     };
     function handleVisibilityChange() {

@@ -53,6 +53,17 @@
         });
       }
 
+      // Simulate an older exact release of the same loader API major. A later
+      // loader must fail closed instead of mixing its core with newer chunks.
+      if (params.has('presetV1Version')) {
+        Object.defineProperty(window, 'ViceMe', {
+          value: { versions: { v1: { version: params.get('presetV1Version') } } },
+          enumerable: false,
+          configurable: true,
+          writable: true,
+        });
+      }
+
       // Hostile global reset: page selectors must not pierce the Shadow Root,
       // and the host element itself is page-owned (a page can always hide it).
       if (params.get('hostileCss') === '1') {
