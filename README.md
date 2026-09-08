@@ -242,7 +242,8 @@ SDK-owned sign-in or checkout layer, and rejects the interrupted call with
 `CLIENT_DESTROYED`; no late session response can restore the in-memory token.
 Request cancellation and timeouts remain effective until the parsed response is
 delivered. Cancelling the client's optional `signal` preserves the caller's
-`Error` reason; a request timeout rejects with retryable `NETWORK_TIMEOUT`.
+`Error` reason for requests and interactive presentations; a request timeout
+rejects with retryable `NETWORK_TIMEOUT`.
 A cancelled response cannot establish a Work session even if its body has
 already finished parsing.
 

@@ -253,13 +253,16 @@ export function createCapabilities(deps: CapabilityDeps): {
       retryable: false,
     });
 
+  const presentationAbortReason = (): Error =>
+    deps.signal.reason instanceof Error ? deps.signal.reason : clientDestroyed();
+
   const present = (
     interaction: Omit<Parameters<AccessPresenter>[0], 'signal'>,
   ): ReturnType<AccessPresenter> => {
-    if (deps.signal.aborted) return Promise.reject(clientDestroyed());
+    if (deps.signal.aborted) return Promise.reject(presentationAbortReason());
     let onAbort: (() => void) | undefined;
     const cancellation = new Promise<never>((_resolve, reject) => {
-      onAbort = () => reject(clientDestroyed());
+      onAbort = () => reject(presentationAbortReason());
       deps.signal.addEventListener('abort', onAbort, { once: true });
       if (deps.signal.aborted) onAbort();
     });
