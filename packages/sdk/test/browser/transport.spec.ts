@@ -118,3 +118,45 @@ test('built ESM preserves a caller abort reason during interactive presentation'
   expect(result).toBe('caller-reason');
   await expect(page.locator('viceme-access-layer')).toHaveCount(0);
 });
+
+test('built ESM preserves a caller abort reason at presentation delivery', async ({ page }) => {
+  await page.goto('/pages/health.html');
+
+  const result = await page.evaluate(async (testingUrl) => {
+    const { createTestViceMe } = await import(testingUrl);
+    const controller = new AbortController();
+    const reason = new Error('Route disposed after presentation');
+    const client = createTestViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      signal: controller.signal,
+      transport: {
+        async request() {
+          return {
+            status: 201,
+            body: {
+              workKey: 'wrk_test_demo',
+              token: 'test-session-token',
+              capabilities: ['auth'],
+            },
+          };
+        },
+      },
+      presenter: () =>
+        Promise.resolve('dismissed').then((presentationResult) => {
+          queueMicrotask(() => controller.abort(reason));
+          return presentationResult;
+        }),
+    });
+    try {
+      await client.auth.signIn();
+      return 'resolved';
+    } catch (error) {
+      return error === reason ? 'caller-reason' : 'unexpected-error';
+    } finally {
+      client.destroy();
+    }
+  }, `${S3_ORIGIN}/viceme-sdk/${SDK_VERSION}/testing.js`);
+
+  expect(result).toBe('caller-reason');
+});

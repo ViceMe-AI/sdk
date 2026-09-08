@@ -459,6 +459,28 @@ describe('website access capabilities', () => {
     client.destroy();
   });
 
+  it('preserves a caller abort reason at the presentation completion boundary', async () => {
+    const controller = new AbortController();
+    const reason = new Error('Route disposed after presentation');
+    const presenter: AccessPresenter = () =>
+      Promise.resolve('dismissed').then((result) => {
+        // Resolve the presenter first, then abort before Promise.race delivers
+        // that result to the capability continuation.
+        queueMicrotask(() => controller.abort(reason));
+        return result;
+      });
+    const client = createTestViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      transport: capabilityTransport(),
+      presenter,
+      signal: controller.signal,
+    });
+
+    await expect(client.auth.signIn()).rejects.toBe(reason);
+    client.destroy();
+  });
+
   it('maps an immediate destroy/presentation race to CLIENT_DESTROYED', async () => {
     const client = createTestViceMe({
       workKey: 'wrk_test_demo',
