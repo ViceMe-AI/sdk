@@ -463,7 +463,7 @@ describe('website access capabilities', () => {
     const controller = new AbortController();
     const reason = new Error('Route disposed after presentation');
     const presenter: AccessPresenter = () =>
-      Promise.resolve('dismissed').then((result) => {
+      Promise.resolve<'dismissed'>('dismissed').then((result) => {
         // Resolve the presenter first, then abort before Promise.race delivers
         // that result to the capability continuation.
         queueMicrotask(() => controller.abort(reason));

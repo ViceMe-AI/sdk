@@ -143,7 +143,7 @@ test('built ESM preserves a caller abort reason at presentation delivery', async
         },
       },
       presenter: () =>
-        Promise.resolve('dismissed').then((presentationResult) => {
+        Promise.resolve<'dismissed'>('dismissed').then((presentationResult) => {
           queueMicrotask(() => controller.abort(reason));
           return presentationResult;
         }),
