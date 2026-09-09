@@ -247,6 +247,11 @@ rejects with retryable `NETWORK_TIMEOUT`.
 A cancelled response cannot establish a Work session even if its body has
 already finished parsing.
 
+Login completion is bound to the Work session that opened the sign-in frame.
+If that session expires, is refreshed, or is replaced by sign-out or another
+completed login, the old completion fails with retryable `SESSION_EXPIRED`
+without changing the current user. Start a new sign-in action to retry.
+
 ## Public Surface
 
 ```ts
