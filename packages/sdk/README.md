@@ -20,7 +20,7 @@ pnpm add @viceme-ai/sdk
 <div id="viceme-engagement"></div>
 <script
   defer
-  src="https://s3.viceme.cn/viceme-sdk/0.5.0/viceme.min.js"
+  src="https://s3.viceme.cn/viceme-sdk/0.7.0/viceme.min.js"
   data-viceme-work="wrk_live_demo"
   data-viceme-region="cn"
   data-viceme-features="danmaku,tip"
@@ -33,9 +33,13 @@ The feature declaration accepts `danmaku`, `tip`, or both without whitespace or
 duplicates.
 
 Static CDN entry points always use an immutable exact-version directory. The CN
-host is `s3.viceme.cn`; GLOBAL uses `s3.viceme.ai`. The `0.5.0` URL above is the
-current source target and is unavailable until that exact release is published
-and verified.
+host is `s3.viceme.cn`; GLOBAL uses `s3.viceme.ai`. The `0.7.0` URL above is
+published and immutable.
+
+Use only one exact SDK release for a loader API major on a page. This loader
+refuses to join an existing `window.ViceMe.versions.v1` namespace owned by
+another exact release: it reports non-retryable `CONFIG_INVALID` before loading
+a capability chunk instead of combining its core and feature files.
 
 With CSP, allow the exact regional S3 origin in `script-src` and `connect-src`,
 the exact regional Shop origin in `frame-src`, and keep `object-src 'none'`. A
@@ -109,8 +113,9 @@ Shop URL, and server-authoritative entitlement checks remain enforced.
 Website access login renders the work-bound WeChat QR code directly in the SDK
 layer. Paid access keeps desktop QR payment and WeChat JSAPI in that layer;
 mobile H5/WAP payment may open a provider page or app. The original page polls
-the server-authoritative access decision and closes the layer after entitlement
-is active. Before login, the consent layer shows only the creator avatar,
+the server-authoritative access decision with at most one request in flight,
+pauses scheduling while hidden, and closes the layer after entitlement is
+active. Before login, the consent layer shows only the creator avatar,
 display name, published Work count, and the current Work title, summary, and
 cover. This behavior does not change the separate Tip Widget flow.
 
@@ -140,8 +145,9 @@ listener on destroy.
 
 ## Headless Tip
 
-This additive API targets `0.5.0`. Do not expect `createTip` or
-`@viceme-ai/sdk/tip/testing` from the immutable npm `0.4.0` package.
+This API is available in published `0.7.0`. Do not expect `createTip` or
+`@viceme-ai/sdk/tip/testing` from the immutable npm `0.4.0` package; the first
+published version containing them was `0.6.1`.
 
 ```ts
 import { createViceMe } from '@viceme-ai/sdk';

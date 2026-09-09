@@ -8,8 +8,8 @@ published creator website.
 - **Hosted features**: `danmaku` and `tip`
 - **Website access**: authentication, explicit creator follow, and one-time paid unlock
 - **Status**: `0.x`; the normal `dev -> main` release workflow owns versioning
-- **Latest published package**: `0.4.0` with Website Access v2; it does not contain Headless Tip
-- **Current source target**: `0.5.0`, adding Headless Tip through a separate release PR
+- **Latest published package and source baseline**: `0.7.0`
+- **Published capabilities**: mounted Danmaku/Tip, Headless Tip, and Website Access v2
 
 Shop resolves `workKey` through `WorkSdkAccess`; the published Work and requested
 feature must be active. The current Website Access release does not require DNS
@@ -35,7 +35,7 @@ SDK release:
 <div id="viceme-engagement"></div>
 <script
   defer
-  src="https://s3.viceme.cn/viceme-sdk/0.5.0/viceme.min.js"
+  src="https://s3.viceme.cn/viceme-sdk/0.7.0/viceme.min.js"
   data-viceme-work="wrk_live_demo"
   data-viceme-region="cn"
   data-viceme-features="danmaku,tip"
@@ -63,9 +63,14 @@ https://s3.viceme.cn/viceme-sdk/<version>/...   (region cn)
 https://s3.viceme.ai/viceme-sdk/<version>/...   (region global)
 ```
 
-The `0.5.0` URL above is the current source target and remains unavailable until
-that exact release is published and verified. GLOBAL snippets use the `.ai` S3
-host and `data-viceme-region="global"`.
+The `0.7.0` URL above is published and immutable. GLOBAL snippets use the `.ai`
+S3 host and `data-viceme-region="global"`.
+
+Use only one exact SDK release for a loader API major on a page. A loader with
+the current boundary refuses to join an existing `window.ViceMe.versions.v1`
+namespace owned by another exact release: it emits non-retryable
+`CONFIG_INVALID` before loading a capability chunk instead of mixing releases
+through a shared client.
 
 For a nonce-based CSP, preserve the host's existing directives and allow only
 the exact regional S3 origin in `script-src` and `connect-src`, and the exact
@@ -116,9 +121,9 @@ pair member: `keys.test` has a `wrk_test_...` value and `keys.live` has a
 
 ## Headless Tip
 
-Headless Tip is present in the current source tree and targets `0.5.0`; npm and
-CN/GLOBAL immutable `0.5.0` artifacts do not exist until the release workflow
-completes.
+Headless Tip is available in the published `0.7.0` npm and CN/GLOBAL artifacts.
+The reserved `0.5.0` version was never published; the first immutable release
+containing Headless Tip was `0.6.1`.
 
 Use `createTip` when the host renders the amount and provider controls but Shop
 must still own confirmation, payment, risk, and result authority:
@@ -195,12 +200,12 @@ The npm entry and immutable CDN ESM entry are built from the same `tip.js`
 implementation. Exact-version CDN imports do not install a `window` global:
 
 ```ts
-import { createViceMe } from 'https://s3.viceme.cn/viceme-sdk/0.5.0/index.js';
-import { createTip } from 'https://s3.viceme.cn/viceme-sdk/0.5.0/tip.js';
+import { createViceMe } from 'https://s3.viceme.cn/viceme-sdk/0.7.0/index.js';
+import { createTip } from 'https://s3.viceme.cn/viceme-sdk/0.7.0/tip.js';
 ```
 
-Use those exact URLs only after `0.5.0` is published and verified. Substituting
-`0.4.0` is invalid because that immutable release does not export `createTip`.
+Substituting `0.4.0` is invalid because that immutable release does not export
+`createTip`.
 
 For components and Storybook, use the isolated deterministic fake:
 
@@ -268,7 +273,7 @@ interface ViceMeClient {
 }
 ```
 
-The `0.5.0` target exports `@viceme-ai/sdk`, `@viceme-ai/sdk/testing`,
+The published `0.7.0` package exports `@viceme-ai/sdk`, `@viceme-ai/sdk/testing`,
 `@viceme-ai/sdk/danmaku`, `@viceme-ai/sdk/tip`, and
 `@viceme-ai/sdk/tip/testing`. The generic testing entry injects deterministic
 Website Access transports and presenters; the scoped Tip entry is an isolated
@@ -291,7 +296,8 @@ Website Access transports and presenters; the scoped Tip entry is an isolated
   origin/source, and owns cleanup.
 - Website access login and desktop checkout stay inside those SDK-owned modal
   frames. Mobile H5/WAP may open the payment provider page or app; the original
-  page keeps polling the signed Work access decision and unlocks after payment.
+  page keeps one access check in flight, pauses scheduling while hidden, and
+  unlocks after payment without duplicating polls across visibility changes.
 - Shop Web owns `/embed/danmaku`, including rendering, keyboard behavior,
   reduced-motion behavior, and interaction.
 - The Shop SDK inside that iframe calls anonymous `GET` and `POST`

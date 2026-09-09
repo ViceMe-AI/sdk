@@ -334,6 +334,95 @@ describe('website access capabilities', () => {
     }
   });
 
+  it('keeps one checkout poll in flight across a hidden-to-visible transition', async () => {
+    vi.useFakeTimers();
+    let visibility: DocumentVisibilityState = 'visible';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
+    let releaseFirstPoll!: (response: TransportResponse) => void;
+    const firstPoll = new Promise<TransportResponse>((resolve) => {
+      releaseFirstPoll = resolve;
+    });
+    const requests: TransportRequest[] = [];
+    const denied = (): TransportResponse => ({
+      status: 200,
+      body: {
+        decisions: {
+          paid: { allowed: false, reason: 'PURCHASE_REQUIRED', nextAction: 'CHECKOUT' },
+        },
+      },
+    });
+    const transport: Transport = {
+      async request(request) {
+        requests.push(request);
+        if (request.path === '/v1/public/work-sdk/sessions') {
+          return {
+            status: 201,
+            body: {
+              workKey: 'wrk_test_demo',
+              capabilities: ['access', 'checkout'],
+              token: 'anonymous-work-token',
+            },
+          };
+        }
+        if (request.path === '/v1/public/work-sdk/checkout') {
+          return {
+            status: 200,
+            body: {
+              checkoutUrl: 'https://viceme.cn/sdk/checkout/session-id',
+              alreadyOwned: false,
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            },
+          };
+        }
+        if (request.path === '/v1/public/work-sdk/access/check') {
+          const pollCount = requests.filter(
+            (candidate) => candidate.path === '/v1/public/work-sdk/access/check',
+          ).length;
+          return pollCount === 1 ? firstPoll : denied();
+        }
+        throw new Error(`unexpected request: ${request.method} ${request.path}`);
+      },
+    };
+
+    try {
+      const presenter: AccessPresenter = async (interaction) => {
+        const action = await interaction.perform();
+        if (action.type !== 'frame') throw new Error('expected checkout frame');
+        await vi.advanceTimersByTimeAsync(1_500);
+        expect(
+          requests.filter((request) => request.path === '/v1/public/work-sdk/access/check'),
+        ).toHaveLength(1);
+
+        visibility = 'hidden';
+        document.dispatchEvent(new Event('visibilitychange'));
+        visibility = 'visible';
+        document.dispatchEvent(new Event('visibilitychange'));
+        releaseFirstPoll(denied());
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(1_500);
+
+        expect(
+          requests.filter((request) => request.path === '/v1/public/work-sdk/access/check'),
+        ).toHaveLength(2);
+        action.cancel();
+        await action.completion;
+        return 'acted';
+      };
+      const client = createTestViceMe({
+        workKey: 'wrk_test_demo',
+        region: 'cn',
+        transport,
+        presenter,
+      });
+
+      await client.checkout.open({ featureKey: 'paid' });
+      client.destroy();
+    } finally {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
   it('accepts the platform-origin login completion for this Work and channel', async () => {
     const presenter: AccessPresenter = async (interaction) => {
       const action = await interaction.perform();

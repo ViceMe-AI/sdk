@@ -22,7 +22,7 @@ describe('auto-loader module side effects', () => {
 });
 
 describe('ensureNamespace', () => {
-  it('installs a non-enumerable, idempotent v1 namespace', () => {
+  it('installs a non-enumerable, exact-release v1 namespace', () => {
     const ns = ensureNamespace('0.1.0');
     const holder = globalThis as { ViceMe?: ViceMeBrowserGlobal };
     expect(holder.ViceMe).toBeDefined();
@@ -31,8 +31,8 @@ describe('ensureNamespace', () => {
 
     expect(Object.keys(holder.ViceMe!)).not.toContain('versions');
 
-    // Second install returns the existing namespace.
-    expect(ensureNamespace('0.2.0')).toBe(ns);
+    expect(ensureNamespace('0.1.0')).toBe(ns);
+    expect(() => ensureNamespace('0.2.0')).toThrow(/already owned by exact SDK release 0\.1\.0/);
   });
 
   it('whenReady rejects for unknown client keys', async () => {
