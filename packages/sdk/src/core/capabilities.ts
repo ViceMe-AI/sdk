@@ -277,7 +277,10 @@ export function createCapabilities(deps: CapabilityDeps): {
     }
     return Promise.race([presentation, cancellation])
       .then((result) => {
-        if (deps.signal.aborted) throw clientDestroyed();
+        // The presenter may win the race immediately before its owner aborts.
+        // Preserve the same caller-owned reason at this final delivery guard;
+        // explicit client.destroy() already aborts with CLIENT_DESTROYED.
+        if (deps.signal.aborted) throw presentationAbortReason();
         return result;
       })
       .finally(() => {
