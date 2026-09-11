@@ -14,6 +14,111 @@ describe('SessionManager', () => {
     expect(transport.requests).toHaveLength(1);
   });
 
+  it('rejects cached session operations after cancellation without changing the snapshot', async () => {
+    const controller = new AbortController();
+    const reason = new Error('Session owner cancelled');
+    const transport = createMemoryTransport({ work: FIXTURE_WORK });
+    const session = new SessionManager({
+      workKey: FIXTURE_WORK.key,
+      transport,
+      signal: controller.signal,
+    });
+    const snapshot = await session.establish();
+    controller.abort(reason);
+
+    await expect(session.establish()).rejects.toBe(reason);
+    await expect(session.signOut()).rejects.toBe(reason);
+    expect(() =>
+      session.authenticate({
+        userToken: 'late-user-token',
+        user: { subject: 'user', nickname: null, avatarUrl: null },
+      }),
+    ).toThrow(reason);
+    expect(session.snapshot).toBe(snapshot);
+    expect(transport.requests).toHaveLength(1);
+    session.destroy();
+    expect(session.snapshot).toBeUndefined();
+    await expect(session.establish()).rejects.toMatchObject({ code: 'CLIENT_DESTROYED' });
+  });
+
+  it('does not commit a cancelled response from a transport that resolves late', async () => {
+    const controller = new AbortController();
+    const reason = new Error('Session owner cancelled');
+    let resolveResponse!: (response: { status: number; body: unknown }) => void;
+    const session = new SessionManager({
+      workKey: FIXTURE_WORK.key,
+      signal: controller.signal,
+      transport: {
+        request: () =>
+          new Promise((resolve) => {
+            resolveResponse = resolve;
+          }),
+      },
+    });
+    const pending = session.establish();
+    controller.abort(reason);
+    resolveResponse({
+      status: 201,
+      body: { workKey: FIXTURE_WORK.key, token: 'late-token', capabilities: ['checkout'] },
+    });
+    await expect(pending).rejects.toBe(reason);
+    expect(session.snapshot).toBeUndefined();
+    session.destroy();
+  });
+
+  it('rejects a cancelled capability response from a transport that resolves late', async () => {
+    const controller = new AbortController();
+    const reason = new Error('Session owner cancelled');
+    let resolveResponse!: (response: { status: number; body: unknown }) => void;
+    let started!: () => void;
+    const requestStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const session = new SessionManager({
+      workKey: FIXTURE_WORK.key,
+      signal: controller.signal,
+      transport: {
+        request(request) {
+          if (request.path.endsWith('/sessions')) {
+            return Promise.resolve({
+              status: 201,
+              body: { workKey: FIXTURE_WORK.key, token: 'test-token', capabilities: ['checkout'] },
+            });
+          }
+          return new Promise((resolve) => {
+            resolveResponse = resolve;
+            started();
+          });
+        },
+      },
+    });
+    const pending = session.request({ method: 'POST', path: '/v1/public/work-sdk/access/check' });
+    await requestStarted;
+    controller.abort(reason);
+    resolveResponse({ status: 200, body: { decisions: {} } });
+    await expect(pending).rejects.toBe(reason);
+    session.destroy();
+  });
+
+  it('normalizes non-Error cancellation before invoking a custom transport', async () => {
+    const controller = new AbortController();
+    controller.abort('route disposed');
+    let requests = 0;
+    const session = new SessionManager({
+      workKey: FIXTURE_WORK.key,
+      signal: controller.signal,
+      transport: {
+        async request() {
+          requests += 1;
+          return { status: 201 };
+        },
+      },
+    });
+    await expect(session.establish()).rejects.toMatchObject({ name: 'AbortError' });
+    expect(requests).toBe(0);
+    session.destroy();
+  });
+
   it('rejects malformed work descriptors', async () => {
     const transport = createMemoryTransport({ work: FIXTURE_WORK });
     // Tamper with the served body by routing through a custom transport.

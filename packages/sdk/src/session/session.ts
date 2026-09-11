@@ -187,7 +187,13 @@ export class SessionManager {
    * in-flight request (single flight).
    */
   establish(): Promise<WorkSessionSnapshot> {
-    if (this.#destroyed) return Promise.reject(clientDestroyed());
+    // Cached and in-flight sessions have the same owner as network requests.
+    // A cancelled caller must never bypass cancellation by hitting the cache.
+    try {
+      this.#assertAlive();
+    } catch (error) {
+      return Promise.reject(error);
+    }
     if (this.#snapshot) {
       if (!this.#isExpired()) return Promise.resolve(this.#snapshot);
       this.#snapshot = undefined;
@@ -267,6 +273,12 @@ export class SessionManager {
 
   #assertAlive(): void {
     if (this.#destroyed) throw clientDestroyed();
+    const signal = this.#options.signal;
+    if (signal?.aborted) {
+      throw signal.reason instanceof Error
+        ? signal.reason
+        : new DOMException('ViceMe session aborted by caller.', 'AbortError');
+    }
   }
 
   #assertCurrent(generation: number): void {

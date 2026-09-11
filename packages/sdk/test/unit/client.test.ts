@@ -43,6 +43,39 @@ describe('ViceMeClient', () => {
     }
   });
 
+  it('rejects cached headless access after caller cancellation', async () => {
+    const controller = new AbortController();
+    const reason = new Error('Route disposed after session initialization');
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        workKey: 'wrk_test_demo',
+        token: 'test-session-token',
+        capabilities: ['checkout'],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      signal: controller.signal,
+    });
+
+    try {
+      await expect(client.auth.getState()).resolves.toEqual({ authenticated: false, user: null });
+      await expect(client.access.refresh()).resolves.toBeUndefined();
+      controller.abort(reason);
+      await expect(client.auth.getState()).rejects.toBe(reason);
+      await expect(client.access.refresh()).rejects.toBe(reason);
+      await expect(client.auth.signOut()).rejects.toBe(reason);
+      expect(fetchMock).toHaveBeenCalledOnce();
+
+      client.destroy();
+      await expect(client.auth.getState()).rejects.toMatchObject({ code: 'CLIENT_DESTROYED' });
+    } finally {
+      client.destroy();
+    }
+  });
+
   it('initializes locally without reaching the network', async () => {
     const fetchMock = vi.fn(() => {
       throw new Error('unexpected network request');
