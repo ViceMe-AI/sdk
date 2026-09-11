@@ -432,6 +432,55 @@ describe('website access capabilities', () => {
     }
   });
 
+  it('preserves a caller abort reason while an interactive surface is active', async () => {
+    const controller = new AbortController();
+    const reason = new Error('Route disposed');
+    let presentationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      presentationStarted = resolve;
+    });
+    const presenter: AccessPresenter = async () => {
+      presentationStarted();
+      return new Promise<never>(() => {});
+    };
+    const client = createTestViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      transport: capabilityTransport(),
+      presenter,
+      signal: controller.signal,
+    });
+    const pending = client.auth.signIn();
+    await started;
+
+    controller.abort(reason);
+
+    await expect(pending).rejects.toBe(reason);
+    client.destroy();
+  });
+
+  it('preserves a caller abort reason at the presentation completion boundary', async () => {
+    const controller = new AbortController();
+    const reason = new Error('Route disposed after presentation');
+    const presenter: AccessPresenter = () =>
+      Promise.resolve<'dismissed'>('dismissed').then((result) => {
+        // Resolve the presenter first, then abort before Promise.race delivers
+        // that result to the capability continuation.
+        queueMicrotask(() => controller.abort(reason));
+        return result;
+      });
+    const client = createTestViceMe({
+      workKey: 'wrk_test_demo',
+      region: 'cn',
+      transport: capabilityTransport(),
+      presenter,
+      signal: controller.signal,
+    });
+
+    await expect(client.auth.signIn()).rejects.toBe(reason);
+    client.destroy();
+  });
+
   it('maps an immediate destroy/presentation race to CLIENT_DESTROYED', async () => {
     const client = createTestViceMe({
       workKey: 'wrk_test_demo',

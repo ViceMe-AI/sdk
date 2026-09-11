@@ -253,13 +253,16 @@ export function createCapabilities(deps: CapabilityDeps): {
       retryable: false,
     });
 
+  const presentationAbortReason = (): Error =>
+    deps.signal.reason instanceof Error ? deps.signal.reason : clientDestroyed();
+
   const present = (
     interaction: Omit<Parameters<AccessPresenter>[0], 'signal'>,
   ): ReturnType<AccessPresenter> => {
-    if (deps.signal.aborted) return Promise.reject(clientDestroyed());
+    if (deps.signal.aborted) return Promise.reject(presentationAbortReason());
     let onAbort: (() => void) | undefined;
     const cancellation = new Promise<never>((_resolve, reject) => {
-      onAbort = () => reject(clientDestroyed());
+      onAbort = () => reject(presentationAbortReason());
       deps.signal.addEventListener('abort', onAbort, { once: true });
       if (deps.signal.aborted) onAbort();
     });
@@ -274,7 +277,10 @@ export function createCapabilities(deps: CapabilityDeps): {
     }
     return Promise.race([presentation, cancellation])
       .then((result) => {
-        if (deps.signal.aborted) throw clientDestroyed();
+        // The presenter may win the race immediately before its owner aborts.
+        // Preserve the same caller-owned reason at this final delivery guard;
+        // explicit client.destroy() already aborts with CLIENT_DESTROYED.
+        if (deps.signal.aborted) throw presentationAbortReason();
         return result;
       })
       .finally(() => {
