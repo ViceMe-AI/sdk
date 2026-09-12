@@ -1,7 +1,7 @@
 import type { FollowTarget } from './capabilities.ts';
 import { isViceMeError } from './errors.ts';
 
-export type AccessInteractionAction = 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT';
+export type AccessInteractionAction = 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT' | 'RESOLVE_BUYER';
 
 export interface AccessInteraction {
   featureKey: string;
@@ -15,6 +15,8 @@ export interface AccessInteraction {
   };
   /** Client-owned lifecycle signal; abort closes any active hosted surface. */
   signal?: AbortSignal;
+  /** The host's original click already authorized opening this interaction. */
+  autoStart?: boolean;
   perform(): Promise<AccessActionResult>;
 }
 
@@ -27,6 +29,8 @@ export interface AccessFrameAction {
   url: string;
   completion: Promise<void>;
   cancel(): void;
+  /** User-triggered fallback when a first-party context is required. */
+  continueInSamePage?(): void;
 }
 
 export interface AccessExternalAction {
@@ -49,6 +53,12 @@ interface AccessLayerElement extends HTMLElement {
   interaction: AccessInteraction;
 }
 
+function english(): boolean {
+  return (
+    typeof document !== 'undefined' && document.documentElement.lang.toLowerCase().startsWith('en')
+  );
+}
+
 function actionCopy(action: AccessInteractionAction): {
   description: string;
   label: string;
@@ -57,36 +67,46 @@ function actionCopy(action: AccessInteractionAction): {
     case 'SIGN_IN':
       return {
         description: '',
-        label: '授权',
+        label: english() ? 'Sign in' : '授权',
       };
     case 'FOLLOW':
       return {
         description: '',
-        label: '关注',
+        label: english() ? 'Follow' : '关注',
       };
     case 'CHECKOUT':
       return {
         description: '',
-        label: '打开支付',
+        label: english() ? 'Open checkout' : '打开支付',
+      };
+    case 'RESOLVE_BUYER':
+      return {
+        description: '',
+        label: english() ? 'Continue or restore purchase' : '继续购买或恢复权益',
       };
   }
 }
 
 function actionErrorCopy(error: unknown): string {
-  if (!isViceMeError(error)) return '操作未完成，请重试。';
+  const fallback = english()
+    ? 'Unable to complete this action. Please try again.'
+    : '操作未完成，请重试。';
+  if (!isViceMeError(error)) return fallback;
   switch (error.code) {
     case 'CONFIG_INVALID':
-      return '微信授权配置无效，请稍后重试。';
+      return english()
+        ? 'This action is not configured correctly. Please try again later.'
+        : '操作配置无效，请稍后重试。';
     case 'AUTH_CANCELLED':
-      return '微信授权已取消，请重试。';
+      return english() ? 'This action was cancelled. Please try again.' : '操作已取消，请重试。';
     case 'SESSION_EXPIRED':
-      return '授权会话已过期，请重试。';
+      return english() ? 'Your session expired. Please try again.' : '授权会话已过期，请重试。';
     case 'NETWORK_TIMEOUT':
-      return '网络连接超时，请重试。';
+      return english() ? 'The connection timed out. Please try again.' : '网络连接超时，请重试。';
     default:
       return error.requestId
-        ? `操作未完成，请重试。请求 ID：${error.requestId}`
-        : '操作未完成，请重试。';
+        ? `${fallback} ${english() ? 'Request ID:' : '请求 ID：'} ${error.requestId}`
+        : fallback;
   }
 }
 
@@ -324,12 +344,12 @@ function ensureAccessLayerElement(): void {
             @keyframes viceme-enter { from { opacity: 0; transform: translateY(1rem); } }
           }
         </style>
-        <button data-viceme="backdrop" type="button" tabindex="-1" aria-label="关闭"></button>
-        <section data-viceme="panel" role="dialog" aria-modal="true" aria-label="ViceMe 授权">
-          <button data-viceme="close" type="button" aria-label="关闭">×</button>
+        <button data-viceme="backdrop" type="button" tabindex="-1" aria-label="${english() ? 'Close' : '关闭'}"></button>
+        <section data-viceme="panel" role="dialog" aria-modal="true" aria-label="${english() ? 'ViceMe access' : 'ViceMe 授权'}">
+          <button data-viceme="close" type="button" aria-label="${english() ? 'Close' : '关闭'}">×</button>
           <div data-viceme="content">
             <p data-viceme="description"></p>
-            <section data-viceme="profile" aria-label="创作者">
+            <section data-viceme="profile" aria-label="${english() ? 'Creator' : '创作者'}">
               <div data-viceme="profile-header">
                 <img data-viceme="avatar" hidden />
                 <span data-viceme="avatar-fallback" aria-hidden="true"></span>
@@ -354,6 +374,7 @@ function ensureAccessLayerElement(): void {
             </div>
           </div>
           <iframe data-viceme="frame" title="" referrerpolicy="no-referrer" allow="payment"></iframe>
+          <button data-viceme="continue" type="button" hidden>${english() ? 'Continue in this page' : '在当前页面继续'}</button>
         </section>
       `;
       const panel = shadow.querySelector<HTMLElement>("[data-viceme='panel']")!;
@@ -367,6 +388,7 @@ function ensureAccessLayerElement(): void {
       const backdrop = shadow.querySelector<HTMLButtonElement>("[data-viceme='backdrop']")!;
       const error = shadow.querySelector<HTMLElement>("[data-viceme='error']")!;
       const frame = shadow.querySelector<HTMLIFrameElement>("[data-viceme='frame']")!;
+      const continueAction = shadow.querySelector<HTMLButtonElement>("[data-viceme='continue']")!;
       const profile = shadow.querySelector<HTMLElement>("[data-viceme='profile']")!;
       const avatar = shadow.querySelector<HTMLImageElement>("[data-viceme='avatar']")!;
       const avatarFallback = shadow.querySelector<HTMLElement>("[data-viceme='avatar-fallback']")!;
@@ -383,7 +405,12 @@ function ensureAccessLayerElement(): void {
       action.hidden = false;
       mainActions.dataset.single = 'true';
       const idleActionLabel = copy.label;
-      frame.title = this.interaction.action === 'SIGN_IN' ? '登录授权' : '支付';
+      frame.title =
+        this.interaction.action === 'SIGN_IN'
+          ? '登录授权'
+          : this.interaction.action === 'RESOLVE_BUYER'
+            ? '购买权益恢复'
+            : '支付';
 
       const target = this.interaction.followTarget;
       if (target) {
@@ -440,12 +467,28 @@ function ensureAccessLayerElement(): void {
       if (this.interaction.signal?.aborted) queueMicrotask(dismissLayer);
       backdrop.addEventListener('click', dismissLayer);
       closeAction.addEventListener('click', dismissLayer);
+      continueAction.addEventListener('click', () => {
+        try {
+          if (activeAction?.type === 'frame') activeAction.continueInSamePage?.();
+        } catch (caught) {
+          error.textContent = actionErrorCopy(caught);
+          panel.dataset.frame = 'false';
+        }
+      });
       this.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') dismissLayer();
         if (event.key === 'Tab') {
           event.preventDefault();
           if (activeAction?.type === 'frame') {
-            frame.focus();
+            const available = [
+              closeAction,
+              frame,
+              ...(continueAction.hidden ? [] : [continueAction]),
+            ];
+            const index = available.indexOf(shadow.activeElement as HTMLButtonElement);
+            available[
+              (index + (event.shiftKey ? -1 : 1) + available.length) % available.length
+            ]?.focus();
             return;
           }
           const focusable = [closeAction, ...(action.hidden ? [] : [action])];
@@ -459,7 +502,7 @@ function ensureAccessLayerElement(): void {
       const performAction = async () => {
         action.disabled = true;
         action.setAttribute('aria-busy', 'true');
-        action.textContent = '正在打开…';
+        action.textContent = english() ? 'Opening…' : '正在打开…';
         error.textContent = '';
         try {
           const result = await this.interaction.perform();
@@ -472,6 +515,7 @@ function ensureAccessLayerElement(): void {
           }
           if (result.type === 'frame') {
             activeAction = result;
+            continueAction.hidden = !result.continueInSamePage;
             panel.dataset.frame = 'true';
             frame.src = result.url;
             frame.focus();
@@ -485,6 +529,7 @@ function ensureAccessLayerElement(): void {
           if (closed) return;
           activeAction?.cancel();
           activeAction = null;
+          continueAction.hidden = true;
           panel.dataset.frame = 'false';
           frame.removeAttribute('src');
           error.textContent = actionErrorCopy(caught);
@@ -496,7 +541,11 @@ function ensureAccessLayerElement(): void {
         }
       };
       action.addEventListener('click', performAction);
-      queueMicrotask(() => action.focus());
+      queueMicrotask(() => {
+        if (closed) return;
+        if (this.interaction.autoStart) void performAction();
+        else action.focus();
+      });
     }
   }
 

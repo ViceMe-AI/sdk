@@ -86,7 +86,7 @@ is `wrk_live_...`. Other Work key shapes are rejected locally.
 
 Access operations establish a short-lived, memory-only Work session on first
 use. They expose `client.auth`, `client.access`, and `client.checkout`; login,
-explicit follow, and hosted checkout remain ViceMe-owned UI. The host never
+buyer recovery, and hosted checkout remain ViceMe-owned UI. The host never
 receives a general ViceMe session or payment credential. Tests can inject a
 deterministic transport and presenter through `@viceme-ai/sdk/testing`.
 Calling `client.destroy()` cancels in-flight access requests, closes the active
@@ -99,20 +99,55 @@ rejects with retryable `NETWORK_TIMEOUT`.
 A cancelled response cannot establish a Work session even if its body has
 already finished parsing.
 
-The current Website Access release accepts any valid HTTP(S) host Origin and
-does not require DNS TXT verification. Session tokens remain bound to the
-Origin observed when they were issued, but that Origin is not compared with a
-registered allowlist. The hosted checkout iframe likewise has no parent-Origin
-`frame-ancestors` restriction; its signed launch context, expiry, official
-Shop URL, and server-authoritative entitlement checks remain enforced.
+Website Access v3 is negotiated during the first Access session request via
+`supportedAccessProtocolVersions: [3]`. An unversioned server response retains
+the legacy login/follow flow and CNY `amountCents` representation. V3 returns
+CNY or USD `amountMinor` prices and feature `status`; `PENDING_CHANNEL` may have
+no sale price and a non-null `pricingIntent`. The server decides which channels
+are ready. GLOBAL supports access integration and login; missing payment
+channels never fall back to CN or create an order.
 
-Website access login renders the work-bound WeChat QR code directly in the SDK
-layer. Paid access keeps desktop QR payment and WeChat JSAPI in that layer;
-mobile H5/WAP payment may open a provider page or app. The original page polls
-the server-authoritative access decision and closes the layer after entitlement
-is active. Before login, the consent layer shows only the creator avatar,
-display name, published Work count, and the current Work title, summary, and
-cover. This behavior does not change the separate Tip Widget flow.
+V3 does not require, bind, or compare host Origin, including null/missing origins.
+Official HTTPS Shop URLs and server-authoritative identity, Work, expiry, and
+entitlement validation remain mandatory. Browser restrictions on Web Crypto,
+frames, navigation, and storage can still require a first-party recovery step.
+
+`access.require(featureKey)` handles buyer identification, checkout, and a fresh
+access check. It never grants access from a payment or window message. V3 login
+opens directly from the initiating action; `FOLLOW` executes in that same user
+interaction without another confirmation. Shop owns automatic follow after an
+authenticated login/payment; anonymous purchase skips both login and follow.
+
+Optional recovery controls use the same protocol:
+
+```ts
+await client.access.restorePurchase('download'); // Remains anonymous.
+await client.access.claimPurchase('download'); // User explicitly chooses login and claim.
+```
+
+The official page owns purchase receipts, account selection, and claim consent.
+The SDK obtains only a short-lived Work-scoped buyer or user credential through
+PKCE challenge/result/exchange calls. These calls omit cookies. It does not
+accept credentials from postMessage, query strings, or fragments. Explicit
+claim replaces the current anonymous context only after a verified user
+exchange; failed/cancelled claim keeps existing purchase authorization.
+
+If an iframe cannot access first-party storage, “在当前页面继续” navigates to the
+official page. Only the challenge, state, verifier, and selected feature/purpose
+are saved in sessionStorage for at most five minutes. After returning, invoking
+the same action or `require()` for the same feature resumes the authorized
+recovery/claim handshake. No buyer/user token, recovery secret,
+or payment result is persisted by the SDK. Unavailable navigation storage is
+reported instead of pretending that a purchase was recovered.
+
+Work-session refresh is single-flight and server expiry retries at most once.
+Refreshing a Work session drops user/buyer context; the next authoritative
+check can request recovery again. Logout, identity replacement, and destruction
+invalidate late identity results. Authorization reads that race a session
+change are retried against the current identity; successful mutations are not
+replayed merely because another request refreshed a session. Both explicit
+`destroy()` and caller cancellation stop bridge polling and close the layer;
+the caller's `Error` reason remains intact.
 
 ```ts
 const decisions = await client.access.checkMany(['members', 'pro-tools']);
