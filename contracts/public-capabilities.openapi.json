@@ -2,18 +2,30 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ViceMe Public Capabilities API",
-    "version": "1.1.0",
+    "version": "2.0.0",
     "summary": "Public Website Work access, Tip configuration, and hosted danmaku capabilities consumed by the ViceMe browser SDK.",
-    "description": "Shop owns the public Work capability APIs. Website access uses short-lived Work sessions, Tip configuration is credentialless, and the Shop SDK inside the hosted danmaku iframe owns anonymous message reads and writes."
+    "description": "Shop owns the public Work capability APIs. Website Access negotiates v3 on first use and resolves scoped buyer/user identity through PKCE proof; Tip remains credentialless and hosted danmaku retains its independent boundary."
   },
   "servers": [
-    { "url": "https://api.viceme.cn", "description": "CN region public API" },
-    { "url": "https://api.viceme.ai", "description": "GLOBAL region public API" }
+    {
+      "url": "https://api.viceme.cn",
+      "description": "CN region public API"
+    },
+    {
+      "url": "https://api.viceme.ai",
+      "description": "GLOBAL region public API"
+    }
   ],
   "security": [],
   "tags": [
-    { "name": "danmaku", "description": "Public hosted danmaku messages" },
-    { "name": "tip", "description": "Public Tip capability configuration" }
+    {
+      "name": "danmaku",
+      "description": "Public hosted danmaku messages"
+    },
+    {
+      "name": "tip",
+      "description": "Public Tip capability configuration"
+    }
   ],
   "paths": {
     "/v1/public/work-sdk/sessions": {
@@ -23,7 +35,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateWorkSessionRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkSessionRequest"
+              }
             }
           }
         },
@@ -31,49 +45,83 @@
           "201": {
             "description": "Session established",
             "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/WorkSession" } }
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkSession"
+                }
+              }
             }
           },
-          "4xx": { "$ref": "#/components/responses/PublicError" }
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
         }
       }
     },
     "/v1/public/work-sdk/follow": {
       "get": {
         "operationId": "getWebsiteFollowState",
-        "security": [{ "workSession": [] }],
+        "security": [
+          {
+            "workSession": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Follow state",
             "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/FollowState" } }
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowState"
+                }
+              }
             }
           },
-          "4xx": { "$ref": "#/components/responses/PublicError" }
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
         }
       },
       "put": {
         "operationId": "followWebsiteCreator",
-        "security": [{ "workSession": [] }],
+        "security": [
+          {
+            "workSession": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Creator followed",
             "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/FollowState" } }
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowState"
+                }
+              }
             }
           },
-          "4xx": { "$ref": "#/components/responses/PublicError" }
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
         }
       }
     },
     "/v1/public/work-sdk/access/check": {
       "post": {
         "operationId": "checkWebsiteAccess",
-        "security": [{ "workSession": [] }],
+        "security": [
+          {
+            "workSession": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": { "schema": { "$ref": "#/components/schemas/AccessCheckRequest" } }
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessCheckRequest"
+              }
+            }
           }
         },
         "responses": {
@@ -81,50 +129,98 @@
             "description": "Access decisions",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/AccessCheckResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/AccessCheckResponse"
+                }
               }
             }
           },
-          "4xx": { "$ref": "#/components/responses/PublicError" }
-        }
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-viceme-buyer-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Verified buyer context; required when creating a feature-scoped CLAIM challenge."
+          }
+        ]
       }
     },
     "/v1/public/work-sdk/access/features": {
       "get": {
         "operationId": "getWebsiteAccessFeatures",
-        "security": [{ "workSession": [] }],
+        "security": [
+          {
+            "workSession": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Server-authoritative feature presentation",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/AccessFeaturesResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/AccessFeaturesResponse"
+                }
               }
             }
           },
-          "4xx": { "$ref": "#/components/responses/PublicError" }
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
         }
       }
     },
     "/v1/public/work-sdk/checkout": {
       "post": {
         "operationId": "createWebsiteAccessCheckout",
-        "security": [{ "workSession": [] }],
+        "security": [
+          {
+            "workSession": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": { "schema": { "$ref": "#/components/schemas/CheckoutRequest" } }
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutRequest"
+              }
+            }
           }
         },
         "responses": {
           "200": {
             "description": "Hosted checkout",
             "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/CheckoutResponse" } }
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutResponse"
+                }
+              }
             }
           },
-          "4xx": { "$ref": "#/components/responses/PublicError" }
-        }
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-viceme-buyer-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Verified buyer context; required when creating a feature-scoped CLAIM challenge."
+          }
+        ]
       }
     },
     "/v1/danmaku/messages": {
@@ -135,17 +231,23 @@
             "name": "workKey",
             "in": "query",
             "required": true,
-            "schema": { "$ref": "#/components/schemas/WorkKey" }
+            "schema": {
+              "$ref": "#/components/schemas/WorkKey"
+            }
           },
           {
             "name": "anchorKey",
             "in": "query",
-            "schema": { "$ref": "#/components/schemas/DanmakuAnchorKey" }
+            "schema": {
+              "$ref": "#/components/schemas/DanmakuAnchorKey"
+            }
           },
           {
             "name": "cursor",
             "in": "query",
-            "schema": { "$ref": "#/components/schemas/DanmakuCursor" }
+            "schema": {
+              "$ref": "#/components/schemas/DanmakuCursor"
+            }
           }
         ],
         "responses": {
@@ -153,11 +255,15 @@
             "description": "Messages",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DanmakuMessagesResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/DanmakuMessagesResponse"
+                }
               }
             }
           },
-          "4xx": { "$ref": "#/components/responses/PublicError" }
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
         }
       },
       "post": {
@@ -166,7 +272,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateDanmakuMessageRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/CreateDanmakuMessageRequest"
+              }
             }
           }
         },
@@ -174,10 +282,16 @@
           "201": {
             "description": "Message created",
             "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/DanmakuMessage" } }
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DanmakuMessage"
+                }
+              }
             }
           },
-          "4xx": { "$ref": "#/components/responses/PublicError" }
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
         }
       }
     },
@@ -187,15 +301,23 @@
         "operationId": "getTipConfig",
         "summary": "Read public Tip configuration for one Work",
         "servers": [
-          { "url": "https://viceme.cn", "description": "CN Shop gateway" },
-          { "url": "https://viceme.ai", "description": "GLOBAL Shop gateway" }
+          {
+            "url": "https://viceme.cn",
+            "description": "CN Shop gateway"
+          },
+          {
+            "url": "https://viceme.ai",
+            "description": "GLOBAL Shop gateway"
+          }
         ],
         "parameters": [
           {
             "name": "workKey",
             "in": "path",
             "required": true,
-            "schema": { "$ref": "#/components/schemas/WorkKey" }
+            "schema": {
+              "$ref": "#/components/schemas/WorkKey"
+            }
           }
         ],
         "responses": {
@@ -203,20 +325,167 @@
             "description": "Sanitized public Tip configuration.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/TipConfig" }
+                "schema": {
+                  "$ref": "#/components/schemas/TipConfig"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/TipConfigCredentialsNotAllowed" },
-          "404": { "$ref": "#/components/responses/TipUnavailable" },
-          "500": { "$ref": "#/components/responses/InternalError" }
+          "400": {
+            "$ref": "#/components/responses/TipConfigCredentialsNotAllowed"
+          },
+          "404": {
+            "$ref": "#/components/responses/TipUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/public/work-sdk/buyer/challenges": {
+      "post": {
+        "operationId": "createWebsiteAccessBuyerChallenge",
+        "description": "Access v3 proof-of-possession operation. The official page owns Cookie-backed authorization; host Origin is not an authorization condition.",
+        "security": [
+          {
+            "workSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBuyerChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "BuyerChallenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuyerChallenge"
+                }
+              }
+            }
+          },
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-viceme-buyer-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Verified buyer context; required when creating a feature-scoped CLAIM challenge."
+          }
+        ]
+      }
+    },
+    "/v1/public/work-sdk/buyer/challenges/{id}/result": {
+      "post": {
+        "operationId": "getWebsiteAccessBuyerChallengeResult",
+        "description": "Access v3 proof-of-possession operation. The official page owns Cookie-backed authorization; host Origin is not an authorization condition.",
+        "security": [
+          {
+            "workSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuyerChallengeResultRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "BuyerChallengeResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuyerChallengeResult"
+                }
+              }
+            }
+          },
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
+        }
+      }
+    },
+    "/v1/public/work-sdk/buyer/exchange": {
+      "post": {
+        "operationId": "exchangeWebsiteAccessBuyer",
+        "description": "Access v3 proof-of-possession operation. The official page owns Cookie-backed authorization; host Origin is not an authorization condition.",
+        "security": [
+          {
+            "workSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuyerExchangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "BuyerSession",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuyerSession"
+                }
+              }
+            }
+          },
+          "4xx": {
+            "$ref": "#/components/responses/PublicError"
+          }
         }
       }
     }
   },
   "components": {
     "securitySchemes": {
-      "workSession": { "type": "http", "scheme": "bearer" }
+      "workSession": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "buyerSession": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-viceme-buyer-token",
+        "description": "Optional short-lived Work-scoped buyer authorization; never a platform session Cookie."
+      }
     },
     "schemas": {
       "WorkKey": {
@@ -226,18 +495,64 @@
       },
       "CreateWorkSessionRequest": {
         "type": "object",
-        "additionalProperties": false,
+        "properties": {
+          "workKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^wrk_test_[A-Za-z0-9_-]{4,119}$"
+              },
+              {
+                "type": "string",
+                "pattern": "^wrk_live_[A-Za-z0-9_-]{4,119}$"
+              }
+            ]
+          },
+          "supportedAccessProtocolVersions": {
+            "minItems": 1,
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "const": 3
+            }
+          }
+        },
         "required": ["workKey"],
-        "properties": { "workKey": { "$ref": "#/components/schemas/WorkKey" } }
+        "additionalProperties": false,
+        "description": "Omit supportedAccessProtocolVersions for the legacy response. V3 is selected only when advertised; selecting a protocol does not authenticate a user or buyer."
       },
       "WorkSession": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["workKey", "token", "expiresAt", "capabilities", "creator", "work"],
         "properties": {
-          "workKey": { "$ref": "#/components/schemas/WorkKey" },
-          "token": { "type": "string" },
-          "expiresAt": { "type": "string", "format": "date-time" },
+          "workKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^wrk_test_[A-Za-z0-9_-]{4,119}$"
+              },
+              {
+                "type": "string",
+                "pattern": "^wrk_live_[A-Za-z0-9_-]{4,119}$"
+              }
+            ]
+          },
+          "token": {
+            "type": "string",
+            "minLength": 32
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "accessProtocolVersion": {
+            "type": "number",
+            "const": 3
+          },
+          "marketCapabilities": {
+            "$ref": "#/components/schemas/AccessMarketCapabilities"
+          },
           "capabilities": {
             "type": "array",
             "items": {
@@ -245,71 +560,164 @@
               "enum": ["danmaku", "tip", "access", "follow", "checkout"]
             }
           },
-          "creator": { "$ref": "#/components/schemas/AccessCreator" },
-          "work": { "$ref": "#/components/schemas/AccessWork" }
-        }
+          "creator": {
+            "$ref": "#/components/schemas/AccessCreator"
+          },
+          "work": {
+            "$ref": "#/components/schemas/AccessWork"
+          }
+        },
+        "required": ["workKey", "token", "expiresAt", "capabilities", "creator", "work"],
+        "additionalProperties": false
       },
       "AccessCreator": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["displayName", "avatarUrl", "publishedWorkCount"],
         "properties": {
-          "displayName": { "type": "string" },
-          "avatarUrl": { "type": ["string", "null"], "format": "uri" },
-          "publishedWorkCount": { "type": "integer", "minimum": 0 }
-        }
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedWorkCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["displayName", "avatarUrl", "publishedWorkCount"],
+        "additionalProperties": false
       },
       "AccessWork": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["title", "summary", "coverUrl"],
         "properties": {
-          "title": { "type": "string" },
-          "summary": { "type": "string" },
-          "coverUrl": { "type": ["string", "null"], "format": "uri" }
-        }
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "coverUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["title", "summary", "coverUrl"],
+        "additionalProperties": false
       },
       "Creator": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "displayName", "avatarUrl", "description", "publishedWorkCount"],
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "displayName": { "type": "string" },
-          "avatarUrl": { "type": ["string", "null"], "format": "uri" },
-          "description": { "type": ["string", "null"] },
-          "publishedWorkCount": { "type": "integer", "minimum": 0 }
-        }
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedWorkCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["id", "displayName", "avatarUrl", "description", "publishedWorkCount"],
+        "additionalProperties": false
       },
       "FollowState": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["following", "followedAt", "creator"],
         "properties": {
-          "following": { "type": "boolean" },
-          "followedAt": { "type": ["string", "null"], "format": "date-time" },
-          "creator": { "$ref": "#/components/schemas/Creator" }
-        }
+          "following": {
+            "type": "boolean"
+          },
+          "followedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "creator": {
+            "$ref": "#/components/schemas/Creator"
+          }
+        },
+        "required": ["following", "followedAt", "creator"],
+        "additionalProperties": false
       },
       "AccessCheckRequest": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["featureKeys"],
         "properties": {
           "featureKeys": {
-            "type": "array",
             "minItems": 1,
             "maxItems": 100,
-            "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" }
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]+$"
+            }
           }
-        }
+        },
+        "required": ["featureKeys"],
+        "additionalProperties": false
       },
       "AccessDecision": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["allowed", "reason", "nextAction"],
         "properties": {
-          "allowed": { "type": "boolean" },
+          "allowed": {
+            "type": "boolean"
+          },
           "reason": {
             "type": "string",
             "enum": [
@@ -317,6 +725,9 @@
               "OWNER",
               "FOLLOWING",
               "ENTITLED",
+              "BUYER_REQUIRED",
+              "FEATURE_NOT_READY",
+              "PAYMENT_CHANNEL_UNAVAILABLE",
               "AUTH_REQUIRED",
               "FOLLOW_REQUIRED",
               "PURCHASE_REQUIRED",
@@ -325,80 +736,178 @@
             ]
           },
           "nextAction": {
-            "type": ["string", "null"],
-            "enum": ["SIGN_IN", "FOLLOW", "CHECKOUT", null]
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["SIGN_IN", "FOLLOW", "RESOLVE_BUYER", "CHECKOUT"]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
-        }
+        },
+        "required": ["allowed", "reason", "nextAction"],
+        "additionalProperties": false
       },
       "AccessCheckResponse": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["decisions"],
         "properties": {
           "decisions": {
             "type": "object",
-            "additionalProperties": { "$ref": "#/components/schemas/AccessDecision" }
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AccessDecision"
+            }
           }
-        }
+        },
+        "required": ["decisions"],
+        "additionalProperties": false
       },
       "AccessFeaturePrice": {
         "type": "object",
         "additionalProperties": false,
         "required": ["amountCents", "currency"],
         "properties": {
-          "amountCents": { "type": "integer", "minimum": 1 },
-          "currency": { "const": "CNY" }
+          "amountCents": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "currency": {
+            "const": "CNY"
+          }
         }
       },
       "AccessFeaturePresentation": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["featureKey", "title", "policyType", "price"],
         "properties": {
-          "featureKey": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
-          "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "featureKey": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_-]+$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
           "policyType": {
             "type": "string",
             "enum": ["PUBLIC", "FOLLOW_OWNER", "WORK_ENTITLEMENT"]
           },
           "price": {
-            "oneOf": [{ "$ref": "#/components/schemas/AccessFeaturePrice" }, { "type": "null" }]
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "currency": {
+                    "type": "string",
+                    "const": "CNY"
+                  },
+                  "amountCents": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["currency", "amountCents"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
-        }
+        },
+        "required": ["featureKey", "title", "policyType", "price"],
+        "additionalProperties": false
       },
       "AccessFeaturesResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["features"],
-        "properties": {
-          "features": {
-            "type": "array",
-            "maxItems": 100,
-            "items": { "$ref": "#/components/schemas/AccessFeaturePresentation" }
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "features": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AccessFeaturePresentation"
+                }
+              }
+            },
+            "required": ["features"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "accessProtocolVersion": {
+                "type": "number",
+                "const": 3
+              },
+              "features": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AccessFeaturePresentationV3"
+                }
+              }
+            },
+            "required": ["accessProtocolVersion", "features"],
+            "additionalProperties": false
           }
-        }
+        ]
       },
       "CheckoutRequest": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["featureKey"],
         "properties": {
-          "featureKey": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
-          "locale": { "type": "string", "enum": ["zh-CN", "en-US"], "default": "zh-CN" }
-        }
+          "featureKey": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_-]+$"
+          },
+          "locale": {
+            "default": "zh-CN",
+            "type": "string",
+            "enum": ["zh-CN", "en-US"]
+          },
+          "returnUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": ["featureKey"],
+        "additionalProperties": false
       },
       "CheckoutResponse": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["checkoutUrl", "alreadyOwned", "expiresAt"],
         "properties": {
-          "checkoutUrl": { "type": "string", "format": "uri" },
-          "alreadyOwned": { "type": "boolean" },
+          "checkoutUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "alreadyOwned": {
+            "type": "boolean"
+          },
           "expiresAt": {
-            "type": ["string", "null"],
-            "format": "date-time"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
-        }
+        },
+        "required": ["checkoutUrl", "alreadyOwned", "expiresAt"],
+        "additionalProperties": false
       },
       "TipEnvironment": {
         "type": "string",
@@ -417,8 +926,15 @@
         "required": ["id", "title"],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "title": { "type": "string", "minLength": 1, "maxLength": 200 }
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
         }
       },
       "TipAmount": {
@@ -426,9 +942,18 @@
         "required": ["minCents", "maxCents", "stepCents"],
         "additionalProperties": false,
         "properties": {
-          "minCents": { "type": "integer", "enum": [100] },
-          "maxCents": { "type": "integer", "enum": [20000] },
-          "stepCents": { "type": "integer", "enum": [1] }
+          "minCents": {
+            "type": "integer",
+            "enum": [100]
+          },
+          "maxCents": {
+            "type": "integer",
+            "enum": [20000]
+          },
+          "stepCents": {
+            "type": "integer",
+            "enum": [1]
+          }
         }
       },
       "TipConfig": {
@@ -436,17 +961,29 @@
         "required": ["work", "workKey", "environment", "currency", "amount", "providers"],
         "additionalProperties": false,
         "properties": {
-          "work": { "$ref": "#/components/schemas/TipWork" },
-          "workKey": { "$ref": "#/components/schemas/WorkKey" },
-          "environment": { "$ref": "#/components/schemas/TipEnvironment" },
-          "currency": { "$ref": "#/components/schemas/TipCurrency" },
-          "amount": { "$ref": "#/components/schemas/TipAmount" },
+          "work": {
+            "$ref": "#/components/schemas/TipWork"
+          },
+          "workKey": {
+            "$ref": "#/components/schemas/WorkKey"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/TipEnvironment"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/TipCurrency"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/TipAmount"
+          },
           "providers": {
             "type": "array",
             "minItems": 1,
             "maxItems": 2,
             "uniqueItems": true,
-            "items": { "$ref": "#/components/schemas/TipProvider" }
+            "items": {
+              "$ref": "#/components/schemas/TipProvider"
+            }
           }
         }
       },
@@ -455,10 +992,22 @@
         "required": ["statusCode", "code", "message", "requestId"],
         "additionalProperties": false,
         "properties": {
-          "statusCode": { "type": "integer", "const": 400 },
-          "code": { "type": "string", "const": "TIP_CONFIG_CREDENTIALS_NOT_ALLOWED" },
-          "message": { "type": "string" },
-          "requestId": { "type": "string", "minLength": 1, "maxLength": 128 }
+          "statusCode": {
+            "type": "integer",
+            "const": 400
+          },
+          "code": {
+            "type": "string",
+            "const": "TIP_CONFIG_CREDENTIALS_NOT_ALLOWED"
+          },
+          "message": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
         }
       },
       "DanmakuAnchorKey": {
@@ -476,13 +1025,32 @@
         "additionalProperties": false,
         "required": ["id", "workKey", "content", "anchorKey", "createdAt"],
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "workKey": { "$ref": "#/components/schemas/WorkKey" },
-          "content": { "type": "string", "minLength": 1, "maxLength": 280 },
-          "anchorKey": {
-            "oneOf": [{ "$ref": "#/components/schemas/DanmakuAnchorKey" }, { "type": "null" }]
+          "id": {
+            "type": "string",
+            "format": "uuid"
           },
-          "createdAt": { "type": "string", "format": "date-time" }
+          "workKey": {
+            "$ref": "#/components/schemas/WorkKey"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280
+          },
+          "anchorKey": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DanmakuAnchorKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "DanmakuMessagesResponse": {
@@ -492,10 +1060,19 @@
         "properties": {
           "messages": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/DanmakuMessage" }
+            "items": {
+              "$ref": "#/components/schemas/DanmakuMessage"
+            }
           },
           "nextCursor": {
-            "oneOf": [{ "$ref": "#/components/schemas/DanmakuCursor" }, { "type": "null" }]
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DanmakuCursor"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -504,34 +1081,378 @@
         "additionalProperties": false,
         "required": ["workKey", "content"],
         "properties": {
-          "workKey": { "$ref": "#/components/schemas/WorkKey" },
-          "content": { "type": "string", "minLength": 1, "maxLength": 280 },
-          "anchorKey": { "$ref": "#/components/schemas/DanmakuAnchorKey" }
+          "workKey": {
+            "$ref": "#/components/schemas/WorkKey"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280
+          },
+          "anchorKey": {
+            "$ref": "#/components/schemas/DanmakuAnchorKey"
+          }
         }
       },
       "ErrorBody": {
         "type": "object",
         "required": ["statusCode", "code", "message", "requestId"],
         "properties": {
-          "statusCode": { "type": "integer" },
-          "code": { "type": "string" },
-          "message": { "type": "string" },
-          "requestId": { "type": "string" }
+          "statusCode": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
         }
+      },
+      "AccessMarketCapabilities": {
+        "type": "object",
+        "properties": {
+          "market": {
+            "type": "string",
+            "enum": ["CN", "GLOBAL"]
+          },
+          "loginMethods": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["WECHAT_MP", "EMAIL"]
+            }
+          },
+          "supportedPriceCurrencies": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["CNY", "USD"]
+            }
+          },
+          "checkoutAvailability": {
+            "type": "string",
+            "enum": ["AVAILABLE", "PENDING_CHANNEL", "DISABLED"]
+          },
+          "anonymousPurchase": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "market",
+          "loginMethods",
+          "supportedPriceCurrencies",
+          "checkoutAvailability",
+          "anonymousPurchase"
+        ],
+        "additionalProperties": false
+      },
+      "AccessFeaturePresentationV3": {
+        "type": "object",
+        "properties": {
+          "featureKey": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_-]+$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "policyType": {
+            "type": "string",
+            "enum": ["PUBLIC", "FOLLOW_OWNER", "WORK_ENTITLEMENT"]
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "currency": {
+                    "type": "string",
+                    "enum": ["CNY", "USD"]
+                  },
+                  "amountMinor": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["currency", "amountMinor"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pricingIntent": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "currency": {
+                    "type": "string",
+                    "enum": ["CNY", "USD"]
+                  },
+                  "amountMinor": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["currency", "amountMinor"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "PENDING_CHANNEL", "DISABLED"]
+          }
+        },
+        "required": ["featureKey", "title", "policyType", "price", "pricingIntent", "status"],
+        "additionalProperties": false,
+        "description": "ACTIVE paid features require a real price. PENDING_CHANNEL has price=null and a non-null pricingIntent. Runtime refinements are owned by the canonical Shop Zod contract."
+      },
+      "CreateBuyerChallengeRequest": {
+        "type": "object",
+        "properties": {
+          "workSessionToken": {
+            "type": "string",
+            "minLength": 32
+          },
+          "purpose": {
+            "type": "string",
+            "enum": ["IDENTIFY", "RESTORE", "CLAIM", "SIGN_IN"]
+          },
+          "featureKey": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_-]+$"
+          },
+          "codeChallenge": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "state": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,128}$"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "returnUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": ["workSessionToken", "purpose", "codeChallenge", "state", "requestId"],
+        "additionalProperties": false
+      },
+      "BuyerChallenge": {
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "bridgeUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": ["challengeId", "bridgeUrl", "expiresAt"],
+        "additionalProperties": false
+      },
+      "BuyerChallengeResultRequest": {
+        "type": "object",
+        "properties": {
+          "workSessionToken": {
+            "type": "string",
+            "minLength": 32
+          },
+          "codeVerifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43,128}$"
+          }
+        },
+        "required": ["workSessionToken", "codeVerifier"],
+        "additionalProperties": false
+      },
+      "BuyerChallengeResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "PENDING"
+              }
+            },
+            "required": ["status"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "EXPIRED"
+              }
+            },
+            "required": ["status"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "READY"
+              },
+              "code": {
+                "type": "string",
+                "pattern": "^vbc_[A-Za-z0-9_-]{43}$"
+              }
+            },
+            "required": ["status", "code"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "BuyerExchangeRequest": {
+        "type": "object",
+        "properties": {
+          "workSessionToken": {
+            "type": "string",
+            "minLength": 32
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^vbc_[A-Za-z0-9_-]{43}$"
+          },
+          "codeVerifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43,128}$"
+          }
+        },
+        "required": ["workSessionToken", "code", "codeVerifier"],
+        "additionalProperties": false
+      },
+      "BuyerSession": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": ["IDENTIFY", "RESTORE", "CLAIM", "SIGN_IN"]
+          },
+          "buyerToken": {
+            "type": "string",
+            "minLength": 32
+          },
+          "userToken": {
+            "type": "string",
+            "minLength": 32
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "displayName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "avatarUrl": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["id", "displayName", "avatarUrl"],
+            "additionalProperties": false
+          },
+          "claim": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["CLAIMED", "ALREADY_CLAIMED", "PENDING"]
+              },
+              "entitlementIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                }
+              }
+            },
+            "required": ["status", "entitlementIds"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["purpose", "expiresAt"],
+        "additionalProperties": false,
+        "description": "Purpose must match the challenge. IDENTIFY/RESTORE return a scoped buyer token; SIGN_IN/CLAIM return scoped userToken/user. No host Origin binding, platform Cookie, or purchase recovery secret is exposed."
       }
     },
     "responses": {
       "PublicError": {
         "description": "Public API error",
         "content": {
-          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorBody" } }
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
+          }
         }
       },
       "TipConfigCredentialsNotAllowed": {
         "description": "Tip configuration requests must not include Cookie or Authorization credentials.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/TipConfigCredentialsError" }
+            "schema": {
+              "$ref": "#/components/schemas/TipConfigCredentialsError"
+            }
           }
         }
       },
@@ -539,7 +1460,9 @@
         "description": "Unknown Work or Tip is unavailable for this Work or region.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorBody" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
           }
         }
       },
@@ -547,7 +1470,9 @@
         "description": "Unexpected Shop error.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorBody" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
           }
         }
       }

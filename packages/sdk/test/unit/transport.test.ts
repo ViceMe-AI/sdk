@@ -19,6 +19,28 @@ function fakeResponse(init: { status?: number; body?: unknown; headers?: Record<
 }
 
 describe('FetchTransport', () => {
+  it('sends a separate buyer bearer without cookies or query credentials', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: { ok: true } }));
+    const transport = createFetchTransport({ apiBaseUrl: 'https://api.viceme.cn', fetchImpl });
+    await transport.request({
+      method: 'POST',
+      path: '/v1/public/work-sdk/access/check',
+      authorization: 'work',
+      buyerAuthorization: 'buyer',
+      body: { featureKeys: ['paid'] },
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://api.viceme.cn/v1/public/work-sdk/access/check',
+      expect.objectContaining({
+        credentials: 'omit',
+        headers: expect.objectContaining({
+          authorization: 'Bearer work',
+          'x-viceme-buyer-token': 'buyer',
+        }),
+        body: JSON.stringify({ featureKeys: ['paid'] }),
+      }),
+    );
+  });
   it.each([200, 401])(
     'honors caller cancellation after an HTTP %i body has already parsed',
     async (status) => {

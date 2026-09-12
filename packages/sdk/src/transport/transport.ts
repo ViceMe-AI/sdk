@@ -19,6 +19,8 @@ export interface TransportRequest {
   authorization?: string;
   /** Optional memory-only signed-in widget token. */
   userAuthorization?: string;
+  /** Optional memory-only, Work-scoped anonymous purchase authorization. */
+  buyerAuthorization?: string;
   signal?: AbortSignal;
   /** Per-request timeout; defaults to the transport default. */
   timeoutMs?: number;
@@ -159,6 +161,9 @@ export class FetchTransport implements Transport {
             : {}),
           ...(request.userAuthorization !== undefined
             ? { 'x-viceme-user-token': request.userAuthorization }
+            : {}),
+          ...(request.buyerAuthorization !== undefined
+            ? { 'x-viceme-buyer-token': request.buyerAuthorization }
             : {}),
         },
         body: request.body !== undefined ? JSON.stringify(request.body) : undefined,

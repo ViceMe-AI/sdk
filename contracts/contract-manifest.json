@@ -1,6 +1,6 @@
 {
-  "contractVersion": "1.1.0",
-  "sha256": "3d47b98df66dbbb8390707b98f30163dbeceb6e18d5f27ad7471d73541c31056",
+  "contractVersion": "2.0.0",
+  "sha256": "4ef9ef8dc1a8c29232b64c3de12f8a2cdf44b6ea6ae57b2416bd42c49d118fa3",
   "generatedFrom": "ViceMe Shop public SDK contract",
-  "generatedAt": "2026-09-04T08:50:09.056Z"
+  "generatedAt": "2026-09-12T07:58:46.588Z"
 }

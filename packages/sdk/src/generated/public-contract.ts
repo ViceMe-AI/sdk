@@ -3,7 +3,7 @@
  * GENERATED FILE — DO NOT EDIT.
  *
  * Generated from contracts/public-capabilities.openapi.json
- * (contractVersion 1.1.0, sha256 3d47b98df66dbbb8…)
+ * (contractVersion 2.0.0, sha256 4ef9ef8dc1a8c292…)
  * by scripts/generate-contracts.mjs. Regenerate with `pnpm contracts:generate`.
  */
 
@@ -126,48 +126,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/work-sdk/buyer/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Access v3 proof-of-possession operation. The official page owns Cookie-backed authorization; host Origin is not an authorization condition. */
+        post: operations["createWebsiteAccessBuyerChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/work-sdk/buyer/challenges/{id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Access v3 proof-of-possession operation. The official page owns Cookie-backed authorization; host Origin is not an authorization condition. */
+        post: operations["getWebsiteAccessBuyerChallengeResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/work-sdk/buyer/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Access v3 proof-of-possession operation. The official page owns Cookie-backed authorization; host Origin is not an authorization condition. */
+        post: operations["exchangeWebsiteAccessBuyer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @description Public opaque test or live Work key. */
         WorkKey: string;
+        /** @description Omit supportedAccessProtocolVersions for the legacy response. V3 is selected only when advertised; selecting a protocol does not authenticate a user or buyer. */
         CreateWorkSessionRequest: {
-            workKey: components["schemas"]["WorkKey"];
+            workKey: string;
+            supportedAccessProtocolVersions?: 3[];
         };
         WorkSession: {
-            workKey: components["schemas"]["WorkKey"];
+            workKey: string;
             token: string;
             /** Format: date-time */
             expiresAt: string;
+            /** @constant */
+            accessProtocolVersion?: 3;
+            marketCapabilities?: components["schemas"]["AccessMarketCapabilities"];
             capabilities: ("danmaku" | "tip" | "access" | "follow" | "checkout")[];
             creator: components["schemas"]["AccessCreator"];
             work: components["schemas"]["AccessWork"];
         };
         AccessCreator: {
             displayName: string;
-            /** Format: uri */
             avatarUrl: string | null;
             publishedWorkCount: number;
         };
         AccessWork: {
             title: string;
             summary: string;
-            /** Format: uri */
             coverUrl: string | null;
         };
         Creator: {
             /** Format: uuid */
             id: string;
             displayName: string;
-            /** Format: uri */
             avatarUrl: string | null;
             description: string | null;
             publishedWorkCount: number;
         };
         FollowState: {
             following: boolean;
-            /** Format: date-time */
             followedAt: string | null;
             creator: components["schemas"]["Creator"];
         };
@@ -177,9 +229,8 @@ export interface components {
         AccessDecision: {
             allowed: boolean;
             /** @enum {string} */
-            reason: "PUBLIC" | "OWNER" | "FOLLOWING" | "ENTITLED" | "AUTH_REQUIRED" | "FOLLOW_REQUIRED" | "PURCHASE_REQUIRED" | "FEATURE_NOT_FOUND" | "FEATURE_DISABLED";
-            /** @enum {string|null} */
-            nextAction: "SIGN_IN" | "FOLLOW" | "CHECKOUT" | null;
+            reason: "PUBLIC" | "OWNER" | "FOLLOWING" | "ENTITLED" | "BUYER_REQUIRED" | "FEATURE_NOT_READY" | "PAYMENT_CHANNEL_UNAVAILABLE" | "AUTH_REQUIRED" | "FOLLOW_REQUIRED" | "PURCHASE_REQUIRED" | "FEATURE_NOT_FOUND" | "FEATURE_DISABLED";
+            nextAction: ("SIGN_IN" | "FOLLOW" | "RESOLVE_BUYER" | "CHECKOUT") | null;
         };
         AccessCheckResponse: {
             decisions: {
@@ -196,10 +247,18 @@ export interface components {
             title: string;
             /** @enum {string} */
             policyType: "PUBLIC" | "FOLLOW_OWNER" | "WORK_ENTITLEMENT";
-            price: components["schemas"]["AccessFeaturePrice"] | null;
+            price: {
+                /** @constant */
+                currency: "CNY";
+                amountCents: number;
+            } | null;
         };
         AccessFeaturesResponse: {
             features: components["schemas"]["AccessFeaturePresentation"][];
+        } | {
+            /** @constant */
+            accessProtocolVersion: 3;
+            features: components["schemas"]["AccessFeaturePresentationV3"][];
         };
         CheckoutRequest: {
             featureKey: string;
@@ -208,12 +267,13 @@ export interface components {
              * @enum {string}
              */
             locale: "zh-CN" | "en-US";
+            /** Format: uri */
+            returnUrl?: string;
         };
         CheckoutResponse: {
             /** Format: uri */
             checkoutUrl: string;
             alreadyOwned: boolean;
-            /** Format: date-time */
             expiresAt: string | null;
         };
         /** @enum {string} */
@@ -276,6 +336,94 @@ export interface components {
             code: string;
             message: string;
             requestId: string;
+        };
+        AccessMarketCapabilities: {
+            /** @enum {string} */
+            market: "CN" | "GLOBAL";
+            loginMethods: ("WECHAT_MP" | "EMAIL")[];
+            supportedPriceCurrencies: ("CNY" | "USD")[];
+            /** @enum {string} */
+            checkoutAvailability: "AVAILABLE" | "PENDING_CHANNEL" | "DISABLED";
+            anonymousPurchase: boolean;
+        };
+        /** @description ACTIVE paid features require a real price. PENDING_CHANNEL has price=null and a non-null pricingIntent. Runtime refinements are owned by the canonical Shop Zod contract. */
+        AccessFeaturePresentationV3: {
+            featureKey: string;
+            title: string;
+            /** @enum {string} */
+            policyType: "PUBLIC" | "FOLLOW_OWNER" | "WORK_ENTITLEMENT";
+            price: {
+                /** @enum {string} */
+                currency: "CNY" | "USD";
+                amountMinor: number;
+            } | null;
+            pricingIntent: {
+                /** @enum {string} */
+                currency: "CNY" | "USD";
+                amountMinor: number;
+            } | null;
+            /** @enum {string} */
+            status: "ACTIVE" | "PENDING_CHANNEL" | "DISABLED";
+        };
+        CreateBuyerChallengeRequest: {
+            workSessionToken: string;
+            /** @enum {string} */
+            purpose: "IDENTIFY" | "RESTORE" | "CLAIM" | "SIGN_IN";
+            featureKey?: string;
+            codeChallenge: string;
+            state: string;
+            /** Format: uuid */
+            requestId: string;
+            /** Format: uri */
+            returnUrl?: string;
+        };
+        BuyerChallenge: {
+            /** Format: uuid */
+            challengeId: string;
+            /** Format: uri */
+            bridgeUrl: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        BuyerChallengeResultRequest: {
+            workSessionToken: string;
+            codeVerifier: string;
+        };
+        BuyerChallengeResult: {
+            /** @constant */
+            status: "PENDING";
+        } | {
+            /** @constant */
+            status: "EXPIRED";
+        } | {
+            /** @constant */
+            status: "READY";
+            code: string;
+        };
+        BuyerExchangeRequest: {
+            workSessionToken: string;
+            code: string;
+            codeVerifier: string;
+        };
+        /** @description Purpose must match the challenge. IDENTIFY/RESTORE return a scoped buyer token; SIGN_IN/CLAIM return scoped userToken/user. No host Origin binding, platform Cookie, or purchase recovery secret is exposed. */
+        BuyerSession: {
+            /** @enum {string} */
+            purpose: "IDENTIFY" | "RESTORE" | "CLAIM" | "SIGN_IN";
+            buyerToken?: string;
+            userToken?: string;
+            /** Format: date-time */
+            expiresAt: string;
+            user?: {
+                /** Format: uuid */
+                id: string;
+                displayName: string | null;
+                avatarUrl: string | null;
+            };
+            claim?: {
+                /** @enum {string} */
+                status: "CLAIMED" | "ALREADY_CLAIMED" | "PENDING";
+                entitlementIds: string[];
+            };
         };
     };
     responses: {
@@ -393,7 +541,10 @@ export interface operations {
     checkWebsiteAccess: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Verified buyer context; required when creating a feature-scoped CLAIM challenge. */
+                "x-viceme-buyer-token"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -439,7 +590,10 @@ export interface operations {
     createWebsiteAccessCheckout: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Verified buyer context; required when creating a feature-scoped CLAIM challenge. */
+                "x-viceme-buyer-token"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -534,6 +688,86 @@ export interface operations {
             400: components["responses"]["TipConfigCredentialsNotAllowed"];
             404: components["responses"]["TipUnavailable"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    createWebsiteAccessBuyerChallenge: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Verified buyer context; required when creating a feature-scoped CLAIM challenge. */
+                "x-viceme-buyer-token"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBuyerChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description BuyerChallenge */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuyerChallenge"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    getWebsiteAccessBuyerChallengeResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuyerChallengeResultRequest"];
+            };
+        };
+        responses: {
+            /** @description BuyerChallengeResult */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuyerChallengeResult"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
+        };
+    };
+    exchangeWebsiteAccessBuyer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuyerExchangeRequest"];
+            };
+        };
+        responses: {
+            /** @description BuyerSession */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuyerSession"];
+                };
+            };
+            "4xx": components["responses"]["PublicError"];
         };
     };
 }
