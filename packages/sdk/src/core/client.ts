@@ -74,6 +74,7 @@ export class ViceMeClientImpl implements ViceMeClient {
     this.#config = deps.config;
     this.#session = new SessionManager({
       workKey: deps.config.workKey,
+      region: deps.config.region,
       transport: deps.transport,
       signal: this.#internalSignal.signal,
       ...(deps.now !== undefined ? { now: deps.now } : {}),

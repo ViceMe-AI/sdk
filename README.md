@@ -6,17 +6,23 @@ published creator website.
 
 - **Package**: [`@viceme-ai/sdk`](./packages/sdk)
 - **Hosted features**: `danmaku` and `tip`
-- **Website access**: authentication, explicit creator follow, and one-time paid unlock
+- **Website access**: authentication, creator follow, anonymous purchase recovery, and one-time paid unlock
 - **Status**: `0.x`; the normal `dev -> main` release workflow owns versioning
-- **Latest published package**: `0.4.0` with Website Access v2; it does not contain Headless Tip
-- **Current source target**: `0.5.0`, adding Headless Tip through a separate release PR
+- **Access protocol**: v3 when negotiated by Shop; unversioned sessions retain the legacy flow
 
 Shop resolves `workKey` through `WorkSdkAccess`; the published Work and requested
-feature must be active. The current Website Access release does not require DNS
-verification or a registered embedding Origin. It establishes short-lived
-in-memory Work and user sessions bound to the Origin that requested them. Login
-never follows a creator automatically, and payment return parameters never
-grant access.
+feature must be active. `createViceMe()` and `ready()` remain local. The first
+Access operation requests supported protocol `[3]`; Shop selects the protocol
+and returns regional login, currency, and checkout capabilities in that session.
+V3 Work, user, and buyer credentials are memory-only and never bind or check the
+host Origin. Official regional API and checkout URLs remain enforced.
+
+V3 login and account-claim actions use a PKCE bridge with bounded server polling,
+including a first-party navigation fallback. No window message or return URL
+carries login or buyer credentials. Authenticated login/payment follow behavior
+belongs to Shop; a `FOLLOW` returned to `require()` executes directly without a
+second consent layer. Anonymous purchase does not sign in or follow a creator.
+Only a fresh server-authoritative access decision grants the original action.
 Headless Tip is a separate credentialless boundary: it does not expose the
 Website Access token, user session, order, payment action, or provider
 transaction data to the host page.
@@ -289,9 +295,10 @@ Website Access transports and presenters; the scoped Tip entry is an isolated
 - The external SDK derives an opaque page-position anchor, creates the stage,
   responsive-width controls, and lazy modal iframes, validates bridge message
   origin/source, and owns cleanup.
-- Website access login and desktop checkout stay inside those SDK-owned modal
-  frames. Mobile H5/WAP may open the payment provider page or app; the original
-  page keeps polling the signed Work access decision and unlocks after payment.
+- Website Access v3 login and buyer recovery use verifier-bound API results;
+  window messages cannot authenticate the host. Desktop checkout stays in the
+  official modal; mobile H5/WAP may open the payment provider page or app.
+  The original page keeps checking server-authoritative access after payment.
 - Shop Web owns `/embed/danmaku`, including rendering, keyboard behavior,
   reduced-motion behavior, and interaction.
 - The Shop SDK inside that iframe calls anonymous `GET` and `POST`

@@ -7,6 +7,7 @@ import {
   type AccessPresenter,
 } from './presentation.ts';
 import type { SessionManager, WorkUser } from '../session/session.ts';
+import { createAccessBridge, type AccessBridgePurpose } from './access-bridge.ts';
 
 export interface AuthState {
   authenticated: boolean;
@@ -36,12 +37,15 @@ export type AccessReason =
   | 'FOLLOW_REQUIRED'
   | 'PURCHASE_REQUIRED'
   | 'FEATURE_NOT_FOUND'
-  | 'FEATURE_DISABLED';
+  | 'FEATURE_DISABLED'
+  | 'BUYER_REQUIRED'
+  | 'FEATURE_NOT_READY'
+  | 'PAYMENT_CHANNEL_UNAVAILABLE';
 
 export interface AccessDecision {
   allowed: boolean;
   reason: AccessReason;
-  nextAction: 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT' | null;
+  nextAction: 'SIGN_IN' | 'FOLLOW' | 'CHECKOUT' | 'RESOLVE_BUYER' | null;
 }
 
 export type AccessPolicyType = 'PUBLIC' | 'FOLLOW_OWNER' | 'WORK_ENTITLEMENT';
@@ -50,7 +54,12 @@ export interface AccessFeaturePresentation {
   featureKey: string;
   title: string;
   policy: { type: AccessPolicyType };
-  price: { amountCents: number; currency: 'CNY' } | null;
+  price:
+    | { amountCents: number; currency: 'CNY' }
+    | { amountMinor: number; currency: 'CNY' | 'USD' }
+    | null;
+  status?: 'ACTIVE' | 'PENDING_CHANNEL' | 'DISABLED';
+  pricingIntent?: { amountMinor: number; currency: 'CNY' | 'USD' } | null;
 }
 
 export interface CheckoutOptions {
@@ -82,6 +91,8 @@ export interface AccessCapability {
   checkMany(featureKeys: string[]): Promise<Record<string, AccessDecision>>;
   require(featureKey: string): Promise<AccessDecision>;
   refresh(): Promise<void>;
+  restorePurchase(featureKey: string): Promise<AccessDecision>;
+  claimPurchase(featureKey: string): Promise<AccessDecision>;
 }
 
 export interface CheckoutCapability {
@@ -158,9 +169,9 @@ function parseFollowState(value: unknown): FollowState {
   };
 }
 
-function parseDecision(value: unknown): AccessDecision {
+function parseDecision(value: unknown, version?: 3): AccessDecision {
   const body = objectBody(value);
-  const reasons: ReadonlySet<string> = new Set([
+  const reasons = new Set<string>([
     'PUBLIC',
     'OWNER',
     'FOLLOWING',
@@ -171,7 +182,11 @@ function parseDecision(value: unknown): AccessDecision {
     'FEATURE_NOT_FOUND',
     'FEATURE_DISABLED',
   ]);
-  const actions: ReadonlySet<unknown> = new Set([null, 'SIGN_IN', 'FOLLOW', 'CHECKOUT']);
+  const actions = new Set<unknown>([null, 'SIGN_IN', 'FOLLOW', 'CHECKOUT']);
+  if (version === 3) {
+    reasons.add('BUYER_REQUIRED').add('FEATURE_NOT_READY').add('PAYMENT_CHANNEL_UNAVAILABLE');
+    actions.add('RESOLVE_BUYER');
+  }
   if (
     typeof body.allowed !== 'boolean' ||
     typeof body.reason !== 'string' ||
@@ -187,7 +202,7 @@ function parseDecision(value: unknown): AccessDecision {
   };
 }
 
-function parseFeaturePresentation(value: unknown): AccessFeaturePresentation {
+function parseFeaturePresentation(value: unknown, version?: 3): AccessFeaturePresentation {
   const body = objectBody(value);
   if (
     typeof body.featureKey !== 'string' ||
@@ -204,6 +219,42 @@ function parseFeaturePresentation(value: unknown): AccessFeaturePresentation {
     throw malformedResponse();
   }
   const price = body.price === null ? null : objectBody(body.price);
+  if (version === 3) {
+    const parsePrice = (
+      value: unknown,
+    ): { amountMinor: number; currency: 'CNY' | 'USD' } | null => {
+      if (value === null) return null;
+      const money = objectBody(value);
+      if (
+        !Number.isSafeInteger(money.amountMinor) ||
+        (money.amountMinor as number) <= 0 ||
+        !(money.currency === 'CNY' || money.currency === 'USD')
+      )
+        throw malformedResponse();
+      return { amountMinor: money.amountMinor as number, currency: money.currency };
+    };
+    if (body.status !== 'ACTIVE' && body.status !== 'PENDING_CHANNEL' && body.status !== 'DISABLED')
+      throw malformedResponse();
+    const parsedPrice = parsePrice(price);
+    const pricingIntent = parsePrice(body.pricingIntent);
+    if (
+      (body.policyType !== 'WORK_ENTITLEMENT' &&
+        (parsedPrice !== null || body.status === 'PENDING_CHANNEL')) ||
+      (body.policyType === 'WORK_ENTITLEMENT' &&
+        body.status === 'ACTIVE' &&
+        parsedPrice === null) ||
+      (body.status === 'PENDING_CHANNEL' && (parsedPrice !== null || pricingIntent === null))
+    )
+      throw malformedResponse();
+    return {
+      featureKey: body.featureKey,
+      title: body.title,
+      policy: { type: body.policyType },
+      price: parsedPrice,
+      status: body.status,
+      pricingIntent,
+    };
+  }
   if (
     price !== null &&
     (!Number.isInteger(price.amountCents) ||
@@ -246,6 +297,7 @@ export function createCapabilities(deps: CapabilityDeps): {
   access: AccessCapability;
   checkout: CheckoutCapability;
 } {
+  const bridge = createAccessBridge(deps);
   const cancelled = () =>
     new ViceMeError({
       code: 'AUTH_CANCELLED',
@@ -357,6 +409,7 @@ export function createCapabilities(deps: CapabilityDeps): {
 
   const startSignIn = async (): Promise<AccessActionResult> => {
     await deps.ready();
+    if (deps.session.snapshot?.accessProtocolVersion === 3) return bridge.start('SIGN_IN');
     if (typeof window === 'undefined') {
       throw new ViceMeError({
         code: 'CONFIG_INVALID',
@@ -433,6 +486,7 @@ export function createCapabilities(deps: CapabilityDeps): {
         featureKey: 'auth',
         reason: 'AUTH_REQUIRED',
         action: 'SIGN_IN',
+        autoStart: deps.session.snapshot?.accessProtocolVersion === 3,
         ...signInPresentation(),
         perform: startSignIn,
       });
@@ -441,6 +495,7 @@ export function createCapabilities(deps: CapabilityDeps): {
     },
     async signOut() {
       await deps.ready();
+      bridge.clear();
       await deps.session.signOut();
     },
   };
@@ -470,7 +525,10 @@ export function createCapabilities(deps: CapabilityDeps): {
     );
     const raw = objectBody(response.decisions);
     return Object.fromEntries(
-      Object.entries(raw).map(([key, value]) => [key, parseDecision(value)]),
+      Object.entries(raw).map(([key, value]) => [
+        key,
+        parseDecision(value, deps.session.snapshot?.accessProtocolVersion),
+      ]),
     );
   };
 
@@ -481,7 +539,14 @@ export function createCapabilities(deps: CapabilityDeps): {
     await deps.ready();
     const body = {
       featureKey,
-      locale: options.locale ?? 'zh-CN',
+      locale:
+        options.locale ??
+        (deps.session.snapshot?.accessProtocolVersion === 3 ? resolveLocale() : 'zh-CN'),
+      ...(deps.session.snapshot?.accessProtocolVersion === 3 &&
+      typeof window !== 'undefined' &&
+      /^https?:$/.test(window.location.protocol)
+        ? { returnUrl: window.location.href }
+        : {}),
     };
     const response = objectBody(
       (
@@ -617,12 +682,34 @@ export function createCapabilities(deps: CapabilityDeps): {
 
   const checkout: CheckoutCapability = {
     async open(options) {
+      await deps.ready();
+      if (deps.session.snapshot?.accessProtocolVersion === 3) {
+        const decision = (await checkMany([options.featureKey]))[options.featureKey];
+        if (!decision) throw malformedResponse();
+        if (decision.nextAction === 'RESOLVE_BUYER') {
+          const result = await present({
+            featureKey: options.featureKey,
+            reason: decision.reason,
+            action: 'RESOLVE_BUYER',
+            autoStart: true,
+            perform: () => bridge.start('IDENTIFY', options.featureKey),
+          });
+          if (result === 'dismissed') throw cancelled();
+        } else if (!decision.allowed && decision.nextAction !== 'CHECKOUT') {
+          throw new ViceMeError({
+            code: 'CHECKOUT_UNAVAILABLE',
+            message: 'Checkout is not available for this feature.',
+            retryable: false,
+          });
+        }
+      }
       const checkoutResult = await createCheckout(options.featureKey, options);
       if (checkoutResult.alreadyOwned) return checkoutResult;
       const presented = await present({
         featureKey: options.featureKey,
         reason: 'PURCHASE_REQUIRED',
         action: 'CHECKOUT',
+        autoStart: deps.session.snapshot?.accessProtocolVersion === 3,
         perform: async () => openCheckout(checkoutResult, options.featureKey),
       });
       if (presented === 'dismissed') throw cancelled();
@@ -644,7 +731,9 @@ export function createCapabilities(deps: CapabilityDeps): {
       if (!Array.isArray(response.features) || response.features.length > 100) {
         throw malformedResponse();
       }
-      return response.features.map(parseFeaturePresentation);
+      return response.features.map((feature) =>
+        parseFeaturePresentation(feature, deps.session.snapshot?.accessProtocolVersion),
+      );
     },
     async check(featureKey) {
       const decisions = await checkMany([featureKey]);
@@ -655,12 +744,21 @@ export function createCapabilities(deps: CapabilityDeps): {
     checkMany,
     async require(featureKey) {
       let decision = await this.check(featureKey);
+      const stages = new Set<string>();
       for (
         let attempts = 0;
-        !decision.allowed && decision.nextAction && attempts < 3;
+        !decision.allowed && decision.nextAction && attempts < 6;
         attempts += 1
       ) {
         const nextAction = decision.nextAction;
+        const stage = `${decision.reason}:${nextAction}`;
+        if (stages.has(stage)) return decision;
+        stages.add(stage);
+        if (nextAction === 'FOLLOW' && deps.session.snapshot?.accessProtocolVersion === 3) {
+          await follow.follow();
+          decision = await this.check(featureKey);
+          continue;
+        }
         const followTarget = nextAction === 'FOLLOW' ? (await follow.getState()).target : undefined;
         const checkoutResult =
           nextAction === 'CHECKOUT' ? await createCheckout(featureKey) : undefined;
@@ -672,6 +770,7 @@ export function createCapabilities(deps: CapabilityDeps): {
           featureKey,
           reason: decision.reason,
           action: nextAction,
+          autoStart: deps.session.snapshot?.accessProtocolVersion === 3,
           ...(nextAction === 'SIGN_IN'
             ? signInPresentation()
             : followTarget
@@ -680,6 +779,8 @@ export function createCapabilities(deps: CapabilityDeps): {
           perform: async () => {
             if (nextAction === 'SIGN_IN') {
               return startSignIn();
+            } else if (nextAction === 'RESOLVE_BUYER') {
+              return bridge.start('IDENTIFY', featureKey);
             } else if (nextAction === 'FOLLOW') {
               await follow.follow();
               return { type: 'completed' };
@@ -696,7 +797,32 @@ export function createCapabilities(deps: CapabilityDeps): {
     async refresh() {
       await deps.ready();
     },
+    restorePurchase: (featureKey) => resolvePurchase('RESTORE', featureKey),
+    claimPurchase: (featureKey) => resolvePurchase('CLAIM', featureKey),
   };
+
+  async function resolvePurchase(
+    purpose: AccessBridgePurpose,
+    featureKey: string,
+  ): Promise<AccessDecision> {
+    await deps.ready();
+    if (deps.session.snapshot?.accessProtocolVersion !== 3) {
+      throw new ViceMeError({
+        code: 'CAPABILITY_DISABLED',
+        message: 'This website has not enabled purchase recovery.',
+        retryable: false,
+      });
+    }
+    const result = await present({
+      featureKey,
+      reason: 'BUYER_REQUIRED',
+      action: 'RESOLVE_BUYER',
+      autoStart: true,
+      perform: () => bridge.start(purpose, featureKey),
+    });
+    if (result === 'dismissed') throw cancelled();
+    return access.check(featureKey);
+  }
 
   return { auth, follow, access, checkout };
 }
