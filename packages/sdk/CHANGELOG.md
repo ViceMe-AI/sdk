@@ -1,6 +1,10 @@
 # Changelog
 
-## [0.7.1] - 2026-09-11
+## [0.8.0] - 2026-09-16
+
+### Features
+
+- add negotiated website access v3 and buyer recovery (`d2724b9`)
 
 ### Fixes
 
