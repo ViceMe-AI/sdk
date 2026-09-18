@@ -49,13 +49,6 @@ export function markClientDegraded(client: ViceMeClient): void {
   if (client instanceof ViceMeClientImpl) client.markDegraded();
 }
 
-/** Marker so in-flight requests cancelled by `destroy()` map to CLIENT_DESTROYED. */
-class DestroySignalReason extends DOMException {
-  constructor() {
-    super('ViceMe client destroyed.', 'AbortError');
-  }
-}
-
 export interface ViceMeClientDeps {
   config: ViceMeConfig;
   transport: Transport;
@@ -81,6 +74,7 @@ export class ViceMeClientImpl implements ViceMeClient {
     this.#config = deps.config;
     this.#session = new SessionManager({
       workKey: deps.config.workKey,
+      region: deps.config.region,
       transport: deps.transport,
       signal: this.#internalSignal.signal,
       ...(deps.now !== undefined ? { now: deps.now } : {}),
@@ -190,7 +184,10 @@ export class ViceMeClientImpl implements ViceMeClient {
   destroy(): void {
     if (this.#lifecycle.destroyed) return;
     this.#lifecycle.transition('DESTROYED');
-    this.#internalSignal.abort(new DestroySignalReason());
+    // The shared signal also owns interactive presentation work. Use the
+    // public lifecycle error as its reason so every consumer can distinguish
+    // explicit client destruction from a caller-owned abort reason.
+    this.#internalSignal.abort(clientDestroyed());
     this.#session.destroy();
     this.#lifecycle.clearListeners();
     this.#readyPromise = undefined;

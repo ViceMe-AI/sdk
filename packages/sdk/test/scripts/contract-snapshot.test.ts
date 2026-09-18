@@ -25,12 +25,31 @@ const snapshot = JSON.parse(
 };
 
 describe('Shop public contract snapshot', () => {
+  it('snapshots v3 negotiation and proof exchange without exposing purchase recovery secrets', () => {
+    const schemas = snapshot.components.schemas;
+    expect(schemas.CreateWorkSessionRequest?.properties).toHaveProperty(
+      'supportedAccessProtocolVersions',
+    );
+    expect(schemas.WorkSession?.properties).toHaveProperty('accessProtocolVersion');
+    expect(schemas.AccessFeaturePresentationV3?.properties).toHaveProperty('price');
+    expect(schemas.AccessFeaturePresentationV3?.properties).toHaveProperty('pricingIntent');
+    expect(schemas.BuyerExchangeRequest?.properties).toHaveProperty('codeVerifier');
+    expect(schemas.BuyerExchangeRequest?.properties).not.toHaveProperty('parentOrigin');
+    expect(JSON.stringify(schemas.CheckoutResponse)).not.toMatch(/recoverySecret|orderNo/);
+    expect(snapshot.paths).not.toHaveProperty(
+      '/v1/public/work-sdk/buyer/challenges/{id}/authorize',
+    );
+  });
+
   it('contains only Website Access, danmaku, and read-only Tip config operations', () => {
     expect(snapshot.security).toEqual([]);
     expect(Object.keys(snapshot.paths).sort()).toEqual([
       '/v1/danmaku/messages',
       '/v1/public/work-sdk/access/check',
       '/v1/public/work-sdk/access/features',
+      '/v1/public/work-sdk/buyer/challenges',
+      '/v1/public/work-sdk/buyer/challenges/{id}/result',
+      '/v1/public/work-sdk/buyer/exchange',
       '/v1/public/work-sdk/checkout',
       '/v1/public/work-sdk/follow',
       '/v1/public/work-sdk/sessions',

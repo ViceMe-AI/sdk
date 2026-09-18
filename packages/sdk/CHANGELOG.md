@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0] - 2026-09-16
+
+### Features
+
+- add negotiated website access v3 and buyer recovery (`d2724b9`)
+
+### Fixes
+
+- 保留展示交付边界的取消原因 (`6316878`)
+- 保留交互取消原因 (`6195ff8`)
+
+### Other Changes
+
+- 收窄取消竞态返回类型 (`6b59dba`)
+
 ## [0.7.0] - 2026-09-04
 
 ### Features

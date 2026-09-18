@@ -6,7 +6,7 @@ for Website Work access, hosted danmaku, and credential-free Tip configuration.
 ## Authority
 
 - The **Shop API** is the single authority for the HTTP contract. The snapshot
-  contains anonymous danmaku, origin-bound Website Work access calls, and the
+  contains anonymous danmaku, versioned Website Work access calls, and the
   credentialless Tip configuration read; payment-provider, order, Admin, and
   ops endpoints are not public SDK contracts.
 - TypeScript reference types are generated from the snapshot by
@@ -14,7 +14,8 @@ for Website Work access, hosted danmaku, and credential-free Tip configuration.
   `packages/sdk/src/generated/public-contract.ts` (committed), and CI fails if
   regeneration drifts.
 - Danmaku remains hosted in Shop's `/embed/danmaku` iframe. Access calls use a
-  short-lived Work token bound to the published Work and its verified Origin.
+  short-lived Work token bound to the published Work and selected protocol. V3
+  does not bind or validate the host Origin.
 - Headless Tip calls only `GET /v1/work-sdk/{workKey}/tip-config`, without
   Cookie or Authorization. Shop's trusted frame owns all Tip write operations.
 
@@ -44,7 +45,7 @@ Shop changes a public SDK API
   -> Shop updates the public contract artifact
   -> SDK "Contract Sync" PR replaces the snapshot + manifest
   -> pnpm contracts:generate && pnpm contracts:check
-  -> SDK validates its hosted, origin-bound, and Headless runtime boundaries
+  -> SDK validates its hosted, versioned Access, and Headless runtime boundaries
   -> stable SDK release
   -> Shop enables the capability
 ```
@@ -75,3 +76,21 @@ Shop changes a public SDK API
 pnpm contracts:generate   # snapshot -> src/generated/public-contract.ts
 pnpm contracts:check      # drift gate: committed file must match regeneration
 ```
+
+## Website Access v3 negotiation
+
+The first Access session advertises `supportedAccessProtocolVersions: [3]`.
+Shop selects `accessProtocolVersion: 3` and returns `marketCapabilities` in
+that response. No session request is made by `createViceMe()` or `ready()`.
+Servers retain the unversioned response/action/price contract for old sessions.
+The selected version is not an authorization credential.
+
+V3 adds verifier-bound buyer challenge, result, and exchange operations.
+The host uses a separate memory-only `x-viceme-buyer-token`; it does not receive
+platform cookies, payment receipts, or provider credentials. Explicit SIGN_IN
+and CLAIM exchanges may establish a scoped user instead; IDENTIFY and RESTORE
+must not silently authenticate an account from the platform cookie.
+
+All endpoint/schema changes must originate in Shop's canonical public artifact
+and be synced here before release. V3 price and action changes are versioned;
+unknown versions or malformed/new values on legacy sessions fail closed.

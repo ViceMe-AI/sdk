@@ -277,7 +277,7 @@ describe('default access presenter', () => {
     await expect(presented).resolves.toBe('dismissed');
   });
 
-  it('reports invalid WeChat login configuration', async () => {
+  it('reports invalid login configuration without assuming a provider', async () => {
     const presented = defaultAccessPresenter({
       featureKey: 'auth',
       reason: 'AUTH_REQUIRED',
@@ -295,7 +295,7 @@ describe('default access presenter', () => {
     (shadow.querySelector("[data-viceme='action']") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(shadow.querySelector("[data-viceme='error']")?.textContent).toBe(
-        '微信授权配置无效，请稍后重试。',
+        '操作配置无效，请稍后重试。',
       );
     });
     (shadow.querySelector("[data-viceme='backdrop']") as HTMLButtonElement).click();
